@@ -155,27 +155,47 @@ pkg_dll_path <- function (pkgname) {
 
 
 collector <- local({
-
+  
   .collected <- NULL
-
+  .scope_registry <- NULL  # New: track functions by scope
+  
   activate <- function(name = NULL) {
     .collected <<- list()
+    .scope_registry <<- list(
+      standalone = list(),
+      internal = list(),
+      module = list()
+    )
     attr(.collected, "name") <<- name
   }
-
+  
   is_active <- function() {
     is.list(.collected)
   }
-
+  
   add <- function(...) {
-    .collected[[length(.collected)+1L]] <<- list(...)
+    args <- list(...)
+    .collected[[length(.collected)+1L]] <<- args
+    
+    # Track by scope
+    scope <- args$scope %||% "standalone"
+    func_name <- args$name
+    .scope_registry[[scope]][[func_name]] <<- args
   }
-
+  
   get_collected <- function(clear = TRUE) {
     if (clear)
       on.exit(.collected <<- NULL)
     .collected
   }
-
+  
+  get_by_scope <- function(scope = NULL) {
+    if (is.null(scope)) {
+      .scope_registry
+    } else {
+      .scope_registry[[scope]]
+    }
+  }
+  
   environment()
 })

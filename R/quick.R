@@ -109,12 +109,16 @@
 #'   out
 #' })
 #' add_ab(1, 2)
-quick <- function(fun, name = NULL) {
+quick <- function(fun, name = NULL, scope = "standalone") {
   if (is.null(name)) {
     name <- if (is.symbol(substitute(fun)))
       deparse(substitute(fun))
     else
       make_unique_name(prefix = "anonymous_quick_function_")
+  }
+  # Validate scope parameter
+  if (!is.null(scope) && !scope %in% c("standalone", "internal", "module")) {
+    stop("scope must be one of 'standalone', 'internal', or 'module'")
   }
 
   if (nzchar(pkgname <- Sys.getenv("DEVTOOLS_LOAD"))) {
@@ -136,7 +140,7 @@ quick <- function(fun, name = NULL) {
     # we are in a quickr::compile_package() or a devtools::load_all() call,
     # merely collecting functions at this point.
     quick_closure <- create_quick_closure(name, fun)
-    collector$add(name = name, closure = fun, quick_closure = quick_closure)
+    collector$add(name = name, closure = fun, quick_closure = quick_closure, scope = scope)
     return(quick_closure)
   }
 
