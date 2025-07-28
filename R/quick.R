@@ -4,6 +4,11 @@
 #'
 #' @param fun An R function
 #' @param name Optional string, name to use for the function.
+#' @param scope Character string indicating function compilation scope.
+#'   One of "standalone" (default), "internal", or "module".
+#'   - "standalone": Traditional compilation as independent function
+#'   - "internal": Available as internal procedure within Fortran contains blocks
+#'   - "module": Available across multiple functions via Fortran module
 #'
 #' @details
 #'
