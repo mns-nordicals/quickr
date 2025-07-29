@@ -5,9 +5,6 @@
 # a Fortran object, which is a string of Fortran code and some attributes
 # describing the value.
 lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist = NULL) {
-  ## 'hoist()' is a function that individual handlers can call to pre-emit some
-  ## Fortran code. E.g., to setup a temporary variable if the generated Fortran
-  ## code doesn't neatly translate into a single expression.
   hoisted <- character()
   if (is.null(hoist)) {
     delayedAssign("hoist_connection", textConnection("hoisted", "w", TRUE))
@@ -15,24 +12,36 @@ lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist
       writeLines(as.character(unlist(c(character(), ...))),
                  hoist_connection)
     }
-  # if performance with textConnection() becomes an issue, maybe switch to an
-  # anonymous file(), though, each hoisting context is typically shortlived and
-  # usually 0 lines are hoisted per context, and if they are hoisted, a small number.
   }
 
   fortran <- switch(typeof(e),
       language = {
         # a call
+        callable <- e[[1L]]
+        
+        # Check if this is a call to a registered subfunction
+        if (is.symbol(callable)) {
+          callable_name <- as.character(callable)
+          
+          cat("Checking if", callable_name, "is a subfunction call\n")
+          
+          # Check multiple sources for subfunction availability
+          subf_info <- find_subfunction_info(callable_name, scope)
+          
+          if (!is.null(subf_info)) {
+            cat("Found subfunction", callable_name, "- translating call\n")
+            return(translate_subfunction_call(e, scope, ..., hoist = hoist))
+          }
+        }
+
+        # Not a subfunction call - use regular handler
         handler <- get_r2f_handler(callable <- e[[1L]])
 
         match.fun <- attr(handler, "match.fun", TRUE)
         if (is.null(match.fun)) {
           match.fun <- get0(callable, parent.env(globalenv()),
                             mode = "function")
-          # this is a best effort to, eg. resolve `seq.default` from `seq`.
-          # This should likely be moved into attaching the `match.fun` attr
-          # to handlers, for more involved resolution (e.g., with getS3Method())
-          if ("UseMethod" %in% all.names(body(match.fun)))
+          if (!is.null(match.fun) && "UseMethod" %in% all.names(body(match.fun)))
             match.fun <- get0(paste0(callable, ".default"),
                               parent.env(globalenv()),
                               mode = "function",
@@ -43,7 +52,6 @@ lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist
         }
 
         if (isTRUE(getOption("quickr.r2f.debug"))) {
-
           try(handler(as.list(e)[-1L], scope, ...,
                       calls = c(calls, as.character(callable)),
                       hoist = hoist)) -> res
@@ -53,17 +61,12 @@ lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist
                     calls = c(calls, as.character(callable)),
                     hoist = hoist)
           }
-
           res
-
         } else {
-
           handler(as.list(e)[-1L], scope, ...,
                   calls = c(calls, as.character(callable)),
                   hoist = hoist)
-
         }
-
       },
 
       integer = ,
@@ -73,8 +76,6 @@ lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist
 
       symbol = {
         s <- as.character(e)
-        # logicals that come in from R are passed as integer types,
-        # so for all fortran ops we cast to logical with /=0
         if (
           !is.null(scope[[e]] -> val) &&
             val@mode == "logical" &&
@@ -85,15 +86,6 @@ lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist
         Fortran(s, value = scope[[e]])
       },
 
-      ## handling 'object' and 'closure' here are both bad ideas,
-      ## TODO: delete both
-      # "object" = {
-      #   if (inherits(e, Variable))
-      #     e <- Fortran(character(), e)
-      #   stopifnot(inherits(e, Fortran))
-      #   e
-      # },
-
       closure = {
         if (is.null(name <- attr(e, "name", TRUE))) {
           name <- if (is.symbol(name <- substitute(e)))
@@ -103,29 +95,10 @@ lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist
         }
 
         stopifnot(is.null(scope))
-        new_fortran_subroutine(name, e)
+        available_subs <- collector$get_registered_subfunctions("internal")
+        new_fortran_subroutine(name, e, available_subfunctions = available_subs)
       },
 
-      ## all the other typeof() possible values
-      # "character",
-      # "raw" ,
-      # "list",
-      # "NULL",
-      # "function",
-      # "special",
-      # "builtin",
-      # "environment",
-      # "S4",
-      # "pairlist",
-      # "promise",
-      # "char",
-      # "...",
-      # "any",
-      # "expression",
-      # "externalptr",
-      # "bytecode",
-      # "weakref"
-      # default
       stop("Unsupported object type encountered: ", typeof(e))
     )
 
@@ -139,6 +112,165 @@ lang2fortran <- r2f <- function(e, scope = NULL, ..., calls = character(), hoist
   fortran
 }
 
+# Helper function to find subfunction info from multiple sources
+find_subfunction_info <- function(name, scope) {
+  # 1. Check scope's available subfunctions first
+  if (!is.null(scope) && !is.null(scope@available_subfunctions)) {
+    if (name %in% names(scope@available_subfunctions)) {
+      cat("Found", name, "in scope's available subfunctions\n")
+      return(scope@available_subfunctions[[name]])
+    }
+  }
+  
+  # 2. Check the global collector registry
+  if (exists("collector", envir = parent.env(environment()))) {
+    if (collector$is_subfunction_registered(name, "internal")) {
+      subf_info <- collector$get_registered_subfunctions("internal")[[name]]
+      if (!is.null(subf_info)) {
+        cat("Found", name, "in global collector registry\n")
+        # Add to current scope's available subfunctions for future use
+        if (!is.null(scope)) {
+          if (is.null(scope@available_subfunctions)) {
+            scope@available_subfunctions <- list()
+          }
+          scope@available_subfunctions[[name]] <- subf_info
+        }
+        return(subf_info)
+      }
+    }
+  }
+  
+  # 3. Not found
+  cat("Subfunction", name, "not found in any registry\n")
+  return(NULL)
+}
+
+# Translate a call to a registered subfunction
+translate_subfunction_call <- function(call_expr, scope, ..., hoist = NULL) {
+  func_name <- as.character(call_expr[[1L]])
+  
+  # Get subfunction info
+  subf_info <- find_subfunction_info(func_name, scope)
+  if (is.null(subf_info)) {
+    stop("Subfunction ", func_name, " not found during translation")
+  }
+  
+  cat("Translating subfunction call to", func_name, "\n")
+  
+  # Translate arguments
+  args <- as.list(call_expr)[-1]
+  translated_args <- lapply(args, r2f, scope = scope, ..., hoist = hoist)
+  
+  # Analyze the subfunction to determine return type
+  subf_closure <- subf_info$closure
+  temp_scope <- new_scope(subf_closure)
+  
+  # Process declarations and body to infer return type
+  body <- body(subf_closure)
+  body <- defuse_numeric_literals(body)
+  body <- ensure_last_expr_sym(body)
+  
+  # Update the closure with the processed body
+  body(subf_closure) <- body
+  
+  # Populate the temporary scope
+  try({
+    r2f(drop_last(body), temp_scope)
+  }, silent = TRUE)
+  
+  # Get return type from analyzed function
+  return_var_name <- closure_return_var_name(subf_closure)
+  return_var <- temp_scope[[return_var_name]]
+  
+  if (is.null(return_var)) {
+    # Fallback: create a default return variable
+    cat("Warning: Could not infer return type for", func_name, "- using default double array\n")
+    return_var <- Variable(
+      mode = "double",
+      dims = if (length(translated_args) > 0 && !is.null(translated_args[[1]]@value)) {
+        translated_args[[1]]@value@dims
+      } else {
+        list(NA)
+      }
+    )
+  }
+  
+  # Map symbolic dimensions to actual dimensions from arguments
+  output_dims <- lapply(return_var@dims, function(d) {
+    if (is.symbol(d) && as.character(d) == "n") {
+      # Find the first array argument and use its dimension
+      for (arg in translated_args) {
+        if (!is.null(arg@value) && !arg@value@is_scalar) {
+          return(arg@value@dims[[1]])
+        }
+      }
+    }
+    d
+  })
+  
+  # Create output variable with resolved dimensions
+  output_var <- Variable(
+    mode = return_var@mode,
+    dims = output_dims
+  )
+  
+  # Store metadata for the assignment handler
+  attr(output_var, "is_subfunction_call") <- TRUE
+  attr(output_var, "func_name") <- func_name
+  attr(output_var, "args") <- translated_args
+  attr(output_var, "scope_type") <- subf_info$scope
+  
+  cat("Successfully translated subfunction call to", func_name, "\n")
+  
+  # Return a Fortran object with the output variable
+  Fortran("", value = output_var)
+}
+
+get_size_param_for_args <- function(args, scope) {
+  # Try to find a size parameter from the arguments
+  for (arg in args) {
+    if (!is.null(arg@value) && !arg@value@is_scalar) {
+      # Get the actual dimension, not generate a new name
+      dims <- arg@value@dims
+      if (length(dims) > 0 && !is.null(dims[[1]])) {
+        # If it's a symbol (like a size parameter), use it directly
+        if (is.symbol(dims[[1]])) {
+          return(as.character(dims[[1]]))
+        }
+        # Otherwise generate the size name
+        return(get_size_name(arg@value))
+      }
+    }
+  }
+  
+  # Fallback: get from parent scope if available
+  if (!is.null(scope@closure)) {
+    parent_args <- names(formals(scope@closure))
+    for (arg_name in parent_args) {
+      var <- scope[[arg_name]]
+      if (!is.null(var) && !var@is_scalar) {
+        dims <- var@dims
+        if (length(dims) > 0 && !is.null(dims[[1]])) {
+          if (is.symbol(dims[[1]])) {
+            return(as.character(dims[[1]]))
+          }
+          return(get_size_name(var))
+        }
+      }
+    }
+  }
+  
+  # Last resort - look for any size parameter in scope
+  scope_vars <- as.list(scope)
+  for (var_name in names(scope_vars)) {
+    if (is_size_name(var_name)) {
+      return(var_name)
+    }
+  }
+  
+  # Final fallback
+  "n"
+}
 
 atomic2Fortran <- function(x) {
   stopifnot(is_scalar_atomic(x))
@@ -769,33 +901,51 @@ r2f_handlers[["<-"]] <- function(args, scope, ...) {
     handler <- get_r2f_handler(name)
     return(handler(args, scope, ...)) # new hoist target
   }
-
-  # It sure seems like it's be nice if the Fortran() constructor
-  # took mode and dims as args directly,
-  # without needing to go through Variable...
+  
   stopifnot(is.symbol(target))
   name <- as.character(target)
 
   value <- args[[2]]
   value <- r2f(value, scope, ...)
-
+  
   # immutable / copy-on-modify usage of Variable()
   if (is.null(var <- get0(name, scope))) {
     # this is a binding to a new symbol
     var <- value@value
     var@name <- name
     scope[[name]] <- var
-
   } else {
     # The var already exists, this assignment is a modification / reassignment
     check_assignment_compatible(var, value@value)
     var@modified <- TRUE
-    # could probably drop this @modified property, and instead track
-    # if the var populated by declare is identical at the end (e.g., perhaps by
-    # address, or by attaching a unique id to each var, or ???)
     assign(name, var, scope)
   }
-
+  
+  # Check if this was an internal procedure call that needs special syntax
+  if (!is.null(value@value) && 
+      !is.null(attr(value@value, "is_subfunction_call")) && 
+      attr(value@value, "scope_type") == "internal") {
+    
+    # Internal procedures need: call func_internal(args..., output, size)
+    func_name <- attr(value@value, "func_name")
+    translated_args <- attr(value@value, "args")
+    
+    # Get size parameter - try to find it from arguments or parent scope
+    size_param <- get_size_param_for_args(translated_args, scope)
+    
+    cat("Generating internal procedure call for", func_name, "with size param", size_param, "\n")
+    
+    # Generate the call statement
+    call_stmt <- sprintf("call %s_internal(%s, %s, %s)", 
+                        func_name,
+                        str_flatten_commas(translated_args),
+                        name,
+                        size_param)
+    
+    return(Fortran(call_stmt))
+  }
+  
+  # Normal assignment
   Fortran(glue("{name} = {value}"))
 }
 
@@ -1134,4 +1284,8 @@ r2f_iterable_handlers[["seq_along"]] <- function(e, scope) {
 check_call <- function(e, nargs) {
   if (length(e) != (nargs+1L))
     stop("Too many args to: ", as.character(e[[1L]]))
+}
+
+is_available_subfunction <- function(name, scope) {
+  !is.null(find_subfunction_info(name, scope))
 }

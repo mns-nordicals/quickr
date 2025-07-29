@@ -114,6 +114,8 @@
 #'   out
 #' })
 #' add_ab(1, 2)
+# In quick.R, update the internal scope handling around line 85-110:
+
 quick <- function(fun, name = NULL, scope = "standalone") {
   if (is.null(name)) {
     name <- if (is.symbol(substitute(fun)))
@@ -121,46 +123,80 @@ quick <- function(fun, name = NULL, scope = "standalone") {
     else
       make_unique_name(prefix = "anonymous_quick_function_")
   }
+  
   # Validate scope parameter
   if (!is.null(scope) && !scope %in% c("standalone", "internal", "module")) {
     stop("scope must be one of 'standalone', 'internal', or 'module'")
   }
 
-  if (nzchar(pkgname <- Sys.getenv("DEVTOOLS_LOAD"))) {
+  # Check for unimplemented features
+  if (scope == "module") {
+    stop("Module scope is not implemented yet. Use 'internal' or 'standalone'.")
+  }
+
+  # Determine if we're in true package development mode
+  in_package_development <- nzchar(Sys.getenv("DEVTOOLS_LOAD"))
+  
+  # Package development mode - use collector for batch compilation
+  if (in_package_development) {
     if (!collector$is_active()) {
       if (!requireNamespace("pkgload", quietly = TRUE)) {
         stop("Please install 'pkgload'")
       }
       for (i in seq_along(sys.calls())) {
         if (identical(sys.function(i), pkgload::load_code)) {
-          collector$activate(paste0(pkgname, ":quick_funcs"))
+          collector$activate(paste0(Sys.getenv("DEVTOOLS_LOAD"), ":quick_funcs"))
           defer(dump_collected(), sys.frame(i), after = TRUE)
           break
         }
       }
     }
-  }
-
-  if (collector$is_active()) {
-    # we are in a quickr::compile_package() or a devtools::load_all() call,
-    # merely collecting functions at this point.
+    
     quick_closure <- create_quick_closure(name, fun)
     collector$add(name = name, closure = fun, quick_closure = quick_closure, scope = scope)
     return(quick_closure)
   }
 
+  # Check if we're in a package but outside compile_package() call
   pkgname <- parent.pkg()
   if (!is.null(pkgname) && pkgname != "quickr") {
-    # we are in a package - but outside a quickr::compile_package() call.
     return(create_quick_closure(name, fun))
   }
 
-  # not in a package. Compile and load eagerly.
-  attr(fun, "name") <- name
-  fun <- compile(r2f(fun))
-  attr(fun, "name") <- NULL
+  # Interactive mode - handle based on scope
+  cat("Interactive mode - processing", scope, "function:", name, "\n")
+  
+  # Ensure collector is available for internal function registry
+  if (!collector$is_active()) {
+    collector$activate("interactive:quick_funcs")
+  }
 
-  fun
+  # Handle internal scope - register and return placeholder
+  if (scope == "internal") {
+    collector$register_subfunction(name, fun, "internal")
+    
+    placeholder <- function(...) {
+      stop(paste0(
+        "Internal function '", name, "' cannot be called directly.\n",
+        "It must be called from within another quick() function."
+      ))
+    }
+    attr(placeholder, "quickr_internal") <- TRUE
+    attr(placeholder, "name") <- name
+    return(placeholder)
+  }
+  
+  # Handle standalone scope - compile immediately with available subfunctions
+  available_subs <- collector$get_registered_subfunctions("internal")
+  
+  cat("Compiling standalone function", name, "with", length(available_subs), "available subfunctions:", names(available_subs), "\n")
+  
+  attr(fun, "name") <- name
+  fsub <- new_fortran_subroutine(name, fun, available_subfunctions = available_subs)
+  compiled_fun <- compile(fsub)
+  attr(compiled_fun, "name") <- NULL
+
+  compiled_fun
 }
 
 compile <- function(fsub, build_dir = tempfile(paste0(fsub@name, "-build-"))) {

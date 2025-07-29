@@ -57,7 +57,6 @@ new_scope <- function(closure, parent = emptyenv()) {
   class(scope) <- unique(c("quickr_scope", class(scope)))
   attr(scope, "closure") <- closure
 
-
   attr(scope, "get_unique_var") <- local({
     i <- 0L
     function(...) {
@@ -65,6 +64,7 @@ new_scope <- function(closure, parent = emptyenv()) {
       (scope[[name]] <- Variable(..., name = name))
     }
   })
+  
   attr(scope, "assign") <- function(name, value) {
     stopifnot(inherits(value, Variable), is.symbol(name) || is_string(name))
     name <- as.character(name)
@@ -73,9 +73,12 @@ new_scope <- function(closure, parent = emptyenv()) {
     value@name <- name
     assign(name, value, scope)
   }
+  
+  # Add available_subfunctions attribute
+  attr(scope, "available_subfunctions") <- NULL
+  
   scope
 }
-
 
 #' @export
 `@.quickr_scope` <- function(x, name) attr(x, name, exact = TRUE)
@@ -86,5 +89,4 @@ new_scope <- function(closure, parent = emptyenv()) {
 #' @importFrom utils .AtNames findMatches
 #' @export
 .AtNames.quickr_scope <- function(x, pattern = "")
-  findMatches(pattern, names(attributes(x)))
-
+  findMatches(pattern, c(names(attributes(x)), "available_subfunctions"))

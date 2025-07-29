@@ -157,7 +157,12 @@ pkg_dll_path <- function (pkgname) {
 collector <- local({
   
   .collected <- NULL
-  .scope_registry <- NULL  # New: track functions by scope
+  .scope_registry <- NULL
+  .subfunction_registry <- list(
+    internal = list(),
+    module = list(),
+    standalone = list()
+  )  # Initialize with empty lists for each scope
   
   activate <- function(name = NULL) {
     .collected <<- list()
@@ -166,7 +171,9 @@ collector <- local({
       internal = list(),
       module = list()
     )
+    # Don't reset .subfunction_registry - keep it persistent
     attr(.collected, "name") <<- name
+    cat("Collector activated with name:", name %||% "NULL", "\n")
   }
   
   is_active <- function() {
@@ -195,6 +202,68 @@ collector <- local({
     } else {
       .scope_registry[[scope]]
     }
+  }
+  
+  # Improved subfunction registry methods
+  register_subfunction <- function(name, closure, scope) {
+    cat("Registering subfunction:", name, "with scope:", scope, "\n")
+    
+    # Ensure scope exists
+    if (is.null(.subfunction_registry[[scope]])) {
+      .subfunction_registry[[scope]] <<- list()
+    }
+    
+    # Store the function info
+    .subfunction_registry[[scope]][[name]] <<- list(
+      scope = scope,
+      closure = closure,
+      name = name
+    )
+    
+    cat("Successfully registered. Current registry for", scope, ":", 
+        names(.subfunction_registry[[scope]]), "\n")
+    
+    invisible(TRUE)
+  }
+  
+  get_registered_subfunctions <- function(scope = NULL) {
+    if (is.null(scope)) {
+      .subfunction_registry
+    } else {
+      result <- .subfunction_registry[[scope]] %||% list()
+      cat("Getting registered subfunctions for scope", scope, ":", names(result), "\n")
+      result
+    }
+  }
+  
+  clear_subfunctions <- function() {
+    cat("Clearing all registered subfunctions\n")
+    .subfunction_registry <<- list(
+      internal = list(),
+      module = list(),
+      standalone = list()
+    )
+  }
+  
+  # New method to check if a function is registered
+  is_subfunction_registered <- function(name, scope = "internal") {
+    registered <- .subfunction_registry[[scope]] %||% list()
+    result <- name %in% names(registered)
+    cat("Checking if", name, "is registered in scope", scope, ":", result, "\n")
+    result
+  }
+  
+  # Debug method to show current state
+  debug_registry <- function() {
+    cat("=== COLLECTOR DEBUG ===\n")
+    cat("Active:", is_active(), "\n")
+    cat("Collected functions:", length(.collected %||% list()), "\n")
+    cat("Subfunction registry:\n")
+    for (scope_name in names(.subfunction_registry)) {
+      funcs <- names(.subfunction_registry[[scope_name]] %||% list())
+      cat("  ", scope_name, ":", if(length(funcs) > 0) paste(funcs, collapse = ", ") else "none", "\n")
+    }
+    cat("=====================\n")
   }
   
   environment()
