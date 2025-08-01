@@ -1,11 +1,48 @@
-#' Compile a Quick Function
+#' Compile a Quick Function (Enhanced with Internal Function Support)
 #'
-#' Compile an R function.
+#' Compile an R function for improved performance.
 #'
 #' @param fun An R function
-#' @param name Optional string, name to use for the function.
+#' @param name Optional string, name to use for the function. **Required when 
+#'   `register_as = "internal"`** is specified.
+#' @param register_as Optional string. If "internal", register function for use 
+#'   by other quickr functions. When specified, `name` parameter is required.
+#'   Currently only "internal" is supported.
 #'
 #' @details
+#'
+#' ## Internal Function Registration
+#' 
+#' When `register_as = "internal"` is specified, the compiled function is 
+#' registered in the internal function registry. This allows other quickr 
+#' functions to call it using normal R function call syntax.
+#' 
+#' **Important**: When registering internal functions, you **must** provide an 
+#' explicit `name` parameter. Auto-generated names are not allowed for internal 
+#' functions to ensure they can be reliably referenced.
+#' 
+#' ```r
+#' # ✅ Correct - explicit name provided
+#' add_one <- quick(function(x) {
+#'   declare(type(x = double(1)))
+#'   out <- x + 1
+#'   out
+#' }, name = "add_one", register_as = "internal")
+#' 
+#' # ❌ Error - name is required for internal functions  
+#' add_one <- quick(function(x) {
+#'   declare(type(x = double(1)))
+#'   out <- x + 1
+#'   out
+#' }, register_as = "internal")  # This will throw an error
+#' 
+#' # Use it in another quickr function  
+#' main_fun <- quick(function(x) {
+#'   declare(type(x = double(1)))
+#'   out <- add_one(x)  # This will work once r2f detection is implemented
+#'   out
+#' })
+#' ```
 #'
 #' ## `declare(type())` syntax:
 #'
@@ -109,7 +146,30 @@
 #'   out
 #' })
 #' add_ab(1, 2)
-quick <- function(fun, name = NULL) {
+#' 
+#' # Register as internal function (name is required)
+#' \dontrun{
+#' helper <- quick(function(x) {
+#'   declare(type(x = double(1)))
+#'   out <- x * 2
+#'   out
+#' }, name = "helper", register_as = "internal")
+#' }
+quick <- function(fun, name = NULL, register_as = NULL) {
+  
+  # === VALIDATION ===
+  if (!is.null(register_as)) {
+    if (!register_as %in% c("internal")) {
+      stop("register_as must be 'internal' or NULL")
+    }
+    
+    # Require explicit name when registering internal functions  
+    if (is.null(name)) {
+      stop("'name' parameter is required when register_as = 'internal'. ",
+           "Internal functions must have explicit names to be referenced reliably.")
+    }
+  }
+  
   if (is.null(name)) {
     name <- if (is.symbol(substitute(fun)))
       deparse(substitute(fun))
@@ -136,22 +196,39 @@ quick <- function(fun, name = NULL) {
     # we are in a quickr::compile_package() or a devtools::load_all() call,
     # merely collecting functions at this point.
     quick_closure <- create_quick_closure(name, fun)
-    collector$add(name = name, closure = fun, quick_closure = quick_closure)
+    
+    # Store register_as information for later use in package compilation
+    collector$add(name = name, closure = fun, quick_closure = quick_closure, 
+                  register_as = register_as)
     return(quick_closure)
   }
 
   pkgname <- parent.pkg()
   if (!is.null(pkgname) && pkgname != "quickr") {
     # we are in a package - but outside a quickr::compile_package() call.
+    # TODO: Handle register_as in package context properly
+    # For now, just create the closure and warn if register_as was requested
+    if (!is.null(register_as)) {
+      warning("register_as is not yet supported in package development context outside of quickr::compile_package()")
+    }
     return(create_quick_closure(name, fun))
   }
 
+  # === EAGER COMPILATION === (Enhanced with registration support)
   # not in a package. Compile and load eagerly.
   attr(fun, "name") <- name
-  fun <- compile(r2f(fun))
-  attr(fun, "name") <- NULL
+  fsub <- r2f(fun)  # Generate FortranSubroutine object
+  
+  # Register as internal function if requested (before compilation)
+  if (!is.null(register_as) && register_as == "internal") {
+    register_internal_function(name, fun, fsub)
+  }
+  
+  # Compile and load the function
+  compiled_fun <- compile(fsub)
+  attr(compiled_fun, "name") <- NULL
 
-  fun
+  compiled_fun
 }
 
 compile <- function(fsub, build_dir = tempfile(paste0(fsub@name, "-build-"))) {
