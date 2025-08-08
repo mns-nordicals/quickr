@@ -38,8 +38,7 @@ InternalFunction := new_class(
     fortran_subroutine = FortranSubroutine,
     scope = class_environment,
     argument_vars = class_list,      # List of Variable objects for arguments
-    return_var = Variable,           # Variable object for return value  
-    size_names = class_character     # Size parameter names from signature
+    return_var = Variable           # Variable object for return value  
   )
 )
 
@@ -109,10 +108,6 @@ register_internal_function <- function(name, r_function, fsub) {
     stop(sprintf("Return variable '%s' not found in function scope", return_var_name))
   }
   
-  # Extract size parameter names from the Fortran subroutine signature
-  # These are the parameters like "x__len_" and "y__dim_2_" that carry size info
-  size_names <- fsub@signature[is_size_name(fsub@signature)]
-  
   # Create and store the internal function entry
   internal_func <- InternalFunction(
     name = name,
@@ -120,8 +115,7 @@ register_internal_function <- function(name, r_function, fsub) {
     fortran_subroutine = fsub,
     scope = scope,
     argument_vars = argument_vars,
-    return_var = return_var,
-    size_names = size_names
+    return_var = return_var
   )
   
   # Store in the global registry

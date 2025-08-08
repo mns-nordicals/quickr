@@ -796,81 +796,13 @@ r2f_handlers[["<-"]] <- function(args, scope, ...) {
   value <- args[[2]]
   value <- r2f(value, scope, ...)
 
-    # NEW: Check if this is an internal function call assignment
-  # Check if this is an internal function call assignment
-  call_metadata <- attr(value@value, "internal_call_metadata")
-  
-  if (!is.null(call_metadata)) {
-    cat("DEBUG: Processing internal function call assignment for:", call_metadata$func_name, "\n")
-    
-    func_name <- call_metadata$func_name
-    translated_args <- call_metadata$translated_args
-    internal_func <- call_metadata$internal_func
-    
-    # Create/update target variable
-    if (is.null(var <- get0(name, scope))) {
-      var <- value@value
-      var@name <- name
-      
-      # Infer dimensions from input arguments for array functions
-      if (length(translated_args) > 0 && length(internal_func@argument_vars) > 0) {
-        first_arg_name <- names(internal_func@argument_vars)[1]
-        first_arg_var <- internal_func@argument_vars[[first_arg_name]]
-        
-        if (first_arg_var@rank > 0) {
-          var@dims <- first_arg_var@dims
-        }
-      }
-      
-      scope[[name]] <- var
-      cat("DEBUG: Created variable:", name, "mode:", var@mode, "rank:", var@rank, "\n")
-    } else {
-      check_assignment_compatible(var, value@value)
-      var@modified <- TRUE
-      assign(name, var, scope)
-    }
-    
-    # SIMPLIFIED: Generate call with just input and output arguments
-    # No size parameters - they're inherited in Fortran internal procedures
-    # Generate the call arguments
-    call_args <- c(translated_args, name)
-    
-    # FIXED: Add size parameter for array functions
-    var <- scope[[name]]  # Get the target variable we just created
-    if (!is.null(var) && var@rank > 0) {
-      # This is an array function, pass the size parameter
-      # Use the size of the first argument
-      if (length(translated_args) > 0) {
-        first_arg <- translated_args[1]
-        # Generate size expression
-        size_expr <- sprintf("size(%s)", first_arg)
-        call_args <- c(call_args, size_expr)
-      }
-    }
-    
-    fortran_call <- sprintf("call %s_internal(%s)", 
-                           func_name, 
-                           str_flatten_commas(call_args))
-    
-    cat("DEBUG: Generated call with size parameter:", fortran_call, "\n")
-        
-    return(Fortran(fortran_call))
-  }
-  
-  # immutable / copy-on-modify usage of Variable()
   if (is.null(var <- get0(name, scope))) {
-    # this is a binding to a new symbol
     var <- value@value
     var@name <- name
     scope[[name]] <- var
-
   } else {
-    # The var already exists, this assignment is a modification / reassignment
     check_assignment_compatible(var, value@value)
     var@modified <- TRUE
-    # could probably drop this @modified property, and instead track
-    # if the var populated by declare is identical at the end (e.g., perhaps by
-    # address, or by attaching a unique id to each var, or ???)
     assign(name, var, scope)
   }
 
@@ -1214,10 +1146,8 @@ check_call <- function(e, nargs) {
     stop("Too many args to: ", as.character(e[[1L]]))
 }
 
-#' Translate Internal Function Call (Minimal Version)
-#' 
-#' This is a minimal version to test the detection logic.
-#' We'll enhance it step by step.
+
+# Simpler fix - just use NA for array dimensions
 translate_internal_function_call <- function(call_expr, scope, ...) {
   func_name <- as.character(call_expr[[1L]])
   
@@ -1229,42 +1159,28 @@ translate_internal_function_call <- function(call_expr, scope, ...) {
     stop("Internal function '", func_name, "' not found in registry")
   }
   
-  cat("DEBUG: Found internal function:", internal_func@name, "\n")
-  
-  # FIXED: Properly translate the actual arguments being passed
-  args <- as.list(call_expr)[-1]  # Get the actual arguments from the call
-  
-  # Translate each argument using the existing r2f system
+  # Translate arguments
+  args <- as.list(call_expr)[-1]
   translated_args <- lapply(args, function(arg) {
     translated <- r2f(arg, scope = scope, ...)
-    cat("DEBUG: Translated argument:", as.character(arg), "→", as.character(translated), "\n")
-    return(as.character(translated))  # Return as character for call generation
+    as.character(translated)
   })
   
-  cat("DEBUG: All translated arguments:", paste(translated_args, collapse = ", "), "\n")
+  cat("DEBUG: Translated arguments:", paste(translated_args, collapse = ", "), "\n")
   
-  # FIXED: Proper return type inference based on internal function signature
+  # Generate function call expression
+  fortran_expr <- sprintf("%s_internal(%s)", 
+                         func_name,
+                         str_flatten_commas(translated_args))
+  
+  # For the result, we don't need to track exact dimensions
+  # since the Fortran function handles its own sizing
   return_var <- internal_func@return_var
-  
-  # Create a copy of the return variable template with proper dimensions
-  inferred_return <- Variable(
+  result_var <- Variable(
     mode = return_var@mode,
-    dims = return_var@dims  # For now, keep the original dimensions
+    dims = if (return_var@rank > 0) list(NA) else NULL  # Just mark as array with unknown size
   )
   
-  cat("DEBUG: Inferred return type:", inferred_return@mode, "with", length(inferred_return@dims %||% 0), "dimensions\n")
-  
-  # Attach metadata with ACTUAL translated arguments
-  call_metadata <- list(
-    func_name = func_name,
-    translated_args = translated_args,  # Now contains actual argument names
-    internal_func = internal_func,
-    size_params = character()  # We'll enhance this later
-  )
-  
-  attr(inferred_return, "internal_call_metadata") <- call_metadata
-  
-  cat("DEBUG: Attached metadata with", length(translated_args), "arguments\n")
-  
-  return(Fortran("", value = inferred_return))
+  # Return as an expression
+  Fortran(fortran_expr, value = result_var)
 }

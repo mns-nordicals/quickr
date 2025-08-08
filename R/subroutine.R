@@ -56,6 +56,10 @@ new_fortran_subroutine <- function(name, closure, parent = emptyenv()) {
     stop("last expression in the function must be a bare symbol")
   }
 
+  cat("DEBUG: Variables in scope for", name, ":\n")
+  cat("  Closure args:", names(formals(closure)), "\n")
+  cat("  All scope vars:", names(scope), "\n")
+
   manifest <- r2f.scope(scope)
   fsub_arg_names <- attr(manifest, "signature", TRUE)
 
@@ -91,24 +95,24 @@ new_fortran_subroutine <- function(name, closure, parent = emptyenv()) {
   used_iso_bindings <- sort(used_iso_bindings, method = "radix")
 
   # NEW: Generate contains section if we have internal function calls
-  # Generate contains section if we have internal function calls
+  # NEW: Generate contains section if we have internal function calls
   contains_section <- ""
   if (length(internal_calls) > 0) {
     cat("DEBUG: Generating contains section for", name, "\n")
     
-    # Generate internal procedures using the simplified approach
-    internal_procedures <- character()
+    # Generate internal FUNCTIONS (not procedures)
+    internal_functions <- character()
     for (func_name in internal_calls) {
       internal_func <- get_internal_function(func_name)
       if (!is.null(internal_func)) {
-        # UPDATED: Use simplified procedure generation with parent scope
-        proc_code <- generate_internal_procedure_simplified(func_name, internal_func, scope)
-        internal_procedures <- c(internal_procedures, proc_code)
+        # Use the new function generator
+        func_code <- generate_internal_function(func_name, internal_func, scope)
+        internal_functions <- c(internal_functions, func_code)
       }
     }
     
-    if (length(internal_procedures) > 0) {
-      contains_section <- paste0("\ncontains\n\n", paste(internal_procedures, collapse = "\n\n"))
+    if (length(internal_functions) > 0) {
+      contains_section <- paste0("\ncontains\n\n", paste(internal_functions, collapse = "\n\n"))
     }
   }
 
@@ -210,16 +214,22 @@ find_internal_function_calls <- function(func_body) {
   return(unique(internal_calls))
 }
 
-# Add this helper function to generate internal procedure definition
-generate_internal_procedure_simplified <- function(func_name, internal_func, parent_scope) {
-  # Generate internal procedure with explicit size parameters (simpler approach)
-  
-  cat("DEBUG: Generating simplified internal procedure for:", func_name, "\n")
+
+
+#' Generate a Fortran function for an internal quickr function
+#' 
+#' @param func_name Name of the function
+#' @param internal_func InternalFunction object from registry
+#' @param parent_scope Parent scope for variable resolution
+#' @return Character string of Fortran function code
+# In generate_internal_function, we need to make sure ALL local variables are found
+generate_internal_function <- function(func_name, internal_func, parent_scope) {
+  cat("DEBUG: Generating Fortran FUNCTION for:", func_name, "\n")
   
   closure <- internal_func@r_function
   
-  # Create scope for the internal procedure
-  proc_scope <- new_scope(closure, parent = parent_scope)
+  # Create scope for the internal function
+  func_scope <- new_scope(closure, parent = parent_scope)
   
   # Process function body
   body <- body(closure)
@@ -227,168 +237,237 @@ generate_internal_procedure_simplified <- function(func_name, internal_func, par
   body <- ensure_last_expr_sym(body)
   body <- substitute_declared_sizes(body)
   
-  # Translate body
-  translated_body <- r2f(drop_last(body), proc_scope)
+  # Translate the ENTIRE body to populate the scope with ALL variables
+  translated_body <- r2f(body, func_scope)
   
-  # Get parameter info
-  arg_names <- names(formals(closure))
+  # Get return variable info
   return_var_name <- closure_return_var_name(closure)
-  
-  # Check if we need size parameters
-  has_arrays <- any(sapply(internal_func@argument_vars, function(v) v@rank > 0)) ||
-                internal_func@return_var@rank > 0
-  
-  # SIMPLIFIED: Use explicit size parameters instead of trying to inherit
-  param_list <- c(arg_names, return_var_name)
-  if (has_arrays) {
-    param_list <- c(param_list, "n")
+  return_var <- func_scope[[return_var_name]]
+  if (is.null(return_var)) {
+    stop("Return variable '", return_var_name, "' not found in function scope")
   }
+  
+  # Generate the Fortran function code
+  # Pass the FULL scope so we can extract all local variables
+  generate_fortran_function_code(
+    func_name,
+    internal_func@argument_vars,
+    return_var,
+    translated_body,
+    func_scope  # This contains ALL variables including locals
+  )
+}
+
+# Update generate_fortran_function_code in subroutine.R
+
+# Fix in generate_fortran_function_code - better local variable extraction
+
+# In subroutine.R - update generate_fortran_function_code
+# In subroutine.R - complete fix for generate_fortran_function_code
+generate_fortran_function_code <- function(func_name, arg_vars, return_var, body, func_scope) {
+  # Build parameter list (just the input arguments)
+  param_list <- names(arg_vars)
   
   # Generate declarations
   declarations <- character()
   
-  # Add size parameter declaration
-  if (has_arrays) {
-    declarations <- c(declarations, "integer(c_ptrdiff_t), intent(in), value :: n")
-  }
-  
-  # Add input parameters
-  for (arg_name in arg_names) {
-    if (arg_name %in% names(internal_func@argument_vars)) {
-      var <- internal_func@argument_vars[[arg_name]]
-      type_spec <- switch(var@mode,
-        double = "real(c_double)",
-        integer = "integer(c_int)",
-        logical = "integer(c_int)",
-        complex = "complex(c_double_complex)"
-      )
-      
-      if (var@rank > 0) {
-        dims <- "(n)"  # Use explicit size parameter
-        declarations <- c(declarations,
-          sprintf("%s, intent(in) :: %s%s", type_spec, arg_name, dims))
-      } else {
-        declarations <- c(declarations,
-          sprintf("%s, intent(in) :: %s", type_spec, arg_name))
-      }
+  # Add parameter declarations
+  for (arg_name in names(arg_vars)) {
+    var <- arg_vars[[arg_name]]
+    type_spec <- switch(var@mode,
+      double = "real(c_double)",
+      integer = "integer(c_int)",
+      logical = "logical",
+      complex = "complex(c_double_complex)",
+      stop("Unsupported type: ", var@mode)
+    )
+    
+    # Check if it's actually a scalar or array
+    if (var@rank > 0 && !identical(var@dims, list(1L))) {
+      dims_spec <- paste0("(", paste(rep(":", var@rank), collapse = ","), ")")
+      declarations <- c(declarations,
+        sprintf("%s, intent(in) :: %s%s", type_spec, arg_name, dims_spec))
+    } else {
+      declarations <- c(declarations,
+        sprintf("%s, intent(in), value :: %s", type_spec, arg_name))
     }
   }
   
-  # Add output parameter
-  return_var <- internal_func@return_var
-  return_type <- switch(return_var@mode,
+  # Generate result declaration - FIX: Use correct type from return_var
+  result_name <- "result_"
+  result_type <- switch(return_var@mode,
     double = "real(c_double)",
     integer = "integer(c_int)",
-    logical = "integer(c_int)",
-    complex = "complex(c_double_complex)"
+    logical = "logical",
+    complex = "complex(c_double_complex)",
+    stop("Unsupported return type: ", return_var@mode)
   )
   
-  if (return_var@rank > 0) {
-    dims <- "(n)"
-    declarations <- c(declarations,
-      sprintf("%s, intent(out) :: %s%s", return_type, return_var_name, dims))
+  # Determine result dimensions
+  if (return_var@rank > 0 && !identical(return_var@dims, list(1L))) {
+    result_dims <- infer_result_dimensions(return_var, arg_vars, func_scope)
+    result_decl <- sprintf("%s :: %s%s", result_type, result_name, result_dims)
   } else {
-    declarations <- c(declarations,
-      sprintf("%s, intent(out) :: %s", return_type, return_var_name))
+    result_decl <- sprintf("%s :: %s", result_type, result_name)
   }
   
-  # FIXED: Add explicit local variable declarations
-  # For normalize function, we need to declare 'norm'
-  if (func_name == "normalize") {
-    declarations <- c(declarations, "real(c_double) :: norm")
-  }
+  # FIX: Properly extract ALL local variables
+  local_declarations <- character()
   
-  # More general approach: extract variable names from translated body
-  body_text <- as.character(translated_body)
-  if (grepl("\\bnorm\\b", body_text)) {
-    if (!"real(c_double) :: norm" %in% declarations) {
-      declarations <- c(declarations, "real(c_double) :: norm")
+  cat("DEBUG: Variables in function scope:", names(func_scope), "\n")
+  cat("DEBUG: Argument names:", names(arg_vars), "\n")
+  cat("DEBUG: Return var name:", return_var@name, "\n")
+  
+  for (var_name in names(func_scope)) {
+    # Skip arguments
+    if (var_name %in% names(arg_vars)) {
+      cat("DEBUG: Skipping argument:", var_name, "\n")
+      next
     }
-  }
-  
-  # Generate the procedure
-  procedure_code <- sprintf("
-  subroutine %s_internal(%s)
-    %s
     
-    %s
-  end subroutine %s_internal",
-    func_name,
-    str_flatten_commas(param_list),
-    paste(declarations, collapse = "\n    "),
-    indent(as.character(translated_body)),
-    func_name
-  )
-  
-  cat("DEBUG: Generated procedure with explicit parameters:\n", procedure_code, "\n")
-  return(procedure_code)
-}
-
-# Modify the existing new_fortran_subroutine function
-# We'll create a wrapper that adds contains block support
-new_fortran_subroutine_with_contains <- function(name, closure, parent = emptyenv()) {
-  
-  cat("DEBUG: Creating subroutine with contains support:", name, "\n")
-  
-  # Step 1: Find internal function calls BEFORE processing the body
-  internal_calls <- find_internal_function_calls(body(closure))
-  cat("DEBUG: Found", length(internal_calls), "internal function calls:", paste(internal_calls, collapse = ", "), "\n")
-  
-  # Step 2: Generate the main subroutine using existing logic
-  # We'll temporarily use the existing function, then modify its output
-  fsub <- new_fortran_subroutine(name, closure, parent)
-  
-  # Step 3: If we have internal calls, add contains section
-  if (length(internal_calls) > 0) {
-    cat("DEBUG: Adding contains section...\n")
+    # Skip return variable
+    if (var_name == return_var@name) {
+      cat("DEBUG: Skipping return var:", var_name, "\n")
+      next
+    }
     
-    # Get the original Fortran code
-    original_code <- as.character(fsub)
+    # Get the variable from the scope
+    var <- func_scope[[var_name]]
     
-    # Generate internal procedures
-    internal_procedures <- character()
-    for (func_name in internal_calls) {
-      internal_func <- get_internal_function(func_name)
-      if (!is.null(internal_func)) {
-        proc_code <- generate_internal_procedure(func_name, internal_func)
-        internal_procedures <- c(internal_procedures, proc_code)
+    # Check if it's a Variable object
+    if (!inherits(var, "Variable")) {
+      cat("DEBUG: Not a Variable object:", var_name, "\n")
+      next
+    }
+    
+    cat("DEBUG: Processing local variable:", var_name, "mode:", var@mode, "\n")
+    
+    # Determine the type
+    var_type <- switch(var@mode,
+      double = "real(c_double)",
+      integer = "integer(c_int)",
+      logical = "logical",
+      complex = "complex(c_double_complex)",
+      NULL
+    )
+    
+    if (!is.null(var_type)) {
+      # Check if it's scalar or array
+      if (!is.null(var@rank) && var@rank > 0 && !identical(var@dims, list(1L))) {
+        # Array local variable
+        local_dims <- infer_local_dimensions(var, func_scope)
+        local_declarations <- c(local_declarations,
+          sprintf("%s :: %s%s", var_type, var_name, local_dims))
+      } else {
+        # Scalar local variable
+        local_declarations <- c(local_declarations,
+          sprintf("%s :: %s", var_type, var_name))
       }
     }
+  }
+  
+  # FIX: Process the body to replace return variable with result_
+  body_str <- as.character(body)
+  lines <- strsplit(body_str, "\n")[[1]]
+  
+  # Remove any standalone return variable name (like "out" at the end)
+  # and replace with assignment to result_
+  processed_lines <- character()
+  for (i in seq_along(lines)) {
+    line <- lines[i]
     
-    # Insert contains section before the final "end subroutine"
-    # Split the code into lines
-    code_lines <- strsplit(original_code, "\n")[[1]]
+    # Check if it's the last line and just the return variable name
+    if (i == length(lines) && grepl(paste0("^\\s*", return_var@name, "\\s*$"), line)) {
+      # Skip this line - we don't need it in a function
+      next
+    }
     
-    # Find the "end subroutine" line
-    end_line_idx <- which(grepl("end subroutine", code_lines, ignore.case = TRUE))
+    # Check if it's an assignment to the return variable
+    if (grepl(paste0("^\\s*", return_var@name, "\\s*="), line)) {
+      # Replace with assignment to result_
+      line <- sub(paste0("^(\\s*)", return_var@name, "(\\s*=)"),
+                  paste0("\\1", result_name, "\\2"),
+                  line)
+    }
     
-    if (length(end_line_idx) > 0) {
-      # Insert contains section before the end
-      before_end <- code_lines[1:(end_line_idx[1] - 1)]
-      end_line <- code_lines[end_line_idx[1]:length(code_lines)]
-      
-      contains_section <- c("contains", "", internal_procedures)
-      
-      # Combine everything
-      new_code <- c(before_end, contains_section, end_line)
-      new_code_str <- paste(new_code, collapse = "\n")
-      
-      cat("DEBUG: Added contains section successfully\n")
-      
-      # Create new FortranSubroutine object with the enhanced code
-      enhanced_fsub <- FortranSubroutine(
-        new_code_str,
-        name = fsub@name,
-        signature = fsub@signature,
-        scope = fsub@scope,
-        closure = fsub@closure
-      )
-      
-      return(enhanced_fsub)
+    processed_lines <- c(processed_lines, line)
+  }
+  body_str <- paste(processed_lines, collapse = "\n")
+  
+  # Generate the complete function
+  function_code <- character()
+  function_code <- c(function_code,
+    sprintf("function %s_internal(%s) result(%s)",
+            func_name,
+            str_flatten_commas(param_list),
+            result_name))
+  
+  # Add declarations in order: parameters, result, locals
+  if (length(declarations) > 0) {
+    function_code <- c(function_code, paste0("  ", declarations))
+  }
+  
+  function_code <- c(function_code, paste0("  ", result_decl))
+  
+  if (length(local_declarations) > 0) {
+    function_code <- c(function_code, paste0("  ", local_declarations))
+  }
+  
+  # Add empty line before body
+  function_code <- c(function_code, "")
+  
+  # Add the function body
+  body_lines <- strsplit(body_str, "\n")[[1]]
+  function_code <- c(function_code, paste0("  ", body_lines))
+  
+  # Close the function
+  function_code <- c(function_code,
+    sprintf("end function %s_internal", func_name))
+  
+  paste(function_code, collapse = "\n")
+}
+
+#' Infer result dimensions for a function
+# Update infer_result_dimensions to handle more cases
+infer_result_dimensions <- function(return_var, arg_vars, func_scope) {
+  if (return_var@rank == 0 || identical(return_var@dims, list(1L))) {
+    return("")  # Scalar
+  }
+  
+  # For arrays, try to match with input arrays
+  for (arg_name in names(arg_vars)) {
+    arg_var <- arg_vars[[arg_name]]
+    if (arg_var@rank == return_var@rank && arg_var@rank > 0) {
+      # Use size intrinsic for each dimension
+      if (arg_var@rank == 1) {
+        return(sprintf("(size(%s))", arg_name))
+      } else {
+        dims <- paste(sapply(1:arg_var@rank, function(i) {
+          sprintf("size(%s,%d)", arg_name, i)
+        }), collapse = ",")
+        return(sprintf("(%s)", dims))
+      }
     }
   }
   
-  # If no internal calls, return original
-  cat("DEBUG: No internal calls, returning original subroutine\n")
-  return(fsub)
+  # If we can't infer, use allocatable
+  return("(:)")
+}
+
+#' Infer dimensions for local variables
+infer_local_dimensions <- function(var, func_scope) {
+  if (var@rank == 0) return("")
+  
+  # Try to use the dimension information stored in the variable
+  if (!is.null(var@dims)) {
+    dims <- sapply(var@dims, function(d) {
+      if (is.numeric(d)) as.character(d)
+      else if (is.symbol(d)) as.character(d)
+      else "size_unknown"
+    })
+    return(sprintf("(%s)", paste(dims, collapse = ",")))
+  }
+  
+  # Default to deferred-shape for allocatable
+  return(sprintf("(%s)", paste(rep(":", var@rank), collapse = ",")))
 }
