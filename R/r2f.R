@@ -649,7 +649,23 @@ r2f_handlers[["*"]] <- function(args, scope = NULL, ...) {
 
 r2f_handlers[["/"]] <- function(args, scope = NULL, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  Fortran(glue("({left} / {right})"), conform(left@value, right@value))
+  
+  # Determine result type - division always promotes to at least double
+  result_type <- promote_types(left@value@mode, right@value@mode)
+  
+  # Special case: promote integer/logical division to double
+  if (result_type %in% c("logical", "integer")) {
+    result_type <- "double"
+  }
+  
+  # Warn about integer division that would truncate in pure Fortran
+  if (left@value@mode == "integer" && right@value@mode == "integer") {
+    message("Note: Division of integers will produce a double result (matching R behavior)")
+  }
+  
+  # Use conform with explicit mode
+  result_var <- conform(left@value, right@value, mode = result_type)
+  Fortran(glue("({left} / {right})"), result_var)
 }
 
 r2f_handlers[["^"]] <- function(args, scope, ...) {
@@ -925,24 +941,133 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ...) {
   # TODO: reshape() if !passes_as_scalar(out)
 }
 
+# Add handlers for explicit type casting
+r2f_handlers[["as.double"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  arg <- r2f(args[[1]], scope, ...)
+  val <- arg@value
+  val@mode <- "double"
+  Fortran(glue("real({arg}, c_double)"), val)
+}
 
-conform <- function(..., mode = NULL) {
-  var <- NULL
-  # technically, types are implicit promoted, but we'll let <- handle that.
-  for (var in drop_nulls(list(...))) {
-    if (passes_as_scalar(var)) {
-      next
-    } else {
-      break
-    }
-  }
-  if (is.null(var)) {
-    NULL
+r2f_handlers[["as.integer"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  arg <- r2f(args[[1]], scope, ...)
+  val <- arg@value
+  val@mode <- "integer"
+  Fortran(glue("int({arg}, c_int)"), val)
+}
+
+r2f_handlers[["as.numeric"]] <- r2f_handlers[["as.double"]]
+
+r2f_handlers[["as.logical"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  arg <- r2f(args[[1]], scope, ...)
+  val <- arg@value
+  val@mode <- "logical"
+  Fortran(glue("({arg} /= 0)"), val)
+}
+
+# Helper for type promotion rules (matching R's behavior)
+promote_types <- function(type1, type2) {
+  # Type promotion hierarchy: logical < integer < double < complex
+  # Following R's implicit coercion rules
+  types <- c(type1, type2)
+  
+  if ("complex" %in% types) {
+    return("complex")
+  } else if ("double" %in% types) {
+    return("double")  
+  } else if ("integer" %in% types) {
+    return("integer")
+  } else if ("logical" %in% types) {
+    return("logical")
   } else {
-    Variable(mode %||% var@mode, var@dims)
+    # Should not reach here, but default to first type
+    return(type1)
   }
 }
 
+# Helper function to check shape compatibility with NA handling
+shapes_compatible <- function(dims1, dims2) {
+  # If dimensions are identical, they're compatible
+  if (identical(dims1, dims2)) {
+    return(TRUE)
+  }
+  
+  # If ranks differ, they're incompatible
+  if (length(dims1) != length(dims2)) {
+    return(FALSE)
+  }
+  
+  # Check each dimension
+  for (i in seq_along(dims1)) {
+    d1 <- dims1[[i]]
+    d2 <- dims2[[i]]
+    
+    # NA means unknown/allocatable - compatible with anything
+    if (is_scalar_na(d1) || is_scalar_na(d2)) {
+      next
+    }
+    
+    # If neither is NA, they must be identical
+    if (!identical(d1, d2)) {
+      return(FALSE)
+    }
+  }
+  
+  return(TRUE)
+}
+
+# Updated conform function with proper type promotion and shape checking
+# Simplified conform function without op parameter
+# Simplified conform function with NA-aware shape checking
+conform <- function(..., mode = NULL) {
+  vars <- drop_nulls(list(...))
+  
+  if (length(vars) == 0) {
+    return(NULL)
+  }
+  
+  # Collect all types for promotion
+  types <- unique(vapply(vars, function(v) v@mode, character(1)))
+  
+  # Determine the promoted type if mode not explicitly provided
+  if (is.null(mode)) {
+    if (length(types) == 1) {
+      mode <- types[1]
+    } else {
+      # Apply type promotion rules
+      mode <- reduce(types, promote_types)
+    }
+  }
+  
+  # Find the non-scalar variable for shape inference
+  shape_var <- NULL
+  for (var in vars) {
+    if (!passes_as_scalar(var)) {
+      if (!is.null(shape_var)) {
+        # Check shape compatibility between non-scalar variables
+        if (!shapes_compatible(shape_var@dims, var@dims)) {
+          shape1_str <- paste0("(", paste(shape_var@dims, collapse = ", "), ")")
+          shape2_str <- paste0("(", paste(var@dims, collapse = ", "), ")")
+          stop(sprintf(
+            "Shape mismatch in binary operation: incompatible dimensions %s and %s",
+            shape1_str, shape2_str
+          ))
+        }
+      }
+      shape_var <- var
+    }
+  }
+  
+  # Return variable with promoted type and inferred shape
+  if (is.null(shape_var)) {
+    Variable(mode)
+  } else {
+    Variable(mode, shape_var@dims)
+  }
+}
 
 # ---- printers ----
 
