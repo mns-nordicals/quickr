@@ -650,17 +650,12 @@ r2f_handlers[["*"]] <- function(args, scope = NULL, ...) {
 r2f_handlers[["/"]] <- function(args, scope = NULL, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
   
-  # Determine result type - division always promotes to at least double
-  result_type <- promote_types(left@value@mode, right@value@mode)
+  # Determine result type using existing function
+  result_type <- reduce_promoted_mode(left, right)
   
-  # Special case: promote integer/logical division to double
+  # Special case: division always promotes to at least double (unless complex)
   if (result_type %in% c("logical", "integer")) {
     result_type <- "double"
-  }
-  
-  # Warn about integer division that would truncate in pure Fortran
-  if (left@value@mode == "integer" && right@value@mode == "integer") {
-    message("Note: Division of integers will produce a double result (matching R behavior)")
   }
   
   # Use conform with explicit mode
@@ -968,26 +963,6 @@ r2f_handlers[["as.logical"]] <- function(args, scope, ...) {
   Fortran(glue("({arg} /= 0)"), val)
 }
 
-# Helper for type promotion rules (matching R's behavior)
-promote_types <- function(type1, type2) {
-  # Type promotion hierarchy: logical < integer < double < complex
-  # Following R's implicit coercion rules
-  types <- c(type1, type2)
-  
-  if ("complex" %in% types) {
-    return("complex")
-  } else if ("double" %in% types) {
-    return("double")  
-  } else if ("integer" %in% types) {
-    return("integer")
-  } else if ("logical" %in% types) {
-    return("logical")
-  } else {
-    # Should not reach here, but default to first type
-    return(type1)
-  }
-}
-
 # Helper function to check shape compatibility with NA handling
 shapes_compatible <- function(dims1, dims2) {
   # If dimensions are identical, they're compatible
@@ -1029,17 +1004,9 @@ conform <- function(..., mode = NULL) {
     return(NULL)
   }
   
-  # Collect all types for promotion
-  types <- unique(vapply(vars, function(v) v@mode, character(1)))
-  
-  # Determine the promoted type if mode not explicitly provided
+  # Use the existing reduce_promoted_mode if mode not explicitly provided
   if (is.null(mode)) {
-    if (length(types) == 1) {
-      mode <- types[1]
-    } else {
-      # Apply type promotion rules
-      mode <- reduce(types, promote_types)
-    }
+    mode <- reduce_promoted_mode(vars)
   }
   
   # Find the non-scalar variable for shape inference
