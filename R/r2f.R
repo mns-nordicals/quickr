@@ -709,43 +709,43 @@ r2f_handlers[["as.double"]] <- function(args, scope = NULL, ...) {
 
 r2f_handlers[["^"]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  Fortran(glue("({left} ** {right})"), conform(left@value, right@value))
+  Fortran(glue("({left} ** {right})"), conform(left@value, right@value, operation = "^"))
 }
 
 
 r2f_handlers[[">="]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  var <- conform(left@value, right@value)
+  var <- conform(left@value, right@value, operation = ">=")
   var@mode <- "logical"
   Fortran(glue("({left} >= {right})"), var)
 }
 r2f_handlers[[">"]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  var <- conform(left@value, right@value)
+  var <- conform(left@value, right@value, operation = ">")
   var@mode <- "logical"
   Fortran(glue("({left} > {right})"), var)
 }
 r2f_handlers[["<"]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  var <- conform(left@value, right@value)
+  var <- conform(left@value, right@value, operation = "<")
   var@mode <- "logical"
   Fortran(glue("({left} < {right})"), var)
 }
 r2f_handlers[["<="]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  var <- conform(left@value, right@value)
+  var <- conform(left@value, right@value, operation = "<=")
   var@mode <- "logical"
   Fortran(glue("({left} <= {right})"), var)
 }
 r2f_handlers[["=="]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  var <- conform(left@value, right@value)
+  var <- conform(left@value, right@value, operation = "==")
   var@mode <- "logical"
   Fortran(glue("({left} == {right})"), var)
 }
 r2f_handlers[["!="]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  var <- conform(left@value, right@value)
+  var <- conform(left@value, right@value, operation = "!=")
   var@mode <- "logical"
   Fortran(glue("({left} /= {right})"), var)
 }
@@ -765,14 +765,14 @@ r2f_handlers[["!="]] <- function(args, scope, ...) {
 
 r2f_handlers[["%%"]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  out_val <- conform(left@value, right@value)
+  out_val <- conform(left@value, right@value, operation = "%%")
   # MODULO gives result with sign(right) – matches R %% behaviour
   Fortran(glue("modulo({left}, {right})"), out_val)
 }
 
 r2f_handlers[["%/%"]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  out_val <- conform(left@value, right@value)
+  out_val <- conform(left@value, right@value, operation = "%/%")
 
   expr <- switch(
     out_val@mode,
@@ -812,7 +812,7 @@ register_r2f_handler(
     )
 
     s <- glue("{left} {operator} {right}")
-    val <- conform(left@value, right@value)
+    val <- conform(left@value, right@value, operation = as.character(last(list(...)$calls)))
     val@mode <- "logical"
     Fortran(s, val)
   }
