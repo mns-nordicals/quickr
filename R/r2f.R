@@ -472,7 +472,10 @@ r2f_handlers[[":"]] <- function(args, scope, ...) {
   args <- whole_doubles_to_ints(args)
   .[start, end] <- lapply(args, r2f, scope, ...)
   step <- glue("sign(1, {end}-{start})")
-  val <- Variable("integer", NA)
+  # NEW: Compute sequence length when possible
+  dims <- compute_sequence_length(args[[1]], args[[2]], scope)  # Pass original R exprs
+  val <- Variable("integer", dims)
+
   fr <- switch(
     list(...)$calls |> drop_last() |> last(),
     "[" = glue("{start}:{end}:{step}"),
@@ -486,6 +489,26 @@ r2f_handlers[[":"]] <- function(args, scope, ...) {
   Fortran(fr, val)
 }
 
+# Helper function to compute sequence length
+compute_sequence_length <- function(start_expr, end_expr, scope) {
+  # If both are numeric constants, compute exact length
+  if (is.numeric(start_expr) && is.numeric(end_expr)) {
+    length <- as.integer(end_expr - start_expr + 1L)
+    if (length > 0) {
+      return(list(length))
+    }
+  }
+  
+  # For expressions like i:(i + n - 1), create length expression: (end - start + 1)
+  if (!is.null(start_expr) && !is.null(end_expr)) {
+    # Simplify common pattern: i:(i + n - 1) should give length n
+    length_expr <- call("+", call("-", end_expr, start_expr), 1L)
+    return(list(length_expr))
+  }
+  
+  # Otherwise, unknown length
+  return(list(NA_integer_))
+}
 
 r2f_handlers[["seq"]] <- function(args, scope, ...) {
   args <- whole_doubles_to_ints(args) # only casts if trunc(dbl) == dbl
