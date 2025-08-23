@@ -52,6 +52,35 @@ check_assignment_compatible <- function(target, value) {
       passes_as_scalar(value) ||
       target@rank == value@rank
   })
+  
+  # NEW: Type compatibility check
+  if (!is_type_assignment_compatible(target@mode, value@mode)) {
+    stop(sprintf(
+      "Type mismatch: cannot assign %s result to %s variable '%s'. %s",
+      value@mode, target@mode, target@name,
+      get_type_fix_suggestion(target@mode, value@mode, target@name)
+    ))
+  }
+}
+
+# NEW: Helper functions for type validation
+is_type_assignment_compatible <- function(target_type, value_type) {
+  # Same types: always compatible
+  if (target_type == value_type) {
+    return(TRUE)
+  }
+  
+  # In Fortran, we need exact type matches for assignment
+  # (unlike R which does implicit conversion)
+  return(FALSE)
+}
+
+# NEW: Helper functions for better error message
+get_type_fix_suggestion <- function(target_type, value_type, var_name) {
+  sprintf(
+    "Consider either: (1) declaring '%s' as %s, or (2) using explicit type conversion",
+    var_name, value_type
+  )
 }
 
 new_scope <- function(closure, parent = emptyenv()) {

@@ -659,24 +659,24 @@ maybe_cast_double <- function(x) {
 
 r2f_handlers[["+"]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  Fortran(glue("({left} + {right})"), conform(left@value, right@value))
+  Fortran(glue("({left} + {right})"), conform(left@value, right@value, operation = "+"))
 }
 
 r2f_handlers[["-"]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  Fortran(glue("({left} - {right})"), conform(left@value, right@value))
+  Fortran(glue("({left} - {right})"), conform(left@value, right@value, operation = "-"))
 }
 
 r2f_handlers[["*"]] <- function(args, scope = NULL, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
-  Fortran(glue("({left} * {right})"), conform(left@value, right@value))
+  Fortran(glue("({left} * {right})"), conform(left@value, right@value, operation = "*"))
 }
 
 r2f_handlers[["/"]] <- function(args, scope = NULL, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
   left <- maybe_cast_double(left)
   right <- maybe_cast_double(right)
-  Fortran(glue("({left} / {right})"), conform(left@value, right@value))
+  Fortran(glue("({left} / {right})"), conform(left@value, right@value, operation = "/"))
 }
 
 r2f_handlers[["as.double"]] <- function(args, scope = NULL, ...) {
@@ -958,20 +958,83 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ...) {
 }
 
 
-conform <- function(..., mode = NULL) {
+# Enhanced conform() function with size validation
+conform <- function(..., mode = NULL, operation = NULL) {
+  vars <- drop_nulls(list(...))
+  
+  # NEW: Size compatibility validation for binary operations
+  if (length(vars) == 2 && !is.null(operation)) {
+    validate_size_compatibility(vars[[1]], vars[[2]], operation)
+  }
+  
+  # Existing logic for determining result variable
   var <- NULL
-  # technically, types are implicit promoted, but we'll let <- handle that.
-  for (var in drop_nulls(list(...))) {
+  for (var in vars) {
     if (passes_as_scalar(var)) {
       next
     } else {
       break
     }
   }
+  
   if (is.null(var)) {
     NULL
   } else {
-    Variable(mode %||% var@mode, var@dims)
+    Variable(mode %||% reduce_promoted_mode(vars), var@dims)
+  }
+}
+
+# NEW: Helper function for size validation
+validate_size_compatibility <- function(left_var, right_var, operation) {
+  # Both scalar: always OK
+  if (left_var@is_scalar && right_var@is_scalar) {
+    return()
+  }
+  
+  # One scalar, one array: OK (scalar will be broadcast)
+  if (left_var@is_scalar || right_var@is_scalar) {
+    return()
+  }
+  
+  # Both arrays: need compatible sizes
+  if (left_var@rank != right_var@rank) {
+    stop(sprintf(
+      "Cannot perform '%s' on arrays of different ranks: %s has rank %d, %s has rank %d",
+      operation, left_var@name %||% "left operand", left_var@rank,
+      right_var@name %||% "right operand", right_var@rank
+    ))
+  }
+  
+  # Check each dimension
+  for (i in seq_len(left_var@rank)) {
+    left_dim <- left_var@dims[[i]]
+    right_dim <- right_var@dims[[i]]
+    
+    # If either dimension is NA, we can't validate at compile time
+    if (is_scalar_na(left_dim) || is_scalar_na(right_dim)) {
+      stop(sprintf(
+        "Cannot validate size compatibility for '%s': %s and %s have unspecified dimensions. Please declare explicit sizes or use size constraints (e.g., 'type(x = integer(n)), type(y = integer(n))')",
+        operation, 
+        left_var@name %||% "left operand",
+        right_var@name %||% "right operand"
+      ))
+    }
+    
+    # If dimensions are different constants, error
+    if (is_scalar_integer(left_dim) && is_scalar_integer(right_dim) && left_dim != right_dim) {
+      stop(sprintf(
+        "Size mismatch in '%s': dimension %d has size %d vs %d",
+        operation, i, left_dim, right_dim
+      ))
+    }
+    
+    # If dimensions are different symbols, error  
+    if (is.symbol(left_dim) && is.symbol(right_dim) && !identical(left_dim, right_dim)) {
+      stop(sprintf(
+        "Size constraint mismatch in '%s': dimension %d constrained by '%s' vs '%s'",
+        operation, i, as.character(left_dim), as.character(right_dim)
+      ))
+    }
   }
 }
 
