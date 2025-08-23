@@ -939,7 +939,10 @@ reduce_promoted_mode <- function(...) {
   }
   modes <- unique(unlist(getmode(list(...))))
 
-  if ("double" %in% modes) {
+  # Type promotion hierarchy: logical → integer → double → complex
+  if ("complex" %in% modes) {
+    "complex"
+  } else if ("double" %in% modes) {
     "double"
   } else if ("integer" %in% modes) {
     "integer"
