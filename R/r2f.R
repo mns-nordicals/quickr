@@ -1012,54 +1012,38 @@ conform <- function(..., mode = NULL, operation = NULL) {
 
 # NEW: Helper function for size validation
 validate_size_compatibility <- function(left_var, right_var, operation) {
-  # Both scalar: always OK
+  # 1. Both scalars: always OK
   if (left_var@is_scalar && right_var@is_scalar) {
     return()
   }
   
-  # One scalar, one array: OK (scalar will be broadcast)
+  # 2. One scalar: OK (broadcasting)  
   if (left_var@is_scalar || right_var@is_scalar) {
     return()
   }
   
-  # Both arrays: need compatible sizes
+  # 3. Both arrays: check rank
   if (left_var@rank != right_var@rank) {
     stop(sprintf(
-      "Cannot perform '%s' on arrays of different ranks: %s has rank %d, %s has rank %d",
-      operation, left_var@name %||% "left operand", left_var@rank,
-      right_var@name %||% "right operand", right_var@rank
+      "Cannot perform '%s' on arrays of different ranks: %d vs %d",
+      operation, left_var@rank, right_var@rank
     ))
   }
   
-  # Check each dimension
+  # 4. Check dimensions using identical()
   for (i in seq_len(left_var@rank)) {
-    left_dim <- left_var@dims[[i]]
-    right_dim <- right_var@dims[[i]]
-    
-    # If either dimension is NA, we can't validate at compile time
-    if (is_scalar_na(left_dim) || is_scalar_na(right_dim)) {
-      stop(sprintf(
-        "Cannot validate size compatibility for '%s': %s and %s have unspecified dimensions. Please declare explicit sizes or use size constraints (e.g., 'type(x = integer(n)), type(y = integer(n))')",
-        operation, 
-        left_var@name %||% "left operand",
-        right_var@name %||% "right operand"
-      ))
-    }
-    
-    # If dimensions are different constants, error
-    if (is_scalar_integer(left_dim) && is_scalar_integer(right_dim) && left_dim != right_dim) {
-      stop(sprintf(
-        "Size mismatch in '%s': dimension %d has size %d vs %d",
-        operation, i, left_dim, right_dim
-      ))
-    }
-    
-    # If dimensions are different symbols, error  
-    if (is.symbol(left_dim) && is.symbol(right_dim) && !identical(left_dim, right_dim)) {
-      stop(sprintf(
-        "Size constraint mismatch in '%s': dimension %d constrained by '%s' vs '%s'",
-        operation, i, as.character(left_dim), as.character(right_dim)
-      ))
+    if (!identical(left_var@dims[[i]], right_var@dims[[i]])) {
+      left_dim <- left_var@dims[[i]]
+      right_dim <- right_var@dims[[i]]
+      
+      # Generate helpful error message
+      if (is_scalar_integer(left_dim) && is_scalar_integer(right_dim)) {
+        stop(sprintf("Size mismatch: dimension %d has size %d vs %d", 
+                     i, left_dim, right_dim))
+      } else {
+        stop(sprintf("Size constraint mismatch: dimension %d has '%s' vs '%s'", 
+                     i, deparse(left_dim), deparse(right_dim)))  
+      }
     }
   }
 }
