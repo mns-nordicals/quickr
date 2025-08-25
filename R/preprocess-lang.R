@@ -18,8 +18,12 @@ ensure_last_expr_sym <- function(bdy) {
     stop("bad body, needs {")
   }
   if (!is.symbol(last_expr <- last(bdy))) {
-    bdy[[length(bdy)]] <- call("<-", quote(out_), last_expr)
-    bdy[[length(bdy) + 1L]] <- quote(out_)
+    if (is_call(last_expr, quote(list))) {
+      # return list will be handled specially downstream
+    } else {
+      bdy[[length(bdy)]] <- call("<-", quote(out_), last_expr)
+      bdy[[length(bdy) + 1L]] <- quote(out_)
+    }
   }
   bdy
 }
