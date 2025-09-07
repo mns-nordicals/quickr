@@ -1039,11 +1039,14 @@ r2f_handlers[["sort"]] <- (function() {
         if (is.logical(dec_arg)) dec_val <- isTRUE(dec_arg)
         else if (is.numeric(dec_arg)) dec_val <- as.logical(dec_arg)
       }
-      quickr_require_runtime(scope, rt_id(x@value@mode, dec_val))
+
       callee <- switch(x@value@mode,
         double = if (dec_val) "qkr_sort_d_desc" else "qkr_sort_d",
         integer = if (dec_val) "qkr_sort_i_desc" else "qkr_sort_i"
       )
+
+      quickr_require_runtime(scope, rt_id(x@value@mode, dec_val))
+
       s <- glue("{callee}({x})")
       return(Fortran(s, Variable(x@value@mode, x@value@dims)))
     }

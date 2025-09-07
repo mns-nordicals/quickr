@@ -83,12 +83,23 @@ dump_collected <- function() {
     )
   }
 
-  sources <- zip_lists(imap(quick_funcs, function(func, name) {
-    fsub <- new_fortran_subroutine(name, func)
-    cbridge <- make_c_bridge(fsub, headers = name == names(quick_funcs)[1])
-    list(f90 = fsub, c = cbridge)
-  })) |>
-    lapply(\(x) x |> unlist() |> interleave("\n"))
+  # Build Fortran subroutines with runtime helpers delegated to a module.
+  fsubs <- imap(quick_funcs, function(func, name) {
+    new_fortran_subroutine(name, func, embed_runtime = FALSE)
+  })
+  cbridges <- imap(fsubs, function(fsub, name) {
+    make_c_bridge(fsub, headers = name == names(fsubs)[1])
+  })
+
+  # Aggregate runtime helper ids across all fsubs and build a module.
+  module_ids <- unique(unlist(lapply(fsubs, function(fs) quickr_get_runtime_deps(fs@scope))))
+  runtime_module_src <- quickr_build_runtime_module(module_ids)
+
+  sources <- list(
+    f90 = interleave(vapply(fsubs, as.character, ""), "\n"),
+    c = interleave(unlist(cbridges, use.names = FALSE), "\n"),
+    runtime_module = str_split_lines(runtime_module_src)
+  )
 
   entries <- paste0(
     sprintf('  {"%1$s", (DL_FUNC) &%1$s, -1}', paste0(names(quick_funcs), "_")),
@@ -166,6 +177,18 @@ dump_collected <- function() {
     writeLines(sources$f90, fsubs_filepath)
     cli::cli_inform(c(i = "Updated {.file {fsubs_filepath}}"))
     src_files_written <- TRUE
+  }
+
+  runtime_module_filepath <- "src/quickr_runtime.f90"
+  if (length(sources$runtime_module) && any(nzchar(sources$runtime_module))) {
+    if (!file.exists(runtime_module_filepath) ||
+        !identical(sources$runtime_module, readLines(runtime_module_filepath))) {
+      unlink(sprintf("%s.o", tools::file_path_sans_ext(runtime_module_filepath)))
+      unlink(pkg_dll_path(pkgname))
+      writeLines(sources$runtime_module, runtime_module_filepath)
+      cli::cli_inform(c(i = "Updated {.file {runtime_module_filepath}}"))
+      src_files_written <- TRUE
+    }
   }
 
   if (src_files_written) {

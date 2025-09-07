@@ -1,4 +1,4 @@
-new_fortran_subroutine <- function(name, closure, parent = emptyenv()) {
+new_fortran_subroutine <- function(name, closure, parent = emptyenv(), embed_runtime = TRUE) {
   check_all_var_names_valid(closure)
 
   # translate body, and populate scope with variables
@@ -124,7 +124,7 @@ new_fortran_subroutine <- function(name, closure, parent = emptyenv()) {
   # Build optional CONTAINS with any requested runtime helpers
   runtime_deps <- quickr_get_runtime_deps(scope)
   contains_block <- ""
-  if (length(runtime_deps)) {
+  if (length(runtime_deps) && isTRUE(embed_runtime)) {
     runtime_src <- lapply(runtime_deps, quickr_runtime_sources)
     contains_block <- glue(
       "contains\n{indent(str_flatten_lines(runtime_src))}"
@@ -136,16 +136,31 @@ new_fortran_subroutine <- function(name, closure, parent = emptyenv()) {
     ""
   }
 
+  # Optional module use (e.g., vendored runtime module)
+  # If we are not embedding helpers, request module symbols instead
+  if (!isTRUE(embed_runtime) && length(runtime_deps)) {
+    syms <- quickr_runtime_symbols_for_ids(runtime_deps)
+    for (s in syms) quickr_require_runtime_module_symbol(scope, s)
+  }
+  runtime_module_symbols <- quickr_get_runtime_module_symbols(scope)
+  header_uses <- glue("  use iso_c_binding, only: {str_flatten_commas(used_iso_bindings)}")
+  if (length(runtime_module_symbols)) {
+    header_uses <- str_flatten_lines(
+      header_uses,
+      glue("  use quickr_runtime, only: {str_flatten_commas(runtime_module_symbols)}")
+    )
+  }
+
   subroutine <- glue(
     "
-    subroutine {name}({str_flatten_commas(fsub_arg_names)}) bind(c)
-      use iso_c_binding, only: {str_flatten_commas(used_iso_bindings)}
-      implicit none
+subroutine {name}({str_flatten_commas(fsub_arg_names)}) bind(c)
+{header_uses}
+  implicit none
 
-    {indent(manifest)}
+{indent(manifest)}
 
-    {indent(body)}{contains_block_prepared}
-    end subroutine
+{indent(body)}{contains_block_prepared}
+end subroutine
     "
   )
 

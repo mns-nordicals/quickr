@@ -101,6 +101,32 @@ Notes:
 - stdlib is Fortran and used from Fortran; no C bridge needed. We only need to compile the module alongside generated subroutines.
 - Ensure feature parity and predictable ordering semantics (esp. NA/NaN) when replacing helpers.
 
+### Minimal vendored stdlib sorting: a sketch
+
+This repo now includes a small module that provides sort entry points with the same names used by the sort handler:
+
+- File: `inst/fortran/quickr_runtime.f90`
+- Provides: `qkr_sort_d`, `qkr_sort_d_desc`, `qkr_sort_i`, `qkr_sort_i_desc`
+- Default implementation: insertion sorts (portable, test-friendly)
+
+How it hooks in:
+- The sort handler can target the module backend when you set:
+  - `options(quickr.runtime.sort.use_module = TRUE)`
+- `compile()` detects module usage and compiles `quickr_runtime.f90` alongside the generated subroutine and C wrapper.
+- `new_fortran_subroutine()` injects `use quickr_runtime, only: ...` when needed.
+
+Upgrading to stdlib:
+- Replace the bodies in `quickr_runtime.f90` with calls into the Fortran stdlib, for example:
+  - `use stdlib_sorting, only: sort`
+  - Ascending: `y = x; call sort(y)`
+  - Descending: `y = x; call sort(y); call reverse_in_place(y)` (implement a small reversal) or use an appropriate stdlib routine if available.
+- Alternatively, keep a single file `quickr_runtime.F90` and add a preprocessor branch:
+  - `#ifdef HAVE_FORTRAN_STDLIB` then `use stdlib_sorting` and call it; `#else` use the fallback insertion sort code.
+  - Pass `-cpp -DHAVE_FORTRAN_STDLIB=1` via `PKG_FFLAGS` (for package builds) or adjust `compile()` to inject flags if needed.
+
+Package builds:
+- For `compile_package()`, a follow-up step can aggregate all required runtime module symbols across quick functions and write `src/quickr_runtime.f90`, then add `use quickr_runtime` in each generated subroutine. The current patch sketches runtime module usage for `quick()`; extending it to the package build is straightforward but left to a subsequent change.
+
 ## Gotchas / Design Calls
 
 - Scalars vs length‑1 vectors: quickr treats certain length‑1 vectors as scalars for convenience (e.g., `logical(1)`), but handlers should check both forms.

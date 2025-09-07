@@ -186,14 +186,32 @@ compile <- function(fsub, build_dir = tempfile(paste0(fsub@name, "-build-"))) {
 
   fsub_path <- paste0(name, "_fsub.f90")
   c_wrapper_path <- paste0(name, "_c_wrapper.c")
+  # If runtime module symbols are requested, add a vendored module to the build
+  runtime_module_symbols <- quickr_get_runtime_module_symbols(fsub@scope)
+  have_runtime_module <- length(runtime_module_symbols) > 0
+  runtime_module_path <- NULL
+  if (have_runtime_module) {
+    # Installed alongside the package under inst/fortran/
+    runtime_module_src <- system.file("fortran", "quickr_runtime.f90", package = parent.pkg())
+    if (!nzchar(runtime_module_src) || !file.exists(runtime_module_src)) {
+      # Fall back to our embedded helpers (contains) if module not present
+      have_runtime_module <- FALSE
+    } else {
+      runtime_module_path <- file.path(getwd(), basename(runtime_module_src))
+      file.copy(runtime_module_src, runtime_module_path, overwrite = TRUE)
+    }
+  }
   dll_path <- paste0(name, .Platform$dynlib.ext)
   writeLines(fsub, fsub_path)
   writeLines(c_wrapper, c_wrapper_path)
 
   suppressWarnings({
+    args <- c("CMD SHLIB --use-LTO", "-o", dll_path)
+    if (have_runtime_module) args <- c(args, runtime_module_path)
+    args <- c(args, fsub_path, c_wrapper_path)
     result <- system2(
       R.home("bin/R"),
-      c("CMD SHLIB --use-LTO", "-o", dll_path, fsub_path, c_wrapper_path),
+      args,
       stdout = TRUE,
       stderr = TRUE
     )

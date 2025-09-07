@@ -119,3 +119,40 @@ quickr_get_runtime_deps <- function(scope) {
   unique(attr(scope, "runtime_deps", TRUE))
 }
 
+# Record that a given subroutine will use procedures from the quickr_runtime module.
+quickr_require_runtime_module_symbol <- function(scope, symbol) {
+  syms <- attr(scope, "runtime_module_symbols", TRUE)
+  if (is.null(syms)) syms <- character()
+  attr(scope, "runtime_module_symbols") <- unique(c(syms, symbol))
+  invisible(scope)
+}
+
+quickr_get_runtime_module_symbols <- function(scope) {
+  unique(attr(scope, "runtime_module_symbols", TRUE))
+}
+
+# Map helper ids to their public procedure names by parsing the source
+quickr_runtime_symbol_for_id <- function(id) {
+  src <- quickr_runtime_sources(id)
+  # Find first "function <name>(" occurrence (case-insensitive)
+  m <- regexec("(?i)function\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(", src, perl = TRUE)
+  regmatches(src, m)[[1]][2] %||% stop("Could not infer symbol name for id: ", id)
+}
+
+quickr_runtime_symbols_for_ids <- function(ids) {
+  unique(vapply(ids, quickr_runtime_symbol_for_id, ""))
+}
+
+# Build a Fortran module source string for the given helper ids.
+quickr_build_runtime_module <- function(ids, module_name = "quickr_runtime") {
+  ids <- unique(ids)
+  if (!length(ids)) return("")
+  body <- str_flatten_lines(lapply(ids, quickr_runtime_sources))
+  glue::as_glue(str_flatten_lines(
+    paste0("module ", module_name),
+    "  implicit none",
+    "contains",
+    body,
+    paste0("end module ", module_name)
+  ))
+}
