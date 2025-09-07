@@ -121,6 +121,21 @@ new_fortran_subroutine <- function(name, closure, parent = emptyenv()) {
 
     manifest <- str_flatten_lines(manifest, "", rng_interface)
   }
+  # Build optional CONTAINS with any requested runtime helpers
+  runtime_deps <- quickr_get_runtime_deps(scope)
+  contains_block <- ""
+  if (length(runtime_deps)) {
+    runtime_src <- lapply(runtime_deps, quickr_runtime_sources)
+    contains_block <- glue(
+      "contains\n{indent(str_flatten_lines(runtime_src))}"
+    )
+  }
+  contains_block_prepared <- if (nzchar(contains_block)) {
+    paste0("\n", indent(contains_block))
+  } else {
+    ""
+  }
+
   subroutine <- glue(
     "
     subroutine {name}({str_flatten_commas(fsub_arg_names)}) bind(c)
@@ -129,7 +144,7 @@ new_fortran_subroutine <- function(name, closure, parent = emptyenv()) {
 
     {indent(manifest)}
 
-    {indent(body)}
+    {indent(body)}{contains_block_prepared}
     end subroutine
     "
   )

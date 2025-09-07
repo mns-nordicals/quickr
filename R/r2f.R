@@ -1002,6 +1002,84 @@ r2f_handlers[["character"]] <- r2f_handlers[["raw"]] <-
   .r2f_handler_not_implemented_yet
 
 
+# ---- sort ----
+# Minimal support for sort(x, decreasing = FALSE) for 1-D integer/double vectors.
+r2f_handlers[["sort"]] <- (function() {
+  fun <- function(args, scope, ..., hoist = NULL) {
+    # Match R's sort signature via prior match.call; we expect args$x etc.
+    x_arg <- args[[1L]] %||% args$x
+    if (is.null(x_arg)) stop("sort() requires 'x'")
+    x <- r2f(x_arg, scope, ...)
+
+    if (x@value@rank > 1) {
+      stop("sort() currently supports only 1-D vectors")
+    }
+
+    if (!x@value@mode %in% c("double", "integer")) {
+      stop("sort() only supported for numeric/integer vectors for now")
+    }
+
+    # decreasing handling
+    dec_arg <- args$decreasing
+    is_dec_missing <- is_missing(dec_arg) || is.null(dec_arg)
+
+    # Helper to choose runtime IDs
+    rt_id <- function(mode, desc) {
+      if (mode == "double") if (desc) "sort_d_desc" else "sort_d"
+      else if (mode == "integer") if (desc) "sort_i_desc" else "sort_i"
+      else stop("unsupported mode for sort runtime")
+    }
+
+    # Case 1: decreasing is missing or a literal constant
+    if (is_dec_missing || is.logical(dec_arg) || is.numeric(dec_arg)) {
+      # Numeric treated via R will coerce to logical in R's sort, but we only
+      # accept logical; numeric literals here occur rarely; handle FALSE/0 and TRUE/1
+      dec_val <- FALSE
+      if (!is_dec_missing) {
+        if (is.logical(dec_arg)) dec_val <- isTRUE(dec_arg)
+        else if (is.numeric(dec_arg)) dec_val <- as.logical(dec_arg)
+      }
+      quickr_require_runtime(scope, rt_id(x@value@mode, dec_val))
+      callee <- switch(x@value@mode,
+        double = if (dec_val) "qkr_sort_d_desc" else "qkr_sort_d",
+        integer = if (dec_val) "qkr_sort_i_desc" else "qkr_sort_i"
+      )
+      s <- glue("{callee}({x})")
+      return(Fortran(s, Variable(x@value@mode, x@value@dims)))
+    }
+
+    # Case 2: decreasing is a dynamic expression: generate hoisted if-else
+    dec <- r2f(dec_arg, scope, ...)
+    if (!(dec@value@mode == "logical" && (dec@value@rank == 0 || identical(dec@value@dims, list(1L))))) {
+      stop("sort(decreasing=) must be a scalar logical or omitted")
+    }
+
+    # require both variants
+    quickr_require_runtime(scope, rt_id(x@value@mode, FALSE))
+    quickr_require_runtime(scope, rt_id(x@value@mode, TRUE))
+
+    tmp <- scope@get_unique_var(x@value@mode, x@value@dims)
+    assign(tmp@name, tmp, scope)
+
+    asc <- if (x@value@mode == "double") "qkr_sort_d" else "qkr_sort_i"
+    dsc <- paste0(asc, "_desc")
+
+    hoist(glue(
+      "if ({dec}) then\n",
+      "  {tmp@name} = {dsc}({x})\n",
+      "else\n",
+      "  {tmp@name} = {asc}({x})\n",
+      "end if"
+    ))
+
+    Fortran(tmp@name, Variable(x@value@mode, x@value@dims))
+  }
+  # Enable match.call against base::sort to normalize named args
+  attr(fun, "match.fun") <- NULL
+  fun
+})()
+
+
 r2f_handlers[["matrix"]] <- function(args, scope = NULL, ...) {
   args$data %||% stop("matrix(data=) must be provided, cannot be NA")
   out <- r2f(args$data, scope, ...)
