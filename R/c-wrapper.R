@@ -330,6 +330,8 @@ dims2c_eval_base_env[["%%"]] <- function(e1, e2) {
   glue("((R_xlen_t){e1} % (R_xlen_t){e2})")
 }
 dims2c_eval_base_env[["^"]] <- function(e1, e2) glue("({e1}**{e2})")
+dims2c_eval_base_env[["min"]] <- function(e1, e2) glue("(((R_xlen_t){e1} < (R_xlen_t){e2}) ? (R_xlen_t){e1} : (R_xlen_t){e2})")
+dims2c_eval_base_env[["max"]] <- function(e1, e2) glue("(((R_xlen_t){e1} > (R_xlen_t){e2}) ? (R_xlen_t){e1} : (R_xlen_t){e2})")
 
 
 dims2c <- function(dims, scope) {

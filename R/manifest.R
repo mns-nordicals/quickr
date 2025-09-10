@@ -162,6 +162,8 @@ dims2f_eval_base_env[["%%"]] <- function(e1, e2) {
   glue("mod(int({e1}), int({e2}))")
 }
 dims2f_eval_base_env[["^"]] <- function(e1, e2) glue("({e1})**({e2})")
+dims2f_eval_base_env[["min"]] <- function(e1, e2) glue("min({e1}, {e2})")
+dims2f_eval_base_env[["max"]] <- function(e1, e2) glue("max({e1}, {e2})")
 
 
 dims2f <- function(dims, scope) {
