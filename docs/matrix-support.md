@@ -63,8 +63,8 @@ Prioritize coverage of base R dense operations with clean BLAS/LAPACK mappings. 
 - `solve(A)` (inverse) if needed: discourage; if required, `dgetrf` + `dgetri`
 - `chol(A)`: `dpotrf` (and `dpotrs` for solves)
 - `qr(A)`: `dgeqrf` (thin QR) returning upper-triangular `R` (k×n, k=min(m,n)); `Q` via `dorgqr` to follow.
-- `svd(A)`: `dgesdd` preferred, fallback `dgesvd`
-- `eigen(A)`: symmetric `dsyevr`/`dsyev`; general `dgeev`
+- `svd(A)`: initial support returns values-only (`d`), via `dgesvd` with `JOBU=JOBVT='N'`.
+- `eigen(A)`: initial support returns values-only for symmetric matrices, via `dsyev` with `JOBZ='N'`.
 - `determinant(A)`: via LU `dgetrf` (sign and log-abs det)
 
 ### Phase 3: Utilities & reductions
@@ -140,9 +140,10 @@ Prioritize coverage of base R dense operations with clean BLAS/LAPACK mappings. 
 - DONE: Implement `%*%`, `crossprod`, `tcrossprod`, `t` handlers in `r2f` using BLAS and Fortran intrinsics.
 - DONE: Implement `solve(A, b)` via LAPACK `dgesv` (copies inputs, returns `x`).
 - DONE: Implement `chol(A)` via LAPACK `dpotrf('U', ...)` returning upper-triangular factor; zero out strict lower triangle to match base `chol` semantics.
-- DONE: Add initial tests for `%*%` and `t()`; expand coverage next.
-- NEXT: Add `qr`, `svd`, and `eigen` handlers.
-- NEXT: Expand tests (conformability, vector-only variants, NaN propagation; NA unsupported; error messages).
+- DONE: Implement `qr(A)` via LAPACK `dgeqrf` returning thin `R`; add tests.
+- DONE: Implement `svd(A)` values-only and `eigen(A)` values-only for symmetric matrices; add tests.
+- NEXT: Add `svd` full U/V and `eigen` vectors; then general (non-symmetric) eigen (`dgeev`).
+- NEXT: Expand tests (conformability, NaN propagation; NA unsupported; error messages).
 
 ---
 
@@ -170,15 +171,32 @@ Prioritize coverage of base R dense operations with clean BLAS/LAPACK mappings. 
 - `colSums/rowSums`: Fortran `sum(X, dim=1|2)` for rank-2 arrays.
 - `colMeans/rowMeans`: `sum(X, dim=1|2) / m|n` (computed from input dims).
 - `qr(A)`: LAPACK `dgeqrf`; returns thin `R` matching `qr.R(qr(A))`.
+- `svd(A)`: LAPACK `dgesvd` with `JOBU=JOBVT='N'`; returns singular values (`d`) only.
+- `eigen(A)`: LAPACK `dsyev('N','U', ...)`; returns eigenvalues only for symmetric input.
 
 - Tests:
   - `tests/testthat/test-matmul.R`: matrix×matrix, matrix×vector, vector×matrix `%*%`, and `t(x)`.
   - `tests/testthat/test-solve-chol.R`: `solve(A, b)` and `chol(A)` compare to base R.
+  - `tests/testthat/test-colrow-sums-means.R`: `colSums/rowSums` and `colMeans/rowMeans` parity.
+  - `tests/testthat/test-qr.R`: thin-`R` from `qr(A)` parity with base.
+  - `tests/testthat/test-cross-tcrossprod.R`: `tcrossprod` vector outer-product semantics and `crossprod` vector dot-product.
+  - `tests/testthat/test-svd-eigen.R`: `svd(A)` returns `svd(A)$d`; `eigen(A)` returns `eigen(A)$values` for symmetric.
   - Full suite passes locally; add more edge-case tests (conformability, error codes) next.
 
 - Notes/decisions:
   - For vector dot products we currently use `dot_product` intrinsic to avoid declaring an explicit `ddot` interface under `implicit none`. We can switch to BLAS `ddot` later by emitting a function declaration/interface in the generated unit if needed.
   - We allocate outputs in Fortran/C bridge based on shape inference; inputs are treated read-only (copy-on-modify in the bridge when required).
+
+---
+
+## Fixes in This Branch
+
+- Corrected `tcrossprod()` semantics for vector inputs:
+  - Single vector: now returns the outer product matrix `x %*% t(x)` (previously returned a scalar dot product by mistake).
+  - Two vectors: now returns the outer product matrix `x %*% t(y)` (previously returned a scalar).
+- Added tests in `tests/testthat/test-cross-tcrossprod.R` to cover these cases.
+
+- Added values-only support for `svd(A)` and `eigen(A)` and tests. Future work: return U/V matrices and eigenvectors.
 
 ---
 
@@ -195,6 +213,20 @@ Prioritize coverage of base R dense operations with clean BLAS/LAPACK mappings. 
     - `info > 0`: `"dpotrf: not PD; INFO="` then `info`.
 - Printing uses R’s Fortran printers available in the R runtime: `labelpr` (for a literal message) and `intpr1` (for a scalar integer). This avoids needing string objects in quickr while still surfacing failures for users.
 - Future: once string support lands, translate common LAPACK `info` conditions into R conditions (errors) with parity to base R wording.
+
+---
+
+## Return Lists (Limitation)
+
+- quickr only supports `list(...)` to pack final return values. Lists are not a general data structure inside quickr-generated code.
+- Allowed patterns (final return only):
+  - Direct: `list(a = a, b = b)` as the last expression in the function body.
+  - Assigned just before return: `out <- list(a = a, b = b); out` (the transpiler rewrites this so the last expression is the list call).
+- Constraints for return lists:
+  - Elements must be symbols (no nested lists or expressions). Names, when provided, must be syntactic (same rules as base R identifiers).
+  - Duplicate symbols are allowed and will be returned twice.
+  - Using `list(...)` anywhere else (e.g., mid-function for general use, or accessing elements like `out$y`) is not supported and errors.
+- Implication: multi-result algorithms (e.g., full SVD returning `U`, `d`, `V`) must pack results into the final return list; intermediate list manipulation is not supported.
 
 ---
 

@@ -1025,7 +1025,7 @@ r2f_handlers[["tcrossprod"]] <- function(args, scope, ..., hoist = NULL) {
   x <- r2f(args[[1]], scope, ...)
   x <- maybe_cast_double(x)
   if (length(args) == 1L) {
-    # x * x'
+    # x %*% t(x)
     if (x@value@rank == 2) {
       m <- x@value@dims[[1]]
       k <- x@value@dims[[2]]
@@ -1040,11 +1040,19 @@ r2f_handlers[["tcrossprod"]] <- function(args, scope, ..., hoist = NULL) {
       ))
       return(Fortran(as.character(out), out))
     } else if (x@value@rank == 1) {
+      # Vector outer product: (m) -> (m x m)
+      m <- x@value@dims[[1]]
+      out <- scope@get_unique_var("double")
+      out@dims <- list(m, m)
+      assign(out@name, out, scope)
       X <- ensure_array_var(x, scope, hoist)
-      tmp <- scope@get_unique_var("double")
-      assign(tmp@name, tmp, scope)
-      hoist(glue("{tmp} = dot_product({X}, {X})"))
-      return(Fortran(as.character(tmp), tmp))
+      lda <- m
+      ldb <- m
+      ldc <- m
+      hoist(glue(
+        "call dgemm('N','T', {m}, {m}, 1, 1.0_c_double, {X}, {lda}, {X}, {ldb}, 0.0_c_double, {out}, {ldc})"
+      ))
+      return(Fortran(as.character(out), out))
     }
     stop("tcrossprod(x) expects rank-1 or rank-2 argument")
   }
@@ -1056,12 +1064,21 @@ r2f_handlers[["tcrossprod"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   if (x@value@rank == 1 && y@value@rank == 1) {
+    # Vector outer product: (m) %*% t(n) -> (m x n)
+    m <- x@value@dims[[1]]
+    n <- y@value@dims[[1]]
+    out <- scope@get_unique_var("double")
+    out@dims <- list(m, n)
+    assign(out@name, out, scope)
     X <- ensure_array_var(x, scope, hoist)
     Y <- ensure_array_var(y, scope, hoist)
-    tmp <- scope@get_unique_var("double")
-    assign(tmp@name, tmp, scope)
-    hoist(glue("{tmp} = dot_product({X}, {Y})"))
-    return(Fortran(as.character(tmp), tmp))
+    lda <- m
+    ldb <- n
+    ldc <- m
+    hoist(glue(
+      "call dgemm('N','T', {m}, {n}, 1, 1.0_c_double, {X}, {lda}, {Y}, {ldb}, 0.0_c_double, {out}, {ldc})"
+    ))
+    return(Fortran(as.character(out), out))
   }
 
   if (x@value@rank == 1) {
@@ -1228,6 +1245,99 @@ r2f_handlers[["chol"]] <- function(args, scope, ..., hoist = NULL) {
     "do {jidx} = 1, {n}\n  do {iidx} = {jidx}+1, {n}\n    {F}({iidx}, {jidx}) = 0.0_c_double\n  end do\nend do"
   ))
   Fortran(as.character(F), F)
+}
+
+
+# svd(A): singular values via LAPACK dgesvd (values-only)
+r2f_handlers[["svd"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  A_sym <- args[[1]]
+  stopifnot(is.symbol(A_sym))
+  A_var <- get(A_sym, scope)
+  if (A_var@rank != 2) {
+    stop("svd(A) expects rank-2 matrix")
+  }
+  m <- A_var@dims[[1]]
+  n <- A_var@dims[[2]]
+  k <- call("min", m, n)
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  F <- gv("double"); F@dims <- list(m, n); scope[[as.character(F)]] <- F
+  S <- gv("double"); S@dims <- list(k); scope[[as.character(S)]] <- S
+  # Dummies for U and VT since JOBU=JOBVT='N'
+  U <- gv("double"); U@dims <- list(1L, 1L); scope[[as.character(U)]] <- U
+  VT <- gv("double"); VT@dims <- list(1L, 1L); scope[[as.character(VT)]] <- VT
+  # Workspace: lwork >= max(3*min(m,n) + max(m,n), 5*min(m,n))
+  lwork_expr <- call(
+    "max",
+    call("+", call("*", 3L, k), call("max", m, n)),
+    call("*", 5L, k)
+  )
+  WORK <- gv("double"); WORK@dims <- list(lwork_expr); scope[[as.character(WORK)]] <- WORK
+  info <- gv("integer"); scope[[as.character(info)]] <- info
+
+  hoist(glue("{F} = {as.character(A_sym)}"))
+  hoist(glue(
+    "call dgesvd('N','N', {m}, {n}, {F}, {m}, {S}, {U}, 1, {VT}, 1, {WORK}, size({WORK}), {info})"
+  ))
+  hoist(glue(
+    "if ({info} /= 0) then\n",
+    "  if ({info} < 0) then\n",
+    "    call labelpr('dgesvd: illegal arg; INFO=', 28)\n",
+    "  else\n",
+    "    call labelpr('dgesvd: failure; INFO=', 24)\n",
+    "  end if\n",
+    "  call intpr1('', 0, {info})\n",
+    "end if"
+  ))
+
+  Fortran(as.character(S), S)
+}
+
+# eigen(A): eigenvalues (symmetric) via LAPACK dsyev (values-only)
+r2f_handlers[["eigen"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  A_sym <- args[[1]]
+  stopifnot(is.symbol(A_sym))
+  A_var <- get(A_sym, scope)
+  if (A_var@rank != 2) {
+    stop("eigen(A) expects rank-2 matrix")
+  }
+  if (!identical(A_var@dims[[1]], A_var@dims[[2]])) {
+    stop("eigen(A) expects a square matrix")
+  }
+  n <- A_var@dims[[1]]
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  F <- gv("double"); F@dims <- list(n, n); scope[[as.character(F)]] <- F
+  W <- gv("double"); W@dims <- list(n); scope[[as.character(W)]] <- W
+  # Workspace: lwork >= max(1, 3*n - 1)
+  lwork_expr <- call("max", 1L, call("-", call("*", 3L, n), 1L))
+  WORK <- gv("double"); WORK@dims <- list(lwork_expr); scope[[as.character(WORK)]] <- WORK
+  info <- gv("integer"); scope[[as.character(info)]] <- info
+
+  hoist(glue("{F} = {as.character(A_sym)}"))
+  hoist(glue("call dsyev('N','U', {n}, {F}, {n}, {W}, {WORK}, size({WORK}), {info})"))
+  hoist(glue(
+    "if ({info} /= 0) then\n",
+    "  if ({info} < 0) then\n",
+    "    call labelpr('dsyev: illegal arg; INFO=', 28)\n",
+    "  else\n",
+    "    call labelpr('dsyev: failure; INFO=', 24)\n",
+    "  end if\n",
+    "  call intpr1('', 0, {info})\n",
+    "end if"
+  ))
+
+  Fortran(as.character(W), W)
 }
 
 
