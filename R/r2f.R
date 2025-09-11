@@ -738,6 +738,63 @@ r2f_handlers[["colSums"]] <- function(args, scope, ...) {
   Fortran(glue("sum({X}, dim=1)"), Variable("double", list(n)))
 }
 
+r2f_handlers[["diag"]] <- function(args, scope, ..., hoist = NULL) {
+  # Supports:
+  #  - diag(X) where X is matrix: extract diagonal vector
+  #  - diag(v) where v is vector: diagonal matrix with v on the diagonal
+  #  - diag(k) where k is scalar: identity matrix of size k x k
+  stopifnot(length(args) == 1L)
+  A <- r2f(args[[1]], scope, ...)
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  # Matrix: extract diagonal vector
+  if (A@value@rank == 2) {
+    m <- A@value@dims[[1]]
+    n <- A@value@dims[[2]]
+    Ai <- ensure_array_var(A, scope, hoist)
+    i <- gv("integer")
+    fr <- glue("[({Ai}({i}, {i}), {i} = 1, min({m}, {n}))]")
+    out_dims <- list(call("min", m, n))
+    return(Fortran(fr, Variable(A@value@mode, out_dims)))
+  }
+
+  # Vector: build a diagonal matrix
+  if (A@value@rank == 1 && !passes_as_scalar(A@value)) {
+    m <- A@value@dims[[1]]
+    V <- ensure_array_var(maybe_cast_double(A), scope, hoist)
+    out <- gv("double")
+    out@dims <- list(m, m)
+    assign(out@name, out, scope)
+    i <- gv("integer")
+    hoist(glue("{out} = 0.0_c_double"))
+    hoist(glue(
+      "do {i} = 1, {m}\n  {out}({i}, {i}) = {V}({i})\nend do"
+    ))
+    return(Fortran(as.character(out), out))
+  }
+
+  # Scalar: identity matrix (also accept length-1 vectors)
+  if (A@value@rank == 0 || passes_as_scalar(A@value)) {
+    # Determine size expression from R-level arg for shape, and Fortran expr for loop bounds
+    k_expr <- r2size(args[[1]], scope)
+    K <- as.character(A)
+    out <- gv("double")
+    out@dims <- list(k_expr, k_expr)
+    assign(out@name, out, scope)
+    i <- gv("integer")
+    hoist(glue("{out} = 0.0_c_double"))
+    hoist(glue(
+      "do {i} = 1, {K}\n  {out}({i}, {i}) = 1.0_c_double\nend do"
+    ))
+    return(Fortran(as.character(out), out))
+  }
+
+  stop("diag(x) expects a scalar, vector, or matrix")
+}
+
 r2f_handlers[["rowSums"]] <- function(args, scope, ...) {
   stopifnot(length(args) == 1L)
   X <- r2f(args[[1]], scope, ...)
@@ -1244,6 +1301,48 @@ r2f_handlers[["chol"]] <- function(args, scope, ..., hoist = NULL) {
   hoist(glue(
     "do {jidx} = 1, {n}\n  do {iidx} = {jidx}+1, {n}\n    {F}({iidx}, {jidx}) = 0.0_c_double\n  end do\nend do"
   ))
+  Fortran(as.character(F), F)
+}
+
+r2f_handlers[["chol2inv"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  U_sym <- args[[1]]
+  stopifnot(is.symbol(U_sym))
+  U_var <- get(U_sym, scope)
+  if (U_var@rank != 2) {
+    stop("chol2inv(U) expects rank-2 matrix (Cholesky factor)")
+  }
+  n <- U_var@dims[[1]]
+  if (!identical(U_var@dims[[1]], U_var@dims[[2]])) {
+    stop("chol2inv(U) expects a square matrix")
+  }
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  F <- gv("double"); F@dims <- list(n, n); scope[[as.character(F)]] <- F
+  info <- gv("integer"); scope[[as.character(info)]] <- info
+  iidx <- gv("integer"); jidx <- gv("integer")
+
+  hoist(glue("{F} = {as.character(U_sym)}"))
+  hoist(glue("call dpotri('U', {n}, {F}, {n}, {info})"))
+  hoist(glue(
+    "if ({info} /= 0) then\n",
+    "  if ({info} < 0) then\n",
+    "    call labelpr('dpotri: illegal arg; INFO=', 28)\n",
+    "  else\n",
+    "    call labelpr('dpotri: not PD; INFO=', 24)\n",
+    "  end if\n",
+    "  call intpr1('', 0, {info})\n",
+    "end if"
+  ))
+  # Symmetrize: copy upper triangle to lower
+  hoist(glue(
+    "do {jidx} = 1, {n}\n  do {iidx} = {jidx}+1, {n}\n    {F}({iidx}, {jidx}) = {F}({jidx}, {iidx})\n  end do\nend do"
+  ))
+
   Fortran(as.character(F), F)
 }
 
