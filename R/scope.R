@@ -85,6 +85,15 @@ new_scope <- function(closure, parent = emptyenv()) {
 #' @export
 `@<-.quickr_scope` <- function(x, name, value) `attr<-`(x, name, value = value)
 
+# Guard against accidental use of `$` on scope (attributes live on `@`)
+#' @export
+`$.quickr_scope` <- function(x, name) {
+  stop(
+    sprintf("Invalid access: scope$%s. Use scope@%s for attributes or scope[[%s]] for bindings.", name, name, deparse(substitute(name))),
+    call. = FALSE
+  )
+}
+
 #' @importFrom utils .AtNames findMatches
 #' @export
 .AtNames.quickr_scope <- function(x, pattern = "") {

@@ -697,6 +697,735 @@ r2f_handlers[["^"]] <- function(args, scope, ...) {
 }
 
 
+# ---- matrix operations ----
+
+# Helper: is the Fortran expression a simple named variable reference?
+is_simple_var_ref <- function(x) {
+  is.character(x) && grepl("^[A-Za-z_][A-Za-z0-9_]*$", x)
+}
+
+# Ensure an expression is bound to a named variable for BLAS calls
+ensure_array_var <- function(expr, scope, hoist) {
+  if (is_simple_var_ref(as.character(expr))) {
+    return(as.character(expr))
+  }
+  tmp <- scope@get_unique_var("double")
+  tmp@dims <- attr(expr, "value", TRUE)@dims %||% expr@value@dims
+  assign(tmp@name, tmp, scope)
+  hoist(glue("{tmp} = {expr}"))
+  as.character(tmp)
+}
+
+# ---- helper utilities for matrix ops (centralized plumbing) ----
+
+# Small alloc helpers
+q_mk_double <- function(scope, dims) {
+  v <- scope@get_unique_var("double"); v@dims <- dims; assign(v@name, v, scope); v
+}
+
+q_mk_int <- function(scope, dims = NULL) {
+  v <- scope@get_unique_var("integer"); if (!is.null(dims)) v@dims <- dims; assign(v@name, v, scope); v
+}
+
+# Cast to double if needed, then ensure we have a named array variable
+q_as_double_var <- function(x, scope, hoist) {
+  x <- maybe_cast_double(x)
+  ensure_array_var(x, scope, hoist)
+}
+
+# Centralized LAPACK info reporting (debug-gated)
+q_lapack_check <- function(hoist, info_name, tag) {
+  if (isTRUE(getOption("quickr.debug_lapack", FALSE))) {
+    hoist(glue(
+      "if ({info_name} /= 0) then\n",
+      "  if ({info_name} < 0) then\n",
+      "    call labelpr('{tag}: illegal arg; INFO=', {nchar(paste0(tag, ': illegal arg; INFO='))})\n",
+      "  else\n",
+      "    call labelpr('{tag}: failure; INFO=', {nchar(paste0(tag, ': failure; INFO='))})\n",
+      "  end if\n",
+      "  call intpr1('', 0, {info_name})\n",
+      "end if"
+    ))
+  }
+}
+
+# BLAS: GEMM wrapper. Returns list(name, var)
+q_blas_gemm <- function(scope, hoist, A_f, B_f, transA = "N", transB = "N") {
+  # Ensure named double arrays
+  A <- q_as_double_var(A_f, scope, hoist)
+  B <- q_as_double_var(B_f, scope, hoist)
+
+  a_dims <- A_f@value@dims
+  b_dims <- B_f@value@dims
+
+  # op(A) dims
+  m <- if (identical(transA, "N")) a_dims[[1]] else a_dims[[2]]
+  k <- if (identical(transA, "N")) a_dims[[2]] else a_dims[[1]]
+  # op(B) dims
+  n <- if (identical(transB, "N")) b_dims[[2]] else b_dims[[1]]
+
+  # Output
+  C_var <- scope@get_unique_var("double"); C_var@dims <- list(m, n); assign(C_var@name, C_var, scope)
+  C <- as.character(C_var)
+
+  lda <- a_dims[[1]]
+  ldb <- b_dims[[1]]
+  ldc <- m
+
+  hoist(glue(
+    "call dgemm('{transA}','{transB}', {m}, {n}, {k}, 1.0_c_double, {A}, {lda}, {B}, {ldb}, 0.0_c_double, {C}, {ldc})"
+  ))
+
+  list(name = C, var = C_var)
+}
+
+# BLAS: GEMV wrapper. Returns list(name, var)
+q_blas_gemv <- function(scope, hoist, A_f, x_f, trans = "N") {
+  A <- q_as_double_var(A_f, scope, hoist)
+  x <- q_as_double_var(x_f, scope, hoist)
+  a_dims <- A_f@value@dims
+  m <- a_dims[[1]]
+  n <- a_dims[[2]]
+  y_len <- if (identical(trans, "N")) m else n
+  y_var <- scope@get_unique_var("double"); y_var@dims <- list(y_len); assign(y_var@name, y_var, scope)
+  y <- as.character(y_var)
+  lda <- m
+  incx <- 1
+  incy <- 1
+  hoist(glue(
+    "call dgemv('{trans}', {m}, {n}, 1.0_c_double, {A}, {lda}, {x}, {incx}, 0.0_c_double, {y}, {incy})"
+  ))
+  list(name = y, var = y_var)
+}
+
+# t(x) -> transpose(x)
+r2f_handlers[["t"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  x <- r2f(args[[1]], scope, ...)
+  if (x@value@rank != 2) {
+    stop("t(x) supports rank-2 arrays only in v1")
+  }
+  dims <- rev(x@value@dims)
+  Fortran(glue("transpose({x})"), Variable("double", dims))
+}
+
+# colSums/rowSums/colMeans/rowMeans for rank-2 arrays
+r2f_handlers[["colSums"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  X <- r2f(args[[1]], scope, ...)
+  if (X@value@rank != 2) stop("colSums(x) expects a rank-2 matrix")
+  X <- maybe_cast_double(X)
+  m <- X@value@dims[[1]]
+  n <- X@value@dims[[2]]
+  Fortran(glue("sum({X}, dim=1)"), Variable("double", list(n)))
+}
+
+r2f_handlers[["diag"]] <- function(args, scope, ..., hoist = NULL) {
+  # Supports:
+  #  - diag(X) where X is matrix: extract diagonal vector
+  #  - diag(v) where v is vector: diagonal matrix with v on the diagonal
+  #  - diag(k) where k is scalar: identity matrix of size k x k
+  stopifnot(length(args) == 1L)
+  A <- r2f(args[[1]], scope, ...)
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  # Matrix: extract diagonal vector (preserve type; avoid unintended cast)
+  if (A@value@rank == 2) {
+    m <- A@value@dims[[1]]
+    n <- A@value@dims[[2]]
+    # Use raw symbol if simple; otherwise hoist to a temp of the same mode as A
+    if (is_simple_var_ref(as.character(A))) {
+      Ai <- as.character(A)
+    } else {
+      tmpA <- gv(A@value@mode); tmpA@dims <- A@value@dims; assign(tmpA@name, tmpA, scope)
+      hoist(glue("{tmpA} = {A}"))
+      Ai <- as.character(tmpA)
+    }
+    i <- gv("integer")
+    fr <- glue("[({Ai}({i}, {i}), {i} = 1, min({m}, {n}))]")
+    out_dims <- list(call("min", m, n))
+    return(Fortran(fr, Variable(A@value@mode, out_dims)))
+  }
+
+  # Vector: build a diagonal matrix
+  if (A@value@rank == 1 && !passes_as_scalar(A@value)) {
+    m <- A@value@dims[[1]]
+    V <- q_as_double_var(A, scope, hoist)
+    out <- gv("double")
+    out@dims <- list(m, m)
+    assign(out@name, out, scope)
+    i <- gv("integer")
+    hoist(glue("{out} = 0.0_c_double"))
+    hoist(glue(
+      "do {i} = 1, {m}\n  {out}({i}, {i}) = {V}({i})\nend do"
+    ))
+    return(Fortran(as.character(out), out))
+  }
+
+  # Scalar: identity matrix (also accept length-1 vectors)
+  if (A@value@rank == 0 || passes_as_scalar(A@value)) {
+    # Determine size expression from R-level arg for shape, and Fortran expr for loop bounds
+    k_expr <- r2size(args[[1]], scope)
+    K <- as.character(A)
+    out <- gv("double")
+    out@dims <- list(k_expr, k_expr)
+    assign(out@name, out, scope)
+    i <- gv("integer")
+    hoist(glue("{out} = 0.0_c_double"))
+    hoist(glue(
+      "do {i} = 1, {K}\n  {out}({i}, {i}) = 1.0_c_double\nend do"
+    ))
+    return(Fortran(as.character(out), out))
+  }
+
+  stop("diag(x) expects a scalar, vector, or matrix")
+}
+
+r2f_handlers[["rowSums"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  X <- r2f(args[[1]], scope, ...)
+  if (X@value@rank != 2) stop("rowSums(x) expects a rank-2 matrix")
+  X <- maybe_cast_double(X)
+  m <- X@value@dims[[1]]
+  n <- X@value@dims[[2]]
+  Fortran(glue("sum({X}, dim=2)"), Variable("double", list(m)))
+}
+
+r2f_handlers[["colMeans"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  X <- r2f(args[[1]], scope, ...)
+  if (X@value@rank != 2) stop("colMeans(x) expects a rank-2 matrix")
+  X <- maybe_cast_double(X)
+  m <- X@value@dims[[1]]
+  n <- X@value@dims[[2]]
+  Fortran(glue("sum({X}, dim=1) / real({m}, kind=c_double)"), Variable("double", list(n)))
+}
+
+r2f_handlers[["rowMeans"]] <- function(args, scope, ...) {
+  stopifnot(length(args) == 1L)
+  X <- r2f(args[[1]], scope, ...)
+  if (X@value@rank != 2) stop("rowMeans(x) expects a rank-2 matrix")
+  X <- maybe_cast_double(X)
+  m <- X@value@dims[[1]]
+  n <- X@value@dims[[2]]
+  Fortran(glue("sum({X}, dim=2) / real({n}, kind=c_double)"), Variable("double", list(m)))
+}
+
+# qr(A): thin QR via LAPACK dgeqrf; returns upper-triangular R (k x n), k=min(m,n)
+r2f_handlers[["qr"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  A_sym <- args[[1]]
+  stopifnot(is.symbol(A_sym))
+  A_var <- get(A_sym, scope)
+  if (A_var@rank != 2) {
+    stop("qr(A) expects rank-2 matrix")
+  }
+  m <- A_var@dims[[1]]
+  n <- A_var@dims[[2]]
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop(paste0(
+      "internal error: invalid scope@get_unique_var; type:", typeof(gv),
+      " class:", paste(class(gv) %||% character(), collapse = ","),
+      " attrs:", paste(names(attributes(scope)) %||% character(), collapse = ",")
+    ))
+  }
+
+  F <- gv("double"); F@dims <- list(m, n); scope[[as.character(F)]] <- F
+  tau <- gv("double"); tau@dims <- list(call("min", m, n)); scope[[as.character(tau)]] <- tau
+  work <- gv("double"); work@dims <- list(n); scope[[as.character(work)]] <- work
+  info <- gv("integer"); scope[[as.character(info)]] <- info
+  iidx <- gv("integer"); jidx <- gv("integer")
+
+  # Copy A, factorize in-place
+  hoist(glue("{F} = {as.character(A_sym)}"))
+  hoist(glue("call dgeqrf({m}, {n}, {F}, {m}, {tau}, {work}, {n}, {info})"))
+  # Temporary error reporting
+  q_lapack_check(hoist, as.character(info), 'dgeqrf')
+
+  # Build R (k x n): upper-triangular from F, zeros below diag
+  R <- gv("double"); R@dims <- list(call("min", m, n), n); scope[[as.character(R)]] <- R
+  hoist(glue(
+    "do {jidx} = 1, {n}\n",
+    "  do {iidx} = 1, min({m}, {n})\n",
+    "    if ({iidx} <= {jidx}) then\n",
+    "      {R}({iidx}, {jidx}) = {F}({iidx}, {jidx})\n",
+    "    else\n",
+    "      {R}({iidx}, {jidx}) = 0.0_c_double\n",
+    "    end if\n",
+    "  end do\n",
+    "end do"
+  ))
+
+  Fortran(as.character(R), R)
+}
+
+# %*% (matrix multiply) — refactored via BLAS helpers
+r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 2L)
+  .[left, right] <- lapply(args, r2f, scope, ...)
+  lr <- left@value@rank
+  rr <- right@value@rank
+
+  if (lr == 2 && rr == 2) {
+    out <- q_blas_gemm(scope, hoist, left, right, 'N', 'N')
+    return(Fortran(out$name, out$var))
+  }
+  if (lr == 2 && rr == 1) {
+    out <- q_blas_gemv(scope, hoist, left, right, 'N')
+    return(Fortran(out$name, out$var))
+  }
+  if (lr == 1 && rr == 2) {
+    out <- q_blas_gemv(scope, hoist, right, left, 'T')
+    return(Fortran(out$name, out$var))
+  }
+  if (lr == 1 && rr == 1) {
+    x <- q_as_double_var(left, scope, hoist)
+    y <- q_as_double_var(right, scope, hoist)
+    tmp <- q_mk_double(scope, NULL)
+    hoist(glue("{tmp} = dot_product({x}, {y})"))
+    return(Fortran(as.character(tmp), tmp))
+  }
+  stop("%*% not implemented for provided operand ranks")
+}
+
+# crossprod(x, y) = t(x) %*% y (refactored)
+r2f_handlers[["crossprod"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) %in% 1:2)
+  x <- r2f(args[[1]], scope, ...)
+  if (length(args) == 1L) {
+    if (x@value@rank == 2) {
+      out <- q_blas_gemm(scope, hoist, x, x, 'T', 'N')
+      return(Fortran(out$name, out$var))
+    } else if (x@value@rank == 1) {
+      X <- q_as_double_var(x, scope, hoist)
+      tmp <- scope@get_unique_var("double"); assign(tmp@name, tmp, scope)
+      hoist(glue("{tmp} = dot_product({X}, {X})"))
+      return(Fortran(as.character(tmp), tmp))
+    }
+    stop("crossprod(x) expects rank-1 or rank-2 argument")
+  }
+
+  y <- r2f(args[[2]], scope, ...)
+  if (!(x@value@rank %in% 1:2 && y@value@rank %in% 1:2)) {
+    stop("crossprod(x, y) expects rank-1 or rank-2 inputs")
+  }
+  if (x@value@rank == 1 && y@value@rank == 1) {
+    X <- q_as_double_var(x, scope, hoist)
+    Y <- q_as_double_var(y, scope, hoist)
+    tmp <- scope@get_unique_var("double"); assign(tmp@name, tmp, scope)
+    hoist(glue("{tmp} = dot_product({X}, {Y})"))
+    return(Fortran(as.character(tmp), tmp))
+  }
+  if (x@value@rank == 1) {
+    out <- q_blas_gemv(scope, hoist, y, x, 'T')
+    return(Fortran(out$name, out$var))
+  }
+  if (y@value@rank == 1) {
+    out <- q_blas_gemv(scope, hoist, x, y, 'T')
+    return(Fortran(out$name, out$var))
+  }
+  m <- x@value@dims[[1]]
+  k <- x@value@dims[[2]]
+  n <- y@value@dims[[2]]
+  Y <- ensure_array_var(y, scope, hoist)
+  X <- ensure_array_var(x, scope, hoist)
+  out <- scope@get_unique_var("double"); out@dims <- list(k, n); assign(out@name, out, scope)
+  lda <- m; ldb <- y@value@dims[[1]]; ldc <- k
+  hoist(glue("call dgemm('T','N', {k}, {n}, {m}, 1.0_c_double, {X}, {lda}, {Y}, {ldb}, 0.0_c_double, {out}, {ldc})"))
+  Fortran(as.character(out), out)
+}
+
+# tcrossprod(x, y) = x %*% t(y) (refactored)
+r2f_handlers[["tcrossprod"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) %in% 1:2)
+  x <- r2f(args[[1]], scope, ...)
+  if (length(args) == 1L) {
+    if (x@value@rank == 2) {
+      m <- x@value@dims[[1]]
+      k <- x@value@dims[[2]]
+      out <- scope@get_unique_var("double"); out@dims <- list(m, m); assign(out@name, out, scope)
+      X <- ensure_array_var(x, scope, hoist)
+      lda <- m; ldc <- m
+      hoist(glue("call dgemm('N','T', {m}, {m}, {k}, 1.0_c_double, {X}, {lda}, {X}, {lda}, 0.0_c_double, {out}, {ldc})"))
+      return(Fortran(as.character(out), out))
+    } else if (x@value@rank == 1) {
+      # Outer product: (m) -> (m x m) via GEMM k=1
+      m <- x@value@dims[[1]]
+      out <- scope@get_unique_var("double"); out@dims <- list(m, m); assign(out@name, out, scope)
+      X <- ensure_array_var(x, scope, hoist)
+      lda <- m; ldb <- m; ldc <- m
+      hoist(glue("call dgemm('N','T', {m}, {m}, 1, 1.0_c_double, {X}, {lda}, {X}, {ldb}, 0.0_c_double, {out}, {ldc})"))
+      return(Fortran(as.character(out), out))
+    }
+    stop("tcrossprod(x) expects rank-1 or rank-2 argument")
+  }
+
+  y <- r2f(args[[2]], scope, ...)
+  if (!(x@value@rank %in% 1:2 && y@value@rank %in% 1:2)) {
+    stop("tcrossprod(x, y) expects rank-1 or rank-2 inputs")
+  }
+  if (x@value@rank == 1 && y@value@rank == 1) {
+    # Outer product: (m) %*% t(n) -> (m x n) via GEMM k=1
+    m <- x@value@dims[[1]]
+    n <- y@value@dims[[1]]
+    out <- scope@get_unique_var("double"); out@dims <- list(m, n); assign(out@name, out, scope)
+    X <- ensure_array_var(x, scope, hoist)
+    Y <- ensure_array_var(y, scope, hoist)
+    lda <- m; ldb <- n; ldc <- m
+    hoist(glue("call dgemm('N','T', {m}, {n}, 1, 1.0_c_double, {X}, {lda}, {Y}, {ldb}, 0.0_c_double, {out}, {ldc})"))
+    return(Fortran(as.character(out), out))
+  }
+  if (x@value@rank == 1) {
+    # vector %*% t(matrix) -> gemv('N') with dims from y
+    out <- q_blas_gemv(scope, hoist, y, x, 'N')
+    return(Fortran(out$name, out$var))
+  }
+  if (y@value@rank == 1) {
+    # matrix %*% t(vector) -> gemv('N')
+    out <- q_blas_gemv(scope, hoist, x, y, 'N')
+    return(Fortran(out$name, out$var))
+  }
+  m <- x@value@dims[[1]]
+  k <- x@value@dims[[2]]
+  n <- y@value@dims[[1]]
+  X <- ensure_array_var(x, scope, hoist)
+  Y <- ensure_array_var(y, scope, hoist)
+  out <- scope@get_unique_var("double"); out@dims <- list(m, n); assign(out@name, out, scope)
+  lda <- m; ldb <- n; ldc <- m
+  hoist(glue("call dgemm('N','T', {m}, {n}, {k}, 1.0_c_double, {X}, {lda}, {Y}, {ldb}, 0.0_c_double, {out}, {ldc})"))
+  Fortran(as.character(out), out)
+}
+
+# solve(A, b): linear solve via LAPACK dgesv (general dense)
+r2f_handlers[["solve"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) %in% 1:2)
+  A <- r2f(args[[1]], scope, ...)
+  A <- maybe_cast_double(A)
+  if (A@value@rank != 2) {
+    stop("solve(A, b) expects A to be rank-2 square matrix")
+  }
+  n <- A@value@dims[[1]]
+  if (!identical(A@value@dims[[1]], A@value@dims[[2]])) {
+    stop("solve(A, b) expects a square matrix A")
+  }
+
+  if (length(args) == 1L) {
+    stop("solve(A) (matrix inverse) not implemented yet")
+  }
+
+  B <- r2f(args[[2]], scope, ...)
+  B <- maybe_cast_double(B)
+  if (!(B@value@rank %in% 1:2)) {
+    stop("solve(A, b) expects b to have rank 1 or 2")
+  }
+
+  nrhs <- if (B@value@rank == 1) 1L else B@value@dims[[2]]
+
+  # Prepare outputs and temporaries
+  X <- scope@get_unique_var("double")
+  X@dims <- if (B@value@rank == 1) list(n) else list(n, nrhs)
+  assign(X@name, X, scope)
+
+  A_ <- scope@get_unique_var("double")
+  A_@dims <- list(n, n)
+  assign(A_@name, A_, scope)
+
+  ipiv <- scope@get_unique_var("integer")
+  ipiv@dims <- list(n)
+  assign(ipiv@name, ipiv, scope)
+
+  info <- scope@get_unique_var("integer")
+  assign(info@name, info, scope)
+
+  # Copies to avoid modifying inputs
+  hoist(glue("{A_} = {A}"))
+  hoist(glue("{X} = {B}"))
+
+  lda <- n
+  ldb <- n
+  hoist(glue(
+    "call dgesv({n}, {nrhs}, {A_}, {lda}, {ipiv}, {X}, {ldb}, {info})"
+  ))
+  q_lapack_check(hoist, as.character(info), 'dgesv')
+
+  # Do not propagate as R error yet; return X regardless
+  Fortran(as.character(X), X)
+}
+
+# chol(A): Cholesky factorization via LAPACK dpotrf, returns upper-triangular U
+r2f_handlers[["chol"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  A_sym <- args[[1]]
+  stopifnot(is.symbol(A_sym))
+  A_var <- get(A_sym, scope)
+  if (A_var@rank != 2) {
+    stop("chol(A) expects rank-2 matrix")
+  }
+  n <- A_var@dims[[1]]
+  if (!identical(A_var@dims[[1]], A_var@dims[[2]])) {
+    stop("chol(A) expects a square matrix")
+  }
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop(paste0(
+      "internal error: invalid scope@get_unique_var; type:", typeof(gv),
+      " class:", paste(class(gv) %||% character(), collapse = ","),
+      " attrs:", paste(names(attributes(scope)) %||% character(), collapse = ",")
+    ))
+  }
+
+  F <- gv("double")
+  F@dims <- list(n, n)
+  scope[[as.character(F)]] <- F
+  info <- gv("integer")
+  iidx <- gv("integer")
+  jidx <- gv("integer")
+
+  hoist(glue("{F} = {as.character(A_sym)}"))
+  hoist(glue("call dpotrf('U', {n}, {F}, {n}, {info})"))
+  # Temporary error reporting: print LAPACK info instead of throwing
+  q_lapack_check(hoist, as.character(info), 'dpotrf')
+  hoist(glue(
+    "do {jidx} = 1, {n}\n  do {iidx} = {jidx}+1, {n}\n    {F}({iidx}, {jidx}) = 0.0_c_double\n  end do\nend do"
+  ))
+  Fortran(as.character(F), F)
+}
+
+r2f_handlers[["chol2inv"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  U_sym <- args[[1]]
+  stopifnot(is.symbol(U_sym))
+  U_var <- get(U_sym, scope)
+  if (U_var@rank != 2) {
+    stop("chol2inv(U) expects rank-2 matrix (Cholesky factor)")
+  }
+  n <- U_var@dims[[1]]
+  if (!identical(U_var@dims[[1]], U_var@dims[[2]])) {
+    stop("chol2inv(U) expects a square matrix")
+  }
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  F <- gv("double"); F@dims <- list(n, n); scope[[as.character(F)]] <- F
+  info <- gv("integer"); scope[[as.character(info)]] <- info
+  iidx <- gv("integer"); jidx <- gv("integer")
+
+  hoist(glue("{F} = {as.character(U_sym)}"))
+  hoist(glue("call dpotri('U', {n}, {F}, {n}, {info})"))
+  q_lapack_check(hoist, as.character(info), 'dpotri')
+  # Symmetrize: copy upper triangle to lower
+  hoist(glue(
+    "do {jidx} = 1, {n}\n  do {iidx} = {jidx}+1, {n}\n    {F}({iidx}, {jidx}) = {F}({jidx}, {iidx})\n  end do\nend do"
+  ))
+
+  Fortran(as.character(F), F)
+}
+
+
+# svd(A): singular values via LAPACK dgesvd (values-only)
+r2f_handlers[["svd"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  A_sym <- args[[1]]
+  stopifnot(is.symbol(A_sym))
+  A_var <- get(A_sym, scope)
+  if (A_var@rank != 2) {
+    stop("svd(A) expects rank-2 matrix")
+  }
+  m <- A_var@dims[[1]]
+  n <- A_var@dims[[2]]
+  k <- call("min", m, n)
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  F <- gv("double"); F@dims <- list(m, n); scope[[as.character(F)]] <- F
+  S <- gv("double"); S@dims <- list(k); scope[[as.character(S)]] <- S
+  # Dummies for U and VT since JOBU=JOBVT='N'
+  U <- gv("double"); U@dims <- list(1L, 1L); scope[[as.character(U)]] <- U
+  VT <- gv("double"); VT@dims <- list(1L, 1L); scope[[as.character(VT)]] <- VT
+  # Workspace: lwork >= max(3*min(m,n) + max(m,n), 5*min(m,n))
+  lwork_expr <- call(
+    "max",
+    call("+", call("*", 3L, k), call("max", m, n)),
+    call("*", 5L, k)
+  )
+  WORK <- gv("double"); WORK@dims <- list(lwork_expr); scope[[as.character(WORK)]] <- WORK
+  info <- gv("integer"); scope[[as.character(info)]] <- info
+
+  hoist(glue("{F} = {as.character(A_sym)}"))
+  hoist(glue(
+    "call dgesvd('N','N', {m}, {n}, {F}, {m}, {S}, {U}, 1, {VT}, 1, {WORK}, size({WORK}), {info})"
+  ))
+  q_lapack_check(hoist, as.character(info), 'dgesvd')
+
+  Fortran(as.character(S), S)
+}
+
+# ---- simplified handlers overriding previous implementations ----
+
+# Reassign %*% using helper wrappers
+r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 2L)
+  .[left, right] <- lapply(args, r2f, scope, ...)
+  left <- maybe_cast_double(left)
+  right <- maybe_cast_double(right)
+
+  lr <- left@value@rank
+  rr <- right@value@rank
+
+  # matrix %*% matrix -> dgemm
+  if (lr == 2 && rr == 2) {
+    m <- left@value@dims[[1]]
+    k <- left@value@dims[[2]]
+    k2 <- right@value@dims[[1]]
+    n <- right@value@dims[[2]]
+
+    # result dims: (m x n)
+    out <- scope@get_unique_var("double")
+    out@dims <- list(m, n)
+    assign(out@name, out, scope)
+
+    A <- ensure_array_var(left, scope, hoist)
+    B <- ensure_array_var(right, scope, hoist)
+    C <- as.character(out)
+
+    lda <- m
+    ldb <- k2
+    ldc <- m
+    hoist(glue(
+      "call dgemm('N','N', {m}, {n}, {k}, 1.0_c_double, {A}, {lda}, {B}, {ldb}, 0.0_c_double, {C}, {ldc})"
+    ))
+    return(Fortran(C, out))
+  }
+
+  # matrix %*% vector -> dgemv('N')
+  if (lr == 2 && rr == 1) {
+    m <- left@value@dims[[1]]
+    n <- left@value@dims[[2]]
+    nx <- right@value@dims[[1]]
+    out <- scope@get_unique_var("double")
+    out@dims <- list(m)
+    assign(out@name, out, scope)
+
+    A <- ensure_array_var(left, scope, hoist)
+    x <- ensure_array_var(right, scope, hoist)
+    y <- as.character(out)
+    lda <- m
+    incx <- 1
+    incy <- 1
+    hoist(glue(
+      "call dgemv('N', {m}, {n}, 1.0_c_double, {A}, {lda}, {x}, {incx}, 0.0_c_double, {y}, {incy})"
+    ))
+    return(Fortran(y, out))
+  }
+
+  # vector %*% matrix -> dgemv('T')
+  if (lr == 1 && rr == 2) {
+    m <- right@value@dims[[1]]
+    n <- right@value@dims[[2]]
+    mx <- left@value@dims[[1]]
+    out <- scope@get_unique_var("double")
+    out@dims <- list(n)
+    assign(out@name, out, scope)
+
+    A <- ensure_array_var(right, scope, hoist)
+    x <- ensure_array_var(left, scope, hoist)
+    y <- as.character(out)
+    lda <- m
+    incx <- 1
+    incy <- 1
+    hoist(glue(
+      "call dgemv('T', {m}, {n}, 1.0_c_double, {A}, {lda}, {x}, {incx}, 0.0_c_double, {y}, {incy})"
+    ))
+    return(Fortran(y, out))
+  }
+
+  # vector %*% vector -> dot_product (scalar)
+  if (lr == 1 && rr == 1) {
+    x <- ensure_array_var(left, scope, hoist)
+    y <- ensure_array_var(right, scope, hoist)
+    tmp <- scope@get_unique_var("double")
+    assign(tmp@name, tmp, scope)
+    hoist(glue("{tmp} = dot_product({x}, {y})"))
+    return(Fortran(as.character(tmp), tmp))
+  }
+
+  stop("%*% not implemented for provided operand ranks")
+}
+
+# Reassign solve() using centralized alloc + LAPACK check
+r2f_handlers[["solve"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) %in% 1:2)
+  A <- r2f(args[[1]], scope, ...)
+  A <- maybe_cast_double(A)
+  if (A@value@rank != 2) stop("solve(A, b) expects A to be rank-2 square matrix")
+  n <- A@value@dims[[1]]
+  if (!identical(A@value@dims[[1]], A@value@dims[[2]])) stop("solve(A, b) expects a square matrix A")
+  if (length(args) == 1L) stop("solve(A) (matrix inverse) not implemented yet")
+
+  B <- r2f(args[[2]], scope, ...)
+  B <- maybe_cast_double(B)
+  if (!(B@value@rank %in% 1:2)) stop("solve(A, b) expects b to have rank 1 or 2")
+  nrhs <- if (B@value@rank == 1) 1L else B@value@dims[[2]]
+
+  X <- scope@get_unique_var("double"); X@dims <- if (B@value@rank == 1) list(n) else list(n, nrhs); assign(X@name, X, scope)
+  A_ <- scope@get_unique_var("double"); A_@dims <- list(n, n); assign(A_@name, A_, scope)
+  ipiv <- scope@get_unique_var("integer"); ipiv@dims <- list(n); assign(ipiv@name, ipiv, scope)
+  info <- scope@get_unique_var("integer"); assign(info@name, info, scope)
+
+  hoist(glue("{A_} = {A}"))
+  hoist(glue("{X} = {B}"))
+  lda <- n; ldb <- n
+  hoist(glue("call dgesv({n}, {nrhs}, {A_}, {lda}, {ipiv}, {X}, {ldb}, {info})"))
+  q_lapack_check(hoist, as.character(info), 'dgesv')
+  Fortran(as.character(X), X)
+}
+
+# eigen(A): eigenvalues (symmetric) via LAPACK dsyev (values-only)
+r2f_handlers[["eigen"]] <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 1L)
+  A_sym <- args[[1]]
+  stopifnot(is.symbol(A_sym))
+  A_var <- get(A_sym, scope)
+  if (A_var@rank != 2) {
+    stop("eigen(A) expects rank-2 matrix")
+  }
+  if (!identical(A_var@dims[[1]], A_var@dims[[2]])) {
+    stop("eigen(A) expects a square matrix")
+  }
+  n <- A_var@dims[[1]]
+
+  gv <- attr(scope, "get_unique_var", exact = TRUE)
+  if (!is.function(gv)) {
+    stop("internal error: invalid scope@get_unique_var")
+  }
+
+  F <- gv("double"); F@dims <- list(n, n); scope[[as.character(F)]] <- F
+  W <- gv("double"); W@dims <- list(n); scope[[as.character(W)]] <- W
+  # Workspace: lwork >= max(1, 3*n - 1)
+  lwork_expr <- call("max", 1L, call("-", call("*", 3L, n), 1L))
+  WORK <- gv("double"); WORK@dims <- list(lwork_expr); scope[[as.character(WORK)]] <- WORK
+  info <- gv("integer"); scope[[as.character(info)]] <- info
+
+  hoist(glue("{F} = {as.character(A_sym)}"))
+  hoist(glue("call dsyev('N','U', {n}, {F}, {n}, {W}, {WORK}, size({WORK}), {info})"))
+  q_lapack_check(hoist, as.character(info), 'dsyev')
+
+  Fortran(as.character(W), W)
+}
+
+
 r2f_handlers[[">="]] <- function(args, scope, ...) {
   .[left, right] <- lapply(args, r2f, scope, ...)
   var <- conform(left@value, right@value)

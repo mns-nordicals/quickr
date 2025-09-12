@@ -1,475 +1,82 @@
-
-<!-- README.md is generated from README.Rmd. Please edit that file -->
-
-# quickr <img src="man/figures/logo.png" align="right" height="138"/>
-
-<!-- ![](https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExMjBhNWt1Z3Q4ZW56cG00c2hncmtwbGJycm53M3JxYWdscjRkaDJobCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/12haGO61oFZ28w/giphy.gif){alt="An animated GIF showing two characters in a spaceship cockpit rapidly accelerating into hyperspace, with stars stretching into bright streaks, creating a sensation of rapid acceleration and motion."} -->
-
-<!-- badges: start -->
-
-[![R-CMD-check](https://github.com/t-kalinowski/quickr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/t-kalinowski/quickr/actions/workflows/R-CMD-check.yaml)
-<!-- badges: end -->
-
-The goal of quickr is to make your R code run quicker.
-
-## Overview
-
-R is an extremely flexible and dynamic language, but that flexibility
-and dynamicism can come at the expense of speed. This package lets you
-trade back some of that flexibility for some speed, for the context of a
-single function.
-
-<!-- Programming language design requires some hard decisions and trade-ofs. -->
-
-<!-- When you want to have it all, you typically end up have two (or more!) languages. -->
-
-<!-- An interpreted, dynamic language full of conveniences, and a staticly-typed, explicit, high-performance language. -->
-
-<!-- This is sometimes called the "Two Language Problem". -->
-
-<!-- Like [Numba](https://numba.pydata.org) in Python, or the [Julia](https://julialang.org) language, quickr is a solution to the [two-language problem](https://juliadatascience.io/julia_accomplish). -->
-
-<!-- Unlike those tools however, quickr does not bundle most of LLVM, keeping dependencies lightweight. -->
-
-<!-- Quickr works by translating the R code to Fortran. -->
-
-<!-- Fortran might seem like a surprising choice, but it has many compelling properties: -->
-
-<!-- -   Superb performance. -->
-
-<!--     As a stalwart of the numerical computing community, Fortran has accrued the benefit of countless person-hours from top-tier computer scientists and compiler engineers. -->
-
-<!--     There is a reason that over 20% of R itself, (and numpy, and ...) are still in Fortran, and it's not merely because of legacy. -->
-
-<!--     And this trend of compiler engineers focusing on Fortran is not stopping. -->
-
-<!-- -   Large overlap with R semantics and syntax for numerical computing. -->
-
-<!--     Fortran and R have very similar syntax for operating on arrays. -->
-
-<!--     Like R, Fortran has builtin-in support for nd-arrays, provides vectorized operators on arrays, convenient array slicing semantics that match many capabilities of R's `[` , 1-based indexing, and a well-populated collection of operators for working on those arrays like `min`, `max`, `any` `all`, etc. -->
-
-<!--     This means that it's relatively straightforward to translate R to Fortran, often just a 1:1 mapping of semantics, with some changes to syntax. -->
-
-<!--     This is also why Fortran has such superb performance, and why it attracts compiler engineers to work on it. -->
-
-<!--     Because the language spec guarantees things like, static shapes for nd-arrays, views of those arrays, etc, it provides many opportunities for compiler engineers to do things like generate SIMD instructions, or automatically parallelize code. -->
-
-<!-- -   Excellent support in R. -->
-
-<!--     One of the original motivations for R was to serve as a front-end for Fortran. -->
-
-<!--     Since its inception, R has supported Fortran extensions, and supported them well. -->
-
-<!--     It also means that any computing environment where R build tools are available, Fortran is supported. -->
-
-<!--     The barrier to entry and thorny questions, that, for example, using Rust in CRAN might raise, is non-existent for Fortran. -->
-
-The main exported function is `quick()`, here is how you use it.
-
-``` r
-library(quickr)
-
-convolve <- quick(function(a, b) {
-  declare(type(a = double(NA)),
-          type(b = double(NA)))
-  ab <- double(length(a) + length(b) - 1)
-  for (i in seq_along(a)) {
-    for (j in seq_along(b)) {
-      ab[i+j-1] <- ab[i+j-1] + a[i] * b[j]
-    }
-  }
-  ab
-})
-```
-
-`quick()` returns a quicker R function. How much quicker? Let’s
-benchmark it! For reference, we’ll also compare it to a
-[pure-C](https://cran.r-project.org/doc/FAQ/R-exts.html#Calling-_002eCall-1)
-implementation.
-
-``` r
-slow_convolve <- function(a, b) {
-  declare(type(a = double(NA)),
-          type(b = double(NA)))
-  ab <- double(length(a) + length(b) - 1)
-  for (i in seq_along(a)) {
-    for (j in seq_along(b)) {
-      ab[i+j-1] <- ab[i+j-1] + a[i] * b[j]
-    }
-  }
-  ab
-}
-
-library(quickr)
-quick_convolve <- quick(slow_convolve)
-
-convolve_c <- inline::cfunction(
-  sig = c(a = "SEXP", b = "SEXP"), body = r"({
-    int na, nb, nab;
-    double *xa, *xb, *xab;
-    SEXP ab;
-
-    a = PROTECT(Rf_coerceVector(a, REALSXP));
-    b = PROTECT(Rf_coerceVector(b, REALSXP));
-    na = Rf_length(a); nb = Rf_length(b); nab = na + nb - 1;
-    ab = PROTECT(Rf_allocVector(REALSXP, nab));
-    xa = REAL(a); xb = REAL(b); xab = REAL(ab);
-    for(int i = 0; i < nab; i++) xab[i] = 0.0;
-    for(int i = 0; i < na; i++)
-        for(int j = 0; j < nb; j++)
-            xab[i + j] += xa[i] * xb[j];
-    UNPROTECT(3);
-    return ab;
-})")
-
-
-
-a <- runif (100000); b <- runif (100)
-
-timings <- bench::mark(
-  r = slow_convolve(a, b),
-  quickr = quick_convolve(a, b),
-  c = convolve_c(a, b),
-  min_time = 2
-)
-timings
-#> # A tibble: 3 × 6
-#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 r             1.04s    1.04s     0.957     782KB    0.957
-#> 2 quickr       4.85ms   5.03ms   198.        782KB    3.61 
-#> 3 c            4.88ms   5.06ms   197.        782KB    4.13
-plot(timings) + bench::scale_x_bench_time(base = NULL)
-```
-
-<img src="man/figures/README-unnamed-chunk-3-1.png" width="100%" />
-
-In the case of `convolve()`, `quick()` returns a function approximately
-*200* times quicker, giving similar performance to the C function.
-
-`quick()` can accelerate any R function, with some restrictions:
-
-- Function arguments must have their types and shapes declared using
-  `declare()`.
-- Only atomic vectors, matrices, and array are currently supported:
-  `integer`, `double`, `logical`, and `complex`.
-- The return value must be an atomic array (e.g., not a list)
-- Named variables must have consistent shapes throughout their
-  lifetimes.
-- `NA` values are not supported.
-- Only a subset of R’s vocabulary is currently supported.
-
-<!-- -->
-
-    #>  [1] -         :         !=        (         [         [<-       {        
-    #>  [8] *         /         &         &&        %/%       %%        ^        
-    #> [15] +         <         <-        <=        =         ==        >        
-    #> [22] >=        |         ||        Arg       Conj      Fortran   Im       
-    #> [29] Mod       Re        abs       acos      as.double asin      atan     
-    #> [36] break     c         cat       cbind     ceiling   character cos      
-    #> [43] declare   dim       double    exp       floor     for       if       
-    #> [50] ifelse    integer   length    log       log10     logical   matrix   
-    #> [57] max       min       ncol      next      nrow      numeric   print    
-    #> [64] prod      raw       repeat    runif     seq       sin       sqrt     
-    #> [71] sum       tan       which.max which.min while
-
-Many of these restrictions are expected to be relaxed as the project
-matures. However, quickr is intended primarily for high-performance
-numerical computing, so features like polymorphic dispatch or support
-for complex or dynamic types are out of scope.
-
-## `declare(type())` syntax:
-
-The shape and mode of all function arguments must be declared. Local and
-return variables may optionally also be declared.
-
-`declare(type())` also has support for declaring size constraints, or
-size relationships between variables. Here are some examples of declare
-calls:
-
-``` r
-declare(type(x = double(NA))) # x is a 1-d double vector of any length
-declare(type(x = double(10))) # x is a 1-d double vector of length 10
-declare(type(x = double(1)))  # x is a scalar double
-
-declare(type(x = integer(2, 3)))  # x is a 2-d integer matrix with dim (2, 3)
-declare(type(x = integer(NA, 3))) # x is a 2-d integer matrix with dim (<any>, 3)
-
-# x is a 4-d logical matrix with dim (<any>, 24, 24, 3)
-declare(type(x = logical(NA, 24, 24, 3)))
-
-# x and y are 1-d double vectors of any length
-declare(type(x = double(NA)),
-        type(y = double(NA)))
-
-# x and y are 1-d double vectors of the same length
-declare(
-  type(x = double(n)),
-  type(y = double(n)),
-)
-
-# x and y are 1-d double vectors, where length(y) == length(x) + 2
-declare(type(x = double(n)),
-        type(y = double(n+2)))
-```
-
-## More examples:
-
-### `viterbi`
-
-The Viterbi algorithm is an example of a dynamic programming algorithm
-within the family of Hidden Markov Models
-(<https://en.wikipedia.org/wiki/Viterbi_algorithm>). Here, `quick()`
-makes the `viterbi()` approximately 50 times faster.
-
-``` r
-slow_viterbi <- function(observations, states, initial_probs, transition_probs, emission_probs) {
-    declare(
-      type(observations = integer(num_steps)),
-      type(states = integer(num_states)),
-      type(initial_probs = double(num_states)),
-      type(transition_probs = double(num_states, num_states)),
-      type(emission_probs = double(num_states, num_obs)),
-    )
-
-    trellis <- matrix(0, nrow = length(states), ncol = length(observations))
-    backpointer <- matrix(0L, nrow = length(states), ncol = length(observations))
-    trellis[, 1] <- initial_probs * emission_probs[, observations[1]]
-
-    for (step in 2:length(observations)) {
-      for (current_state in 1:length(states)) {
-        probabilities <- trellis[, step - 1] * transition_probs[, current_state]
-        trellis[current_state, step] <- max(probabilities) * emission_probs[current_state, observations[step]]
-        backpointer[current_state, step] <- which.max(probabilities)
-      }
-    }
-
-    path <- integer(length(observations))
-    path[length(observations)] <- which.max(trellis[, length(observations)])
-    for (step in seq(length(observations) - 1, 1)) {
-      path[step] <- backpointer[path[step + 1], step + 1]
-    }
-
-    out <- states[path]
-    out
-}
-
-quick_viterbi <- quick(slow_viterbi)
-
-set.seed(1234)
-num_steps <- 16
-num_states <- 8
-num_obs <- 16
-
-observations <- sample(1:num_obs, num_steps, replace = TRUE)
-states <- 1:num_states
-initial_probs <- runif (num_states)
-initial_probs <- initial_probs / sum(initial_probs)  # normalize to sum to 1
-transition_probs <- matrix(runif (num_states * num_states), nrow = num_states)
-transition_probs <- transition_probs / rowSums(transition_probs)  # normalize rows
-emission_probs <- matrix(runif (num_states * num_obs), nrow = num_states)
-emission_probs <- emission_probs / rowSums(emission_probs)  # normalize rows
-
-timings <- bench::mark(
-  slow_viterbi = slow_viterbi(observations, states, initial_probs,
-                              transition_probs, emission_probs),
-  quick_viterbi = quick_viterbi(observations, states, initial_probs,
-                                transition_probs, emission_probs)
-)
-timings
-#> # A tibble: 2 × 6
-#>   expression         min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr>    <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 slow_viterbi  147.12µs 162.33µs     5957.    1.59KB     16.8
-#> 2 quick_viterbi   2.48µs   2.62µs   367468.        0B      0
-plot(timings)
-```
-
-<img src="man/figures/README-unnamed-chunk-6-1.png" width="100%" />
-
-### Diffusion simulation
-
-Simulate how heat spreads over time across a 2D grid, using the [finite
-difference method](https://en.wikipedia.org/wiki/Finite_difference)
-applied to the [Heat
-Equation](https://en.wikipedia.org/wiki/Heat_equation).
-
-Here, `quick()` returns a function over 100 times faster.
-
-``` r
-diffuse_heat <- function(nx, ny, dx, dy, dt, k, steps) {
-  declare(
-    type(nx = integer(1)),
-    type(ny = integer(1)),
-    type(dx = integer(1)),
-    type(dy = integer(1)),
-    type(dt = double(1)),
-    type(k = double(1)),
-    type(steps = integer(1))
-  )
-
-  # Initialize temperature grid
-  temp <- matrix(0, nx, ny)
-  temp[nx / 2, ny / 2] <- 100  # Initial heat source in the center
-
-  # Time stepping
-  for (step in seq_len(steps)) {
-    # Apply boundary conditions
-    temp[1, ] <- 0
-    temp[nx, ] <- 0
-    temp[, 1] <- 0
-    temp[, ny] <- 0
-
-    # Update using finite differences
-    temp_new <- temp
-    for (i in 2:(nx - 1)) {
-      for (j in 2:(ny - 1)) {
-        temp_new[i, j] <- temp[i, j] + k * dt *
-          ((temp[i + 1, j] - 2 * temp[i, j] + temp[i - 1, j]) /
-             dx ^ 2 + (temp[i, j + 1] - 2 * temp[i, j] + temp[i, j - 1]) / dy ^ 2)
-      }
-    }
-    temp <- temp_new
-
-  }
-
-  temp
-}
-
-quick_diffuse_heat <- quick(diffuse_heat)
-
-# Parameters
-nx <- 100L      # Grid size in x
-ny <- 100L      # Grid size in y
-dx <- 1L        # Grid spacing
-dy <- 1L        # Grid spacing
-dt <- 0.01      # Time step
-k <- 0.1        # Thermal diffusivity
-steps <- 500L   # Number of time steps
-
-timings <- bench::mark(
-  diffuse_heat = diffuse_heat(nx, ny, dx, dy, dt, k, steps),
-  quick_diffuse_heat = quick_diffuse_heat(nx, ny, dx, dy, dt, k, steps)
-)
-#> Warning: Some expressions had a GC in every iteration; so filtering is
-#> disabled.
-summary(timings, relative = TRUE)
-#> Warning: Some expressions had a GC in every iteration; so filtering is
-#> disabled.
-#> # A tibble: 2 × 6
-#>   expression           min median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr>         <dbl>  <dbl>     <dbl>     <dbl>    <dbl>
-#> 1 diffuse_heat        131.   127.        1      1011.      Inf
-#> 2 quick_diffuse_heat    1      1       127.        1       NaN
-plot(timings)
-```
-
-<img src="man/figures/README-unnamed-chunk-7-1.png" width="100%" />
-
-### Rolling Mean
-
-Here is quickr used to calculate a rolling mean. Note that the CRAN
-package RcppRoll already provides a highly optimized rolling mean, which
-we include in the benchmarks for comparison.
-
-``` r
-slow_roll_mean <- function(x, weights, normalize = TRUE) {
-  declare(
-    type(x = double(NA)),
-    type(weights = double(NA)),
-    type(normalize = logical(1))
-  )
-  out <- double(length(x) - length(weights) + 1)
-  n <- length(weights)
-  if (normalize)
-    weights <- weights/sum(weights)*length(weights)
-
-  for(i in seq_along(out)) {
-    out[i] <- sum(x[i:(i+n-1)] * weights) / length(weights)
-  }
-  out
-}
-
-quick_roll_mean <- quick(slow_roll_mean)
-
-x <- dnorm(seq(-3, 3, len = 100000))
-weights <- dnorm(seq(-1, 1, len = 100))
-
-timings <- bench::mark(
-  r = slow_roll_mean(x, weights),
-  rcpp = RcppRoll::roll_mean(x, weights = weights),
-  quickr = quick_roll_mean(x, weights = weights)
-)
-#> Warning: Some expressions had a GC in every iteration; so filtering is
-#> disabled.
-timings
-#> # A tibble: 3 × 6
-#>   expression      min   median `itr/sec` mem_alloc `gc/sec`
-#>   <bch:expr> <bch:tm> <bch:tm>     <dbl> <bch:byt>    <dbl>
-#> 1 r           114.2ms 132.75ms      5.66  124.24MB     9.44
-#> 2 rcpp        19.35ms  19.58ms     50.9     4.44MB     0   
-#> 3 quickr       6.73ms   6.87ms    142.    781.35KB     1.98
-
-timings$expression <- factor(names(timings$expression), rev(names(timings$expression)))
-plot(timings) + bench::scale_x_bench_time(base = NULL)
-```
-
-<img src="man/figures/README-unnamed-chunk-8-1.png" width="100%" />
-
-## Using `quickr` in an R package
-
-When called in a package, `quick()` will pre-compile the quick functions
-and place them in the `./src` directory. Run `devtools::load_all()` or
-`quickr::compile_package()` to ensure that the generated files in
-`./src` and `./R` are in sync with each other.
-
-In a package, you must provide a function name to `quick()`. For
-example:
-
-``` r
-my_fun <- quick(name = "my_fun", function(x) ....)
-```
-
-## Installation
-
-You can install quickr from CRAN with:
-
-``` r
-install.packages("quickr")
-```
-
-You can install the development version of quickr from
-[GitHub](https://github.com/) with:
-
-``` r
-# install.packages("pak")
-pak::pak("t-kalinowski/quickr")
-```
-
-You will also need a C and Fortran compiler, preferably the same ones
-used to build R itself.
-
-On macOS:
-
-- Make sure xcode tools and gfortran are installed, as described in
-  <https://mac.r-project.org/tools/>. In Terminal, run:
-
-  ``` zsh
-  sudo xcode-select --install
-  # curl -LO https://mac.r-project.org/tools/gfortran-12.2-universal.pkg # R 4.4
-  curl -LO https://mac.r-project.org/tools/gfortran-14.2-universal.pkg   # R 4.5
-  sudo installer -pkg gfortran-12.2-universal.pkg -target /
-  ```
-
-On Windows:
-
-- Install the latest version of
-  [Rtools](https://cran.r-project.org/bin/windows/Rtools/)
-
-On Linux:
-
-- The “Install Required Dependencies” section
-  [here](https://docs.posit.co/resources/install-r-source.html#install-required-dependencies)
-  provides detailed instructions for installing R build tools on various
-  Linux flavors.
+# Master Matrix Operations: R ↔ BLAS/LAPACK
+
+This document maps common matrix operations in **R** to their closest **Fortran BLAS/LAPACK** routines.
+Mathematical notation uses LaTeX. For routine behavior and argument details, see the references.
+
+## Basic / Elementwise
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| Matrix addition / subtraction | Elementwise combine: $C_{ij}=A_{ij}\pm B_{ij}$. | A + B; A - B | No direct BLAS/LAPACK (use vectorized loops) | Memory-bound; keep data contiguous and avoid unnecessary copies. |
+| Hadamard (elementwise) product / scaling | Entrywise product $(A\circ B)_{ij}=A_{ij}B_{ij}$; scalar scaling $\alpha A$. | A * B; a * A; A / a | SCAL (vector scaling); no matrix–matrix elementwise in BLAS | Don’t confuse with matrix product `%*%`/GEMM. |
+| Transpose / conjugate transpose | Reorder to $A^T$ or $A^H$. | t(A) | Use transpose flags in BLAS (`TRANS='T'` or `'C'`) within GEMM/GEMV; no standalone transpose | Prefer op(A) flags over materializing a transpose. |
+
+## Products (basic)
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| Dot (inner) product | For vectors: $x^Ty$; projection and orthogonalization building block. | crossprod(x, y); sum(x * y) | DDOT / SDOT; ZDOTC for complex | For norms, prefer BLAS 2-norm routines. |
+| Matrix–vector product | Compute $y := A x$ or $y := A^T x$. | A %*% x | DGEMV / SGEMV; SYMV/HEMV for symmetric/Hermitian | Batch multiple RHS as a matrix to promote GEMM usage when possible. |
+| Matrix–matrix product | Compute $C := A B$. | A %*% B | DGEMM / SGEMM / ZGEMM | Central Level-3 BLAS; use transpose flags rather than forming transposes. |
+
+## Products (specialized)
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| Crossproduct / Gram $X^TX$ | Form $G := X^TX$ efficiently using symmetry. | crossprod(X) | SYRK / HERK | More efficient than GEMM for symmetric outputs. |
+| tcrossprod $XX^T$ | Form $G := XX^T$ efficiently. | tcrossprod(X) | SYRK (with transposed operands) or GEMM | Useful for covariance-like matrices. |
+| Outer product / rank-1 update | Update $A := A + \alpha x y^T$. | outer(x, y) (build); in-place update via loops | GER / GERU / GERC | Use GER for in-place updates without forming full outer. |
+| Kronecker product | Block matrix $A\otimes B$. | kronecker(A, B) or %x% | No direct BLAS; implement via tiled GEMM | Beware memory growth: $(mn)\times(pq)$. |
+
+## Properties / Diagnostics
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| Trace | Sum of diagonal: $\operatorname{tr}(A)=\sum_i A_{ii}$. | sum(diag(A)) | No direct BLAS/LAPACK | Use a simple loop over the diagonal; stable and $O(n)$. |
+| Matrix norms | Size measures: $\|A\|_F$, $\|A\|_1$, $\|A\|_\infty$, spectral $\|A\|_2$. | norm(A, type='F'|'1'|'I'|'2') | DLANGE / DLANSY / ZLANGE etc. | 2-norm requires SVD/eigenpower; Fro/1/Inf are cheap. |
+| Determinant / log-det | Product of eigenvalues; $\log\det(A)$ for stability. | determinant(A, logarithm=TRUE); det(A) | Via LU: DGETRF (+ sign); SPD via Cholesky (DPOTRF) | Prefer log-det to avoid overflow/underflow. |
+| Rank / null space / condition number | Rank (dimension of image); null space basis; condition number $\kappa$. | qr(A)$rank; svd(A); kappa(A) | DGELSY (RRQR), DGELSD/DGESVD (SVD), GECON/POCON | Use SVD for robust rank/null space; QRCP faster when adequate. |
+
+## Linear systems
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| General solve $Ax=b$ | Solve for $x$ when $A$ is square/nonsingular. | solve(A, b) | DGESV (GETRF + GETRS) | If multiple RHS, pass as matrix B to reuse factorization. |
+| SPD solve via Cholesky | If $A$ SPD, use $A=LL^T$ or $R^TR$. | chol(A); backsolve/forwardsolve | DPOSV / DPOTRF + DPOTRS | More stable & faster than LU for SPD. |
+| Triangular solves | Solve $Lx=b$ or $Ux=b$. | forwardsolve(L,b); backsolve(U,b) | DTRSV (vector RHS), DTRSM (matrix RHS) | Core kernel inside many algorithms. |
+| Banded systems | Exploit band structure to reduce cost. | Matrix package (banded types) | DGBSV (general band), DPBSV (SPD band), etc. | Store in banded format to get speedups. |
+
+## Factorizations
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| LU factorization | Permutation-LU: $PA=LU$. | Matrix::lu(A) (package) / base uses LAPACK | DGETRF (LU), DGETRS (solve), DGETRI (inverse) | Pivoted by default; reuse LU for repeated solves. |
+| QR (with/without pivoting) | $A=QR$; with pivoting for rank-revealing. | qr(A); qr.Q(); qr.R() | DGEQRF (QR), DORGQR/ORMQR; GEQP3 (QR with pivoting) | QRCP helps detect rank deficiency; stable LS. |
+| Cholesky | $A=R^TR$ (or $LL^T$) for SPD. | chol(A) | DPOTRF (factor), DPOTRS (solve), DPOTRI (inverse) | Use pivoted Cholesky for near-semi-definite. |
+| Eigen (symmetric / general) | Eigen decomposition of $A$; symmetric faster and real. | eigen(A, symmetric=TRUE/FALSE) | DSYEV/DSYEVD/DSYEVR (sym); DGEEV (general) | SYEVD/SYEVR are more robust/efficient than classic SYEV. |
+| SVD | $A=U\Sigma V^T$. | svd(A) / La.svd(A) | DGESVD (classic) / DGESDD (divide-and-conquer) | GESDD often faster on large problems. |
+| Real Schur | Real Schur: $A=Q T Q^T$ with (quasi-)triangular $T$. | Schur() (via packages like pracma) | DGEES / DGEESX (Schur), TREXC (reorder) | Foundation for stable functions of matrices. |
+
+## Least squares
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| Overdetermined LS (min ||Ax-b||_2) | Solve $\min_x \|Ax-b\|_2$. | lm.fit(X,y); qr.solve(X,y); solve(qr(X), y) | DGELS (driver QR), DGELSY (RRQR), DGELSD (SVD) | GELSD most robust (SVD); GELSY faster; DGELS assumes full rank. |
+| Rank-deficient LS / pseudoinverse | Handle rank deficiency; Moore–Penrose. | MASS::ginv; svd() | DGELSD/DGESVD | Use tolerance on singular values for numerical rank. |
+
+## Matrix functions
+
+| Operation | Description | R (base or common) | BLAS/LAPACK (Fortran) | Notes / Recommendations |
+|---|---|---|---|---|
+| Exponential / logarithm / square root | Matrix functions $\exp(A)$, $\log(A)$, $A^{1/2}$. | expm::expm, expm::logm, expm::sqrtm | Not in BLAS/LAPACK; implemented via Schur/SVD/eigen; SLICOT/EXPOKIT | Scaling-and-squaring w/ Padé (expm); conditioning critical. |
+
+## References
+- [BLAS](https://www.netlib.org/blas/)
+- [LAPACK](https://www.netlib.org/lapack/)
+- [LAPACK Users' Guide](https://netlib.org/lapack/lug/)
+- [Intel oneMKL BLAS/LAPACK refs](https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-c/)
+- [OpenBLAS](https://www.openblas.net/)
+- [R Matrix package](https://cran.r-project.org/package=Matrix)
+- [R expm package](https://cran.r-project.org/package=expm)
+- [SLICOT](https://github.com/SLICOT)
+- [EXPOKIT](https://www.maths.uq.edu.au/expokit/)
