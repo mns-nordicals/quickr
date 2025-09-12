@@ -720,11 +720,11 @@ ensure_array_var <- function(expr, scope, hoist) {
 
 # Small alloc helpers
 q_mk_double <- function(scope, dims) {
-  v <- scope$get_unique_var("double"); v@dims <- dims; assign(v@name, v, scope); v
+  v <- scope@get_unique_var("double"); v@dims <- dims; assign(v@name, v, scope); v
 }
 
 q_mk_int <- function(scope, dims = NULL) {
-  v <- scope$get_unique_var("integer"); if (!is.null(dims)) v@dims <- dims; assign(v@name, v, scope); v
+  v <- scope@get_unique_var("integer"); if (!is.null(dims)) v@dims <- dims; assign(v@name, v, scope); v
 }
 
 # Cast to double if needed, then ensure we have a named array variable
@@ -765,7 +765,7 @@ q_blas_gemm <- function(scope, hoist, A_f, B_f, transA = "N", transB = "N") {
   n <- if (identical(transB, "N")) b_dims[[2]] else b_dims[[1]]
 
   # Output
-  C_var <- scope$get_unique_var("double"); C_var@dims <- list(m, n); assign(C_var@name, C_var, scope)
+  C_var <- scope@get_unique_var("double"); C_var@dims <- list(m, n); assign(C_var@name, C_var, scope)
   C <- as.character(C_var)
 
   lda <- a_dims[[1]]
@@ -787,7 +787,7 @@ q_blas_gemv <- function(scope, hoist, A_f, x_f, trans = "N") {
   m <- a_dims[[1]]
   n <- a_dims[[2]]
   y_len <- if (identical(trans, "N")) m else n
-  y_var <- scope$get_unique_var("double"); y_var@dims <- list(y_len); assign(y_var@name, y_var, scope)
+  y_var <- scope@get_unique_var("double"); y_var@dims <- list(y_len); assign(y_var@name, y_var, scope)
   y <- as.character(y_var)
   lda <- m
   incx <- 1
