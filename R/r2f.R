@@ -859,7 +859,7 @@ r2f_handlers[["cbind"]] <- function(e, scope) {
 }
 
 
-r2f_handlers[["<-"]] <- function(args, scope, ...) {
+r2f_handlers[["<-"]] <- function(args, scope, ..., hoist = NULL) {
   target <- args[[1]]
   if (is.call(target)) {
     # given a call like `foo(x) <- y`, dispatch to `foo<-`
@@ -876,8 +876,15 @@ r2f_handlers[["<-"]] <- function(args, scope, ...) {
   stopifnot(is.symbol(target))
   name <- as.character(target)
 
-  value <- args[[2]]
-  value <- r2f(value, scope, ...)
+  value_expr <- args[[2]]
+
+  # If target already exists (declared), thread destination hint to a single BLAS-capable child
+  dest_var <- get0(name, scope)
+  if (!is.null(dest_var) && inherits(dest_var, Variable)) {
+    value <- r2f(value_expr, scope, ..., hoist = hoist, dest = dest_var)
+  } else {
+    value <- r2f(value_expr, scope, ..., hoist = hoist)
+  }
 
   # immutable / copy-on-modify usage of Variable()
   if (is.null(var <- get0(name, scope))) {
@@ -899,7 +906,12 @@ r2f_handlers[["<-"]] <- function(args, scope, ...) {
     assign(name, var, scope)
   }
 
-  Fortran(glue("{name} = {value}"))
+  # If child consumed destination (e.g., BLAS wrote directly into LHS), skip assignment
+  if (isTRUE(attr(value, "writes_to_dest", TRUE))) {
+    Fortran("")
+  } else {
+    Fortran(glue("{name} = {value}"))
+  }
 }
 
 
