@@ -7,7 +7,7 @@ This document proposes a clean, principled redesign for matrix and linear‑alge
 - Correctness first: strict R semantics for dense double matrices, dimension checks, and copy‑on‑modify for inputs.
 - Minimal temporaries: write results directly into the final destination whenever safe; avoid redundant allocations and copies.
 - Clear lowering model: express multi‑operation expressions as sequences of safe, well‑ordered BLAS/LAPACK calls and simple Fortran statements.
-- Performance via BLAS/LAPACK: exploit transpose flags, alpha/beta accumulation, and specialized routines when applicable.
+- Performance via BLAS/LAPACK: exploit transpose flags, alpha/beta accumulation, and specialized routines when applicable. !! NOTE !! This is posponed. We don't do this now.
 - Extensible: a small internal IR that allows localized fusions and future additions (QR/SVD/eigen, complex types, sparse backends).
 
 ## Scope (v1)
@@ -40,6 +40,7 @@ This document proposes a clean, principled redesign for matrix and linear‑alge
 - Accumulation patterns:
   - `Y <- A %*% B + C` → `Y = C; gemm(..., dest=Y, beta=1)`.
   - `res <- y - X %*% b` → `res = y; gemv('N', X, b, dest=res, alpha=-1, beta=1)`.
+  - !! NOTE !! This is posponed. We don't do this now.
 - Aliasing guardrails: if `LHS` equals any BLAS input symbol (e.g., `A <- A %*% B`), fall back to a temporary and assign.
 
 ### 3) Expression normalization for multi‑op expressions
