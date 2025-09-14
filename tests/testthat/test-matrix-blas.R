@@ -40,3 +40,19 @@ test_that("chained x %*% x %*% x computes correctly and uses two dgemm calls", {
   expect_identical(n_dgemm, 2L)
   expect_false(grepl("matmul\\(", fs_txt, fixed = FALSE))
 })
+
+
+test_that("BLAS receives only identifiers (materialize non-identifiers)", {
+  fn <- function(x) {
+    declare(type(x = double(n, n)), type(out = double(n, n)))
+    out <- t(x) %*% x
+    out
+  }
+  fs <- r2f(fn)
+  fs_txt <- as.character(fs)
+  # There is a hoisted temp assignment for transpose(x)
+  expect_true(grepl("= transpose\\(x\\)", fs_txt, perl = TRUE))
+  # dgemm is used and does not inline transpose() in its arguments
+  expect_true(grepl("call dgemm\\(", fs_txt, perl = TRUE))
+  expect_false(grepl("call dgemm\\([^\n]*transpose\\(", fs_txt, perl = TRUE))
+})

@@ -1,5 +1,31 @@
 # Matrix-specific r2f handlers and helpers
 
+# Simple identifier check for Fortran variable names
+is_fortran_identifier <- function(s) {
+  is.character(s) && length(s) == 1L && grepl("^[A-Za-z_][A-Za-z0-9_]*$", s)
+}
+
+# Ensure a BLAS operand is a simple identifier.
+# If not, materialize the expression into a temporary variable and return its name.
+ensure_identifier <- function(x, scope, hoist) {
+  stopifnot(inherits(x, Fortran))
+  s <- as.character(x)
+  if (is_fortran_identifier(s)) return(s)
+  mode <- x@value@mode %||% "double"
+  get_uv <- attr(scope, "get_unique_var", exact = TRUE)
+  stopifnot(is.function(get_uv))
+  tmp <- get_uv(mode)
+  tmp@dims <- x@value@dims
+  scope[[tmp@name]] <- tmp
+  if (!is.function(hoist)) {
+    # Fallback no-op to avoid crashing; caller should provide hoist.
+    # This should not occur during normal lowering paths.
+  } else {
+    hoist(glue("{tmp@name} = {x}"))
+  }
+  tmp@name
+}
+
 size_code <- function(e) {
   # Render a scalar size expression suitable for Fortran actual args
   if (is.null(e)) return("")
@@ -87,10 +113,12 @@ r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
   }
   # Matrix-Vector: use GEMV
   if (lr == 2 && rr == 1) {
+    A_id <- ensure_identifier(left, scope, hoist)
+    x_id <- ensure_identifier(right, scope, hoist)
     if (use_dest) {
       emit_dgemv(
         transA = "N",
-        A = as.character(left), x = as.character(right), y = dest@name,
+        A = A_id, x = x_id, y = dest@name,
         m_expr = left@value@dims[[1]], n_expr = left@value@dims[[2]],
         lda_expr = left@value@dims[[1]],
         scope = scope, hoist = hoist
@@ -101,10 +129,10 @@ r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
     } else {
       yvar <- scope@get_unique_var("double")
       yvar@dims <- list(m_expr, 1L)
-      assign(yvar@name, yvar, scope)
+      scope[[yvar@name]] <- yvar
       emit_dgemv(
         transA = "N",
-        A = as.character(left), x = as.character(right), y = yvar@name,
+        A = A_id, x = x_id, y = yvar@name,
         m_expr = left@value@dims[[1]], n_expr = left@value@dims[[2]],
         lda_expr = left@value@dims[[1]],
         scope = scope, hoist = hoist
@@ -114,10 +142,12 @@ r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
   }
   # Vector-Matrix: use GEMV with transpose
   if (lr == 1 && rr == 2) {
+    A_id <- ensure_identifier(right, scope, hoist)
+    x_id <- ensure_identifier(left, scope, hoist)
     if (use_dest) {
       emit_dgemv(
         transA = "T",
-        A = as.character(right), x = as.character(left), y = dest@name,
+        A = A_id, x = x_id, y = dest@name,
         m_expr = right@value@dims[[1]], n_expr = right@value@dims[[2]],
         lda_expr = right@value@dims[[1]],
         scope = scope, hoist = hoist
@@ -128,10 +158,10 @@ r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
     } else {
       yvar <- scope@get_unique_var("double")
       yvar@dims <- list(1L, n_expr)
-      assign(yvar@name, yvar, scope)
+      scope[[yvar@name]] <- yvar
       emit_dgemv(
         transA = "T",
-        A = as.character(right), x = as.character(left), y = yvar@name,
+        A = A_id, x = x_id, y = yvar@name,
         m_expr = right@value@dims[[1]], n_expr = right@value@dims[[2]],
         lda_expr = right@value@dims[[1]],
         scope = scope, hoist = hoist
@@ -140,9 +170,11 @@ r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
     }
   }
   if (use_dest) {
+    A_id <- ensure_identifier(left, scope, hoist)
+    B_id <- ensure_identifier(right, scope, hoist)
     emit_dgemm(
       opA = "N", opB = "N",
-      A = as.character(left), B = as.character(right), C = dest@name,
+      A = A_id, B = B_id, C = dest@name,
       m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
       lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
       scope = scope, hoist = hoist
@@ -155,11 +187,13 @@ r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
   # No dest or aliased → write to temp and return it
   Cvar <- scope@get_unique_var("double")
   Cvar@dims <- list(m_expr, n_expr)
-  assign(Cvar@name, Cvar, scope)
+  scope[[Cvar@name]] <- Cvar
 
+  A_id <- ensure_identifier(left, scope, hoist)
+  B_id <- ensure_identifier(right, scope, hoist)
   emit_dgemm(
     opA = "N", opB = "N",
-    A = as.character(left), B = as.character(right), C = Cvar@name,
+    A = A_id, B = B_id, C = Cvar@name,
     m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
     lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
     scope = scope, hoist = hoist
@@ -213,9 +247,11 @@ r2f_handlers[["crossprod"]] <- function(args, scope, ..., hoist = NULL, dest = N
     use_dest <- !identical(cname, as.character(x)) && !identical(cname, as.character(y))
   }
   if (use_dest) {
+    A_id <- ensure_identifier(x, scope, hoist)
+    B_id <- ensure_identifier(y, scope, hoist)
     emit_dgemm(
       opA = "T", opB = "N",
-      A = as.character(x), B = as.character(y), C = dest@name,
+      A = A_id, B = B_id, C = dest@name,
       m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
       lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
       scope = scope, hoist = hoist
@@ -227,11 +263,13 @@ r2f_handlers[["crossprod"]] <- function(args, scope, ..., hoist = NULL, dest = N
 
   Cvar <- scope@get_unique_var("double")
   Cvar@dims <- list(m_expr, n_expr)
-  assign(Cvar@name, Cvar, scope)
+  scope[[Cvar@name]] <- Cvar
 
+  A_id <- ensure_identifier(x, scope, hoist)
+  B_id <- ensure_identifier(y, scope, hoist)
   emit_dgemm(
     opA = "T", opB = "N",
-    A = as.character(x), B = as.character(y), C = Cvar@name,
+    A = A_id, B = B_id, C = Cvar@name,
     m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
     lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
     scope = scope, hoist = hoist
@@ -264,9 +302,11 @@ r2f_handlers[["tcrossprod"]] <- function(args, scope, ..., hoist = NULL, dest = 
     use_dest <- !identical(cname, as.character(x)) && !identical(cname, as.character(y))
   }
   if (use_dest) {
+    A_id <- ensure_identifier(x, scope, hoist)
+    B_id <- ensure_identifier(y, scope, hoist)
     emit_dgemm(
       opA = "N", opB = "T",
-      A = as.character(x), B = as.character(y), C = dest@name,
+      A = A_id, B = B_id, C = dest@name,
       m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
       lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
       scope = scope, hoist = hoist
@@ -278,11 +318,13 @@ r2f_handlers[["tcrossprod"]] <- function(args, scope, ..., hoist = NULL, dest = 
 
   Cvar <- scope@get_unique_var("double")
   Cvar@dims <- list(m_expr, n_expr)
-  assign(Cvar@name, Cvar, scope)
+  scope[[Cvar@name]] <- Cvar
 
+  A_id <- ensure_identifier(x, scope, hoist)
+  B_id <- ensure_identifier(y, scope, hoist)
   emit_dgemm(
     opA = "N", opB = "T",
-    A = as.character(x), B = as.character(y), C = Cvar@name,
+    A = A_id, B = B_id, C = Cvar@name,
     m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
     lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
     scope = scope, hoist = hoist
