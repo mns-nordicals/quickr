@@ -190,14 +190,37 @@ compile <- function(fsub, build_dir = tempfile(paste0(fsub@name, "-build-"))) {
   writeLines(fsub, fsub_path)
   writeLines(c_wrapper, c_wrapper_path)
 
+  # Link against the same BLAS/LAPACK/Fortran libs as the running R
+  # to support generated calls to vendor BLAS (e.g., dgemm, dgesv).
+  cfg <- function(var) tryCatch({
+    out <- system2(
+      R.home("bin/R"),
+      c("CMD", "config", var),
+      stdout = TRUE,
+      stderr = FALSE
+    )
+    paste(out, collapse = " ")
+  }, error = function(e) "")
+
+  BLAS_LIBS <- strsplit(cfg("BLAS_LIBS"), "[[:space:]]+")[[1]]
+  LAPACK_LIBS <- strsplit(cfg("LAPACK_LIBS"), "[[:space:]]+")[[1]]
+  FLIBS <- strsplit(cfg("FLIBS"), "[[:space:]]+")[[1]]
+  # clean empties
+  BLAS_LIBS <- BLAS_LIBS[nzchar(BLAS_LIBS)]
+  LAPACK_LIBS <- LAPACK_LIBS[nzchar(LAPACK_LIBS)]
+  FLIBS <- FLIBS[nzchar(FLIBS)]
+
+  link_flags <- c(LAPACK_LIBS, BLAS_LIBS, FLIBS)
+
   suppressWarnings({
     result <- system2(
       R.home("bin/R"),
-      c("CMD SHLIB --use-LTO", "-o", dll_path, fsub_path, c_wrapper_path),
+      c("CMD SHLIB --use-LTO", "-o", dll_path, fsub_path, c_wrapper_path, link_flags),
       stdout = TRUE,
       stderr = TRUE
     )
   })
+  
   if (!is.null(status <- attr(result, "status"))) {
     # Adjust the compiler error so RStudio console formatter doesn't mangle
     # the actual error message https://github.com/rstudio/rstudio/issues/16365
