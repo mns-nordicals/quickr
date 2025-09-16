@@ -13,6 +13,19 @@ test_that("%*% parity with base R (mat-mat)", {
   expect_equal(q_mm(X, Y), X %*% Y, tolerance = 1e-12)
 })
 
+test_that("%*% handles scalar operands like base R", {
+  fn_ss <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    x %*% y
+  }
+
+  expect_quick_equal(
+    fn_ss,
+    list(2, 5),
+    list(pi, 0.5)
+  )
+})
+
 test_that("%*% parity with base R (mat-vec, vec-mat)", {
   fn_mv <- function(x, y) {
     declare(type(x = double(m, k)), type(y = double(k)))
@@ -83,6 +96,20 @@ test_that("crossprod() parity with base R (x, x) and (x, y)", {
   expect_equal(q_cxy(X, Y), crossprod(X, Y), tolerance = 1e-12)
 })
 
+test_that("crossprod() handles scalar operands like base R", {
+  fn_x <- function(x) {
+    declare(type(x = double(NA)))
+    crossprod(x)
+  }
+  fn_xy <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    crossprod(x, y)
+  }
+
+  expect_quick_equal(fn_x, list(4))
+  expect_quick_equal(fn_xy, list(3, 7))
+})
+
 
 test_that("tcrossprod() parity with base R (x, x) and (x, y)", {
   fn_tx <- function(x) {
@@ -104,4 +131,18 @@ test_that("tcrossprod() parity with base R (x, x) and (x, y)", {
 
   expect_equal(q_tx(X), tcrossprod(X), tolerance = 1e-12)
   expect_equal(q_txy(X, Y), tcrossprod(X, Y), tolerance = 1e-12)
+})
+
+test_that("tcrossprod() handles scalar operands like base R", {
+  fn_x <- function(x) {
+    declare(type(x = double(NA)))
+    tcrossprod(x)
+  }
+  fn_xy <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    tcrossprod(x, y)
+  }
+
+  expect_quick_equal(fn_x, list(11))
+  expect_quick_equal(fn_xy, list(5, -2))
 })

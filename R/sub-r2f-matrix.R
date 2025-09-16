@@ -3,37 +3,57 @@
 # Return the R symbol name if operand is a bare symbol; otherwise NULL.
 symbol_name_or_null <- function(x) {
   stopifnot(inherits(x, Fortran))
-  rx <- x@r
-  if (is.symbol(rx)) as.character(rx) else NULL
+  r_expr <- x@r
+  if (is.symbol(r_expr)) as.character(r_expr) else NULL
 }
 
-# TODO(blas): If/when we add complex or mixed-precision BLAS support,
-# consider reintroducing dedicated emitter helpers for readability and
-# centralized alpha/beta handling and dtype dispatch.
-#
-# Example stubs (intentionally commented out for now):
-# emit_gemm <- function(opA, opB, A, B, C, m_expr, n_expr, k_expr,
-#                       lda_expr, ldb_expr, ldc_expr, scope, hoist,
-#                       alpha = "1.0_c_double", beta = "0.0_c_double") {
-#   hoist(glue(
-#     "call dgemm('{opA}','{opB}', {m_expr}, {n_expr}, {k_expr}, {alpha}, {A}, {lda_expr}, {B}, {ldb_expr}, {beta}, {C}, {ldc_expr})"
-#   ))
-# }
-#
-# emit_gemv <- function(transA, A, x, y, m_expr, n_expr, lda_expr, scope, hoist,
-#                       alpha = "1.0_c_double", beta = "0.0_c_double") {
-#   hoist(glue(
-#     "call dgemv('{transA}', {m_expr}, {n_expr}, {alpha}, {A}, {lda_expr}, {x}, 1, {beta}, {y}, 1)"
-#   ))
-# }
+# Return the requested axis length, defaulting scalars (or missing axes) to 1L.
+dim_or_one <- function(x, axis) {
+  stopifnot(inherits(x, Fortran))
+  stopifnot(is.numeric(axis), axis >= 1)
+  axis <- as.integer(axis)
+  dims <- x@value@dims
+  if (axis <= length(dims) && !is.null(dims[[axis]])) {
+    dims[[axis]]
+  } else {
+    1L
+  }
+}
 
-# ---- helpers to reduce repetition ----
+# Interpret a Fortran value as a matrix for BLAS calls. Scalars become 1x1
+# matrices, and vectors can be viewed as either row or column vectors.
+matrix_dims <- function(x, orientation = c("matrix", "rowvec", "colvec")) {
+  stopifnot(inherits(x, Fortran))
+  orientation <- match.arg(orientation)
+  rank <- x@value@rank
+  rows <- dim_or_one(x, 1L)
+  cols <- dim_or_one(x, 2L)
+
+  if (rank == 0L) {
+    rows <- 1L
+    cols <- 1L
+  } else if (rank == 1L) {
+    if (orientation == "rowvec") {
+      rows <- 1L
+      cols <- dim_or_one(x, 1L)
+    } else {
+      rows <- dim_or_one(x, 1L)
+      cols <- 1L
+    }
+  }
+
+  list(rows = rows, cols = cols)
+}
 
 # Whether it's safe and useful to write into dest (no aliasing with inputs)
 can_use_output <- function(dest, left, right) {
-  if (is.null(dest)) return(FALSE)
+  if (is.null(dest)) {
+    return(FALSE)
+  }
   output_name <- dest@name
-  !identical(output_name, as.character(left)) && !identical(output_name, as.character(right))
+  # check output name is not the same as left or right
+  !identical(output_name, as.character(left)) &&
+    !identical(output_name, as.character(right))
 }
 
 # Centralized GEMM emission with optional destination
@@ -41,14 +61,23 @@ can_use_output <- function(dest, left, right) {
 # - 'hoist' is required and provided by r2f(); handlers thread it through so
 #   helpers can pre-emit temporary assignments and BLAS calls.
 gemm <- function(
-  opA, opB,
-  left, right,
-  m_expr, n_expr, k_expr,
-  lda_expr, ldb_expr, ldc_expr,
-  scope, hoist,
+  opA,
+  opB,
+  left,
+  right,
+  m,
+  n,
+  k,
+  lda,
+  ldb,
+  ldc_expr,
+  scope,
+  hoist,
   dest = NULL
 ) {
-  if (!is.function(hoist)) stop("internal: hoist must be a function")
+  if (!is.function(hoist)) {
+    stop("internal: hoist must be a function")
+  }
   A_name <- symbol_name_or_null(left)
   if (is.null(A_name)) {
     tmp <- scope@get_unique_var(left@value@mode %||% "double")
@@ -68,7 +97,7 @@ gemm <- function(
 
   if (can_use_output(dest, left, right)) {
     hoist(glue(
-      "call dgemm('{opA}','{opB}', {m_expr}, {n_expr}, {k_expr}, 1.0_c_double, {A_name}, {lda_expr}, {B_name}, {ldb_expr}, 0.0_c_double, {dest@name}, {ldc_expr})"
+      "call dgemm('{opA}','{opB}', {m}, {n}, {k}, 1.0_c_double, {A_name}, {lda}, {B_name}, {ldb}, 0.0_c_double, {dest@name}, {ldc_expr})"
     ))
     out <- Fortran(dest@name, dest)
     attr(out, "writes_to_dest") <- TRUE
@@ -76,10 +105,10 @@ gemm <- function(
   }
 
   output_var <- scope@get_unique_var("double")
-  output_var@dims <- list(m_expr, n_expr)
+  output_var@dims <- list(m, n)
   scope[[output_var@name]] <- output_var
   hoist(glue(
-    "call dgemm('{opA}','{opB}', {m_expr}, {n_expr}, {k_expr}, 1.0_c_double, {A_name}, {lda_expr}, {B_name}, {ldb_expr}, 0.0_c_double, {output_var@name}, {ldc_expr})"
+    "call dgemm('{opA}','{opB}', {m}, {n}, {k}, 1.0_c_double, {A_name}, {lda}, {B_name}, {ldb}, 0.0_c_double, {output_var@name}, {ldc_expr})"
   ))
   Fortran(output_var@name, output_var)
 }
@@ -90,14 +119,19 @@ gemm <- function(
 #   helpers can pre-emit temporary assignments and BLAS calls.
 gemv <- function(
   transA,
-  A, x,
-  m_expr, n_expr,
-  lda_expr,
+  A,
+  x,
+  m,
+  n,
+  lda,
   out_dims,
-  scope, hoist,
+  scope,
+  hoist,
   dest = NULL
 ) {
-  if (!is.function(hoist)) stop("internal: hoist must be a function")
+  if (!is.function(hoist)) {
+    stop("internal: hoist must be a function")
+  }
   A_name <- symbol_name_or_null(A)
   if (is.null(A_name)) {
     tmp <- scope@get_unique_var(A@value@mode %||% "double")
@@ -118,7 +152,7 @@ gemv <- function(
   if (can_use_output(dest, A, x)) {
     # Assign output to output destination
     hoist(glue(
-      "call dgemv('{transA}', {m_expr}, {n_expr}, 1.0_c_double, {A_name}, {lda_expr}, {x_name}, 1, 0.0_c_double, {dest@name}, 1)"
+      "call dgemv('{transA}', {m}, {n}, 1.0_c_double, {A_name}, {lda}, {x_name}, 1, 0.0_c_double, {dest@name}, 1)"
     ))
     out <- Fortran(dest@name, dest)
     attr(out, "writes_to_dest") <- TRUE
@@ -129,7 +163,7 @@ gemv <- function(
   output_var@dims <- out_dims
   scope[[output_var@name]] <- output_var
   hoist(glue(
-    "call dgemv('{transA}', {m_expr}, {n_expr}, 1.0_c_double, {A_name}, {lda_expr}, {x_name}, 1, 0.0_c_double, {output_var@name}, 1)"
+    "call dgemv('{transA}', {m}, {n}, 1.0_c_double, {A_name}, {lda}, {x_name}, 1, 0.0_c_double, {output_var@name}, 1)"
   ))
   Fortran(output_var@name, output_var)
 }
@@ -139,59 +173,86 @@ gemv <- function(
 # %*% handler with optional destination hint
 r2f_handlers[["%*%"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
   stopifnot(length(args) == 2L)
-  left  <- r2f(args[[1L]], scope, ..., hoist = hoist)
+  left <- r2f(args[[1L]], scope, ..., hoist = hoist)
   right <- r2f(args[[2L]], scope, ..., hoist = hoist)
 
   # Promote to double for BLAS
-  left  <- maybe_cast_double(left)
+  left <- maybe_cast_double(left)
   right <- maybe_cast_double(right)
 
   left_rank <- left@value@rank
   right_rank <- right@value@rank
+
   if (left_rank > 2 || right_rank > 2) {
     stop("%*% only supports vectors/matrices (rank <= 2)")
   }
 
+  left_dims <- matrix_dims(
+    left,
+    orientation = if (left_rank == 1) "rowvec" else "matrix"
+  )
+
+  right_dims <- matrix_dims(
+    right,
+    orientation = if (right_rank == 1) "colvec" else "matrix"
+  )
+
   # Compute effective shapes
-  m_expr <- if (left_rank == 2) left@value@dims[[1]] else 1L
-  k_expr <- if (left_rank == 2) left@value@dims[[2]] else left@value@dims[[1]]
-  n_expr <- if (right_rank == 2) right@value@dims[[2]] else 1L
+  m <- left_dims$rows
+  k <- left_dims$cols
+  n <- right_dims$cols
 
   # Leading dimensions
-  lda_expr <- if (left_rank == 2) left@value@dims[[1]] else 1L
-  ldb_expr <- right@value@dims[[1]]
-  ldc_expr <- m_expr
+  lda <- left_dims$rows
+  ldb <- right_dims$rows
+  ldc_expr <- m
 
   # Matrix-Vector: use GEMV
   if (left_rank == 2 && right_rank == 1) {
     return(gemv(
       transA = "N",
-      A = left, x = right,
-      m_expr = left@value@dims[[1]], n_expr = left@value@dims[[2]],
-      lda_expr = left@value@dims[[1]],
-      out_dims = list(m_expr, 1L),
-      scope = scope, hoist = hoist, dest = dest
+      A = left,
+      x = right,
+      m = left_dims$rows,
+      n = left_dims$cols,
+      lda = left_dims$rows,
+      out_dims = list(left_dims$rows, 1L),
+      scope = scope,
+      hoist = hoist,
+      dest = dest
     ))
   }
   # Vector-Matrix: use GEMV with transpose
   if (left_rank == 1 && right_rank == 2) {
     return(gemv(
       transA = "T",
-      A = right, x = left,
-      m_expr = right@value@dims[[1]], n_expr = right@value@dims[[2]],
-      lda_expr = right@value@dims[[1]],
-      out_dims = list(1L, n_expr),
-      scope = scope, hoist = hoist, dest = dest
+      A = right,
+      x = left,
+      m = right_dims$rows,
+      n = right_dims$cols,
+      lda = right_dims$rows,
+      out_dims = list(1L, right_dims$cols),
+      scope = scope,
+      hoist = hoist,
+      dest = dest
     ))
   }
 
   # Matrix-Matrix
   gemm(
-    opA = "N", opB = "N",
-    left = left, right = right,
-    m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
-    lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
-    scope = scope, hoist = hoist, dest = dest
+    opA = "N",
+    opB = "N",
+    left = left,
+    right = right,
+    m = m,
+    n = n,
+    k = k,
+    lda = lda,
+    ldb = ldb,
+    ldc_expr = ldc_expr,
+    scope = scope,
+    hoist = hoist,
+    dest = dest
   )
 }
 
@@ -216,54 +277,96 @@ r2f_handlers[["t"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 
-r2f_handlers[["crossprod"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
+r2f_handlers[["crossprod"]] <- function(
+  args,
+  scope,
+  ...,
+  hoist = NULL,
+  dest = NULL
+) {
   x_arg <- args[[1L]]
   y_arg <- if (length(args) >= 2L) args[[2L]] else args$y
 
   x <- r2f(x_arg, scope, ..., hoist = hoist)
   x <- maybe_cast_double(x)
-  y <- if (is.null(y_arg)) x else maybe_cast_double(r2f(y_arg, scope, ..., hoist = hoist))
+  y <- if (is.null(y_arg)) {
+    x
+  } else {
+    maybe_cast_double(r2f(y_arg, scope, ..., hoist = hoist))
+  }
 
-  m_expr <- if (x@value@rank == 2) x@value@dims[[2]] else 1L
-  n_expr <- if (y@value@rank == 2) y@value@dims[[2]] else 1L
-  k_expr <- x@value@dims[[1]]
+  x_dims <- matrix_dims(x)
+  y_dims <- matrix_dims(y)
+
+  m <- x_dims$cols
+  n <- y_dims$cols
+  k <- x_dims$rows
 
   # Fortran column-major: LDA/LDB are rows of original arrays
-  lda_expr <- x@value@dims[[1]]
-  ldb_expr <- y@value@dims[[1]]
-  ldc_expr <- m_expr
+  lda <- x_dims$rows
+  ldb <- y_dims$rows
+  ldc_expr <- m
 
   gemm(
-    opA = "T", opB = "N",
-    left = x, right = y,
-    m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
-    lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
-    scope = scope, hoist = hoist, dest = dest
+    opA = "T",
+    opB = "N",
+    left = x,
+    right = y,
+    m = m,
+    n = n,
+    k = k,
+    lda = lda,
+    ldb = ldb,
+    ldc_expr = ldc_expr,
+    scope = scope,
+    hoist = hoist,
+    dest = dest
   )
 }
 
-r2f_handlers[["tcrossprod"]] <- function(args, scope, ..., hoist = NULL, dest = NULL) {
+r2f_handlers[["tcrossprod"]] <- function(
+  args,
+  scope,
+  ...,
+  hoist = NULL,
+  dest = NULL
+) {
   x_arg <- args[[1L]]
   y_arg <- if (length(args) >= 2L) args[[2L]] else args$y
 
   x <- r2f(x_arg, scope, ..., hoist = hoist)
   x <- maybe_cast_double(x)
-  y <- if (is.null(y_arg)) x else maybe_cast_double(r2f(y_arg, scope, ..., hoist = hoist))
+  y <- if (is.null(y_arg)) {
+    x
+  } else {
+    maybe_cast_double(r2f(y_arg, scope, ..., hoist = hoist))
+  }
 
-  m_expr <- x@value@dims[[1]]
-  n_expr <- y@value@dims[[1]]
-  k_expr <- if (x@value@rank == 2) x@value@dims[[2]] else 1L
+  x_dims <- matrix_dims(x)
+  y_dims <- matrix_dims(y)
 
-  lda_expr <- x@value@dims[[1]]
+  m <- x_dims$rows
+  n <- y_dims$rows
+  k <- x_dims$cols
+
+  lda <- x_dims$rows
   # LDB is rows of original y regardless of transpose
-  ldb_expr <- y@value@dims[[1]]
-  ldc_expr <- m_expr
+  ldb <- y_dims$rows
+  ldc_expr <- m
 
   gemm(
-    opA = "N", opB = "T",
-    left = x, right = y,
-    m_expr = m_expr, n_expr = n_expr, k_expr = k_expr,
-    lda_expr = lda_expr, ldb_expr = ldb_expr, ldc_expr = ldc_expr,
-    scope = scope, hoist = hoist, dest = dest
+    opA = "N",
+    opB = "T",
+    left = x,
+    right = y,
+    m = m,
+    n = n,
+    k = k,
+    lda = lda,
+    ldb = ldb,
+    ldc_expr = ldc_expr,
+    scope = scope,
+    hoist = hoist,
+    dest = dest
   )
 }
