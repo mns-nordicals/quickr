@@ -58,6 +58,11 @@
             call quickr_set_error_msg("index ranges in x[a:b] must have bounds >= 1")
             return
           end if
+          if (size(x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i))) /= size(weights)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+            return
+          end if
           out(i) = (sum((x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i)) * weights)) / real(size(weights), kind=c_double))
         end do
       
