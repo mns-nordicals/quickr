@@ -29,8 +29,8 @@ booleanize_logical_as_int <- function(x) {
 # The only place cast spellings live; errors on casts it cannot spell
 # (complex/character operands, or any narrowing) so an unsupported mode is
 # a clean diagnostic instead of invalid generated Fortran.
-# Used by: r2f-arithmetic.R, r2f-logical.R, r2f-constructors.R,
-#          r2f-reductions.R, r2f-matrix.R
+# Used by: r2f-operators.R, r2f-constructors.R, r2f-reductions.R,
+#          r2f-matrix.R
 cast_to_mode <- function(x, mode, context = "operand") {
   stopifnot(inherits(x, Fortran))
   if (
@@ -76,7 +76,7 @@ cast_to_mode <- function(x, mode, context = "operand") {
 }
 
 # Cast a value to double if it's logical or integer.
-# Used by: r2f-arithmetic.R, r2f-math.R, r2f-matrix*.R, r2f-coercions.R
+# Used by: r2f-operators.R, r2f-math.R, r2f-matrix*.R, r2f-coercions.R
 maybe_cast_double <- function(x) {
   if (x@value@mode %in% c("logical", "integer")) {
     cast_to_mode(x, "double")
@@ -89,7 +89,7 @@ maybe_cast_double <- function(x) {
 # each one whose mode differs. For contexts where Fortran requires uniform
 # argument types: array constructors (c()), min/max, merge, modulo.
 # Returns list(args = <cast operands>, mode = <join>).
-# Used by: r2f-arithmetic.R, r2f-constructors.R, r2f-reductions.R
+# Used by: r2f-conditionals.R, r2f-constructors.R, r2f-reductions.R
 promote_operands <- function(args, context = "operator") {
   mode <- reduce_promoted_mode(args)
   list(
@@ -100,7 +100,7 @@ promote_operands <- function(args, context = "operator") {
 
 # Lattice join for arithmetic contexts: logical joins as integer (R:
 # TRUE + TRUE is 2L, sum(TRUE) is 1L; Fortran has no logical arithmetic).
-# Used by: r2f-arithmetic.R, r2f-math.R, r2f-reductions.R
+# Used by: r2f-operators.R, r2f-math.R, r2f-reductions.R
 arith_join_mode <- function(...) {
   mode <- reduce_promoted_mode(...)
   if (identical(mode, "logical")) "integer" else mode
@@ -109,7 +109,7 @@ arith_join_mode <- function(...) {
 # Apply R's arithmetic rule for logical operands: they join as integer
 # (TRUE + TRUE is 2L), and Fortran has no logical arithmetic, so cast them.
 # int/double mixes are left alone -- Fortran's own promotion matches R.
-# Used by: r2f-arithmetic.R, r2f-logical.R
+# Used by: r2f-operators.R
 promote_arith_pair <- function(left, right, context = "arithmetic") {
   if (
     identical(left@value@mode, "logical") ||
@@ -123,20 +123,18 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
 }
 
 # Check if a dimension expression equals 1.
-# Used by: r2f-arithmetic.R, r2f-logical.R
 dim_is_one <- function(x) {
   is_wholenumber(x) && identical(as.integer(x), 1L)
 }
 
 # Check if a dimension expression is statically known and not 1. Symbolic
 # dimensions are FALSE: "not provably 1" is not "provably not 1".
-# Used by: maybe_reshape_vector_matrix()
+# Used by: resolve_elementwise()
 dim_known_not_one <- function(x) {
   is_wholenumber(x) && !identical(as.integer(x), 1L)
 }
 
 # Check if a Fortran value is a 1x1 matrix.
-# Used by: r2f-arithmetic.R, r2f-logical.R
 is_one_by_one <- function(x) {
   stopifnot(inherits(x, Fortran))
   x@value@rank == 2L &&
@@ -144,8 +142,12 @@ is_one_by_one <- function(x) {
     dim_is_one(x@value@dims[[2L]])
 }
 
-# Check if two dimension expressions match.
-# Used by: r2f-arithmetic.R, r2f-logical.R
+# Check if two dimension expressions provably match (both known and
+# equal, or the identical symbolic expression). Weaker than
+# check_elementwise_lengths(): no zero-length policy, no symbol
+# normalization -- callers use it for routing/declaration decisions, not
+# for the conformability contract.
+# Used by: r2f-matrix.R (bind_common_dim), r2f-matrix-blas.R (solve routing)
 dims_match <- function(left, right) {
   if (is_wholenumber(left) && is_wholenumber(right)) {
     return(identical(as.integer(left), as.integer(right)))
@@ -159,7 +161,7 @@ dims_match <- function(left, right) {
 # and nonzero -- R-style recycling is never implemented, and quickr cannot
 # represent length-0 results. NA dims are always unknown: two unknown
 # lengths are not the same quantity.
-# Used by: maybe_reshape_vector_matrix()
+# Used by: guard_conformable_dims()
 check_elementwise_lengths <- function(left, right) {
   if (is_wholenumber(left) && is_wholenumber(right)) {
     left <- as.integer(left)
@@ -182,40 +184,67 @@ check_elementwise_lengths <- function(left, right) {
   list(ok = TRUE, unknown = TRUE)
 }
 
-# Emit a statement-level runtime check that two elementwise operands have
-# equal size along the given axes (whole size when an axis is NULL).
-# size() is an inquiry, so applying it to operand expression text does not
-# evaluate the operands.
-# Used by: maybe_reshape_vector_matrix()
-emit_elementwise_size_guard <- function(
-  left,
-  right,
+# Render one side of a dim-comparison guard: a literal dim as the literal,
+# anything else as the operand's actual extent (whole size when `axis` is
+# NULL). size() is an inquiry, so applying it to operand expression text
+# does not evaluate the operand.
+# Used by: guard_conformable_dims()
+guard_dim_f <- function(dim, operand, axis = NULL) {
+  if (is_wholenumber(dim)) {
+    return(as.character(as.integer(dim)))
+  }
+  if (is.null(axis)) {
+    glue("size({operand})")
+  } else {
+    glue("size({operand}, {axis})")
+  }
+}
+
+# The one conformability policy, shared by elementwise ops, ifelse(), and
+# the BLAS/LAPACK lowerings: a statically known mismatch is a compile
+# error; dims that cannot be compared statically get a statement-level
+# runtime guard emitted before the consuming statement; provably equal
+# dims need nothing. Never warn-and-proceed. `axis` NULL compares the
+# operand's whole size (rank-1 operands).
+# Used by: resolve_elementwise(), r2f-conditionals.R, r2f-matrix*.R
+guard_conformable_dims <- function(
+  left_dim,
+  right_dim,
+  message,
   hoist,
   scope,
-  message,
+  left,
+  right,
   left_axis = NULL,
-  right_axis = left_axis
+  right_axis = NULL
 ) {
-  if (is.null(hoist)) {
-    stop(
-      "cannot emit a runtime length guard here; ",
-      "operand lengths must match statically",
-      call. = FALSE
+  stopifnot(is_string(message))
+  conform <- check_elementwise_lengths(left_dim, right_dim)
+  if (!conform$ok) {
+    stop(message, call. = FALSE)
+  }
+  if (conform$unknown) {
+    if (is.null(hoist)) {
+      stop(
+        "cannot emit a runtime length guard here; ",
+        "operand lengths must match statically",
+        call. = FALSE
+      )
+    }
+    emit_quickr_error_if(
+      glue(
+        "{guard_dim_f(left_dim, left, left_axis)} /= {guard_dim_f(right_dim, right, right_axis)}"
+      ),
+      message,
+      hoist,
+      scope
     )
   }
-  size_of <- function(x, axis) {
-    if (is.null(axis)) glue("size({x})") else glue("size({x}, {axis})")
-  }
-  emit_quickr_error_if(
-    glue("{size_of(left, left_axis)} /= {size_of(right, right_axis)}"),
-    message,
-    hoist,
-    scope
-  )
+  invisible(TRUE)
 }
 
 # Reshape a vector to match a matrix's dimensions.
-# Used by: r2f-arithmetic.R, r2f-logical.R
+# Used by: resolve_elementwise()
 reshape_vector_for_matrix <- function(vec, rows, cols) {
   stopifnot(inherits(vec, Fortran))
   out_val <- Variable(vec@value@mode, list(rows, cols))
@@ -230,19 +259,31 @@ reshape_vector_for_matrix <- function(vec, rows, cols) {
   Fortran(out_expr, out_val)
 }
 
+# Floor a double expression while staying in the real domain: Fortran
+# FLOOR() returns an integer, so a large double (e.g. 1e20) would
+# silently overflow. aint(x) truncates toward 0 (real result); adjust by
+# -1 where truncation differs from floor (negative non-integers). `x` is
+# spliced three times, so callers hoist non-trivial expressions first.
+# Used by: r2f-math.R (floor), r2f-operators.R (double %/%)
+real_floor_expr <- function(x) {
+  aint <- glue("aint({x})")
+  glue("({aint} - merge(1.0_c_double, 0.0_c_double, ({x} < {aint})))")
+}
+
 # Convert a 1x1 matrix to a scalar.
-# Used by: r2f-arithmetic.R, r2f-logical.R
+# Used by: resolve_elementwise()
 scalarize_matrix <- function(mat) {
   stopifnot(inherits(mat, Fortran))
   out_val <- Variable(mat@value@mode)
   Fortran(glue("{mat}(1, 1)"), out_val)
 }
 
-# Reshape vector/matrix operands to match ranks for binary operations, and
-# enforce the elementwise conformability policy: known-mismatched lengths
-# are compile errors (R-style recycling is not supported; scalar broadcast
-# is native), lengths that cannot be compared statically get a runtime
-# size guard through `hoist`.
+# The single entry point that resolves operand shapes for an elementwise
+# binary op: reshape vector/matrix operands to match ranks, and enforce
+# the elementwise conformability policy via guard_conformable_dims() --
+# known-mismatched lengths are compile errors (R-style recycling is not
+# supported; scalar broadcast is native), lengths that cannot be compared
+# statically get a runtime size guard through `hoist`.
 #
 # `scalarize_one_by_one` mirrors R's split over length-1 arrays: arithmetic
 # recycles a 1x1 matrix against a vector of statically known length != 1
@@ -254,8 +295,8 @@ scalarize_matrix <- function(mat) {
 # an error where R would recycle. Comparisons and & | error in R itself,
 # so strict callers pass FALSE and the 1x1 always takes the vector-matrix
 # path.
-# Used by: r2f-arithmetic.R, r2f-logical.R
-maybe_reshape_vector_matrix <- function(
+# Used by: r2f-operators.R
+resolve_elementwise <- function(
   left,
   right,
   hoist = NULL,
@@ -315,45 +356,32 @@ maybe_reshape_vector_matrix <- function(
       "elementwise vector operations require equal lengths or ",
       "a scalar operand; R-style recycling is not supported"
     )
-    conform <- check_elementwise_lengths(
+    guard_conformable_dims(
       dim_or_one(left, 1L),
-      dim_or_one(right, 1L)
+      dim_or_one(right, 1L),
+      vector_msg,
+      hoist,
+      scope,
+      left = left,
+      right = right
     )
-    if (!conform$ok) {
-      stop(vector_msg, call. = FALSE)
-    }
-    if (conform$unknown) {
-      emit_elementwise_size_guard(left, right, hoist, scope, vector_msg)
-    }
   }
 
   if (left_rank == 2L && right_rank == 2L) {
     matrix_msg <- "elementwise matrix operations require matching dimensions"
     left_dims <- matrix_dims(left)
     right_dims <- matrix_dims(right)
-    row_conform <- check_elementwise_lengths(left_dims$rows, right_dims$rows)
-    col_conform <- check_elementwise_lengths(left_dims$cols, right_dims$cols)
-    if (!row_conform$ok || !col_conform$ok) {
-      stop(matrix_msg, call. = FALSE)
-    }
-    if (row_conform$unknown) {
-      emit_elementwise_size_guard(
-        left,
-        right,
+    for (axis in 1:2) {
+      guard_conformable_dims(
+        if (axis == 1L) left_dims$rows else left_dims$cols,
+        if (axis == 1L) right_dims$rows else right_dims$cols,
+        matrix_msg,
         hoist,
         scope,
-        matrix_msg,
-        left_axis = 1L
-      )
-    }
-    if (col_conform$unknown) {
-      emit_elementwise_size_guard(
-        left,
-        right,
-        hoist,
-        scope,
-        matrix_msg,
-        left_axis = 2L
+        left = left,
+        right = right,
+        left_axis = axis,
+        right_axis = axis
       )
     }
   }
@@ -364,39 +392,29 @@ maybe_reshape_vector_matrix <- function(
   )
   if (left_rank == 1L && right_rank == 2L) {
     right_dims <- matrix_dims(right)
-    left_len <- dim_or_one(left, 1L)
-    row_conform <- check_elementwise_lengths(left_len, right_dims$rows)
-    if (!row_conform$ok) {
-      stop(vec_mat_msg, call. = FALSE)
-    }
-    if (row_conform$unknown) {
-      emit_elementwise_size_guard(
-        left,
-        right,
-        hoist,
-        scope,
-        vec_mat_msg,
-        right_axis = 1L
-      )
-    }
+    guard_conformable_dims(
+      dim_or_one(left, 1L),
+      right_dims$rows,
+      vec_mat_msg,
+      hoist,
+      scope,
+      left = left,
+      right = right,
+      right_axis = 1L
+    )
     left <- reshape_vector_for_matrix(left, right_dims$rows, right_dims$cols)
   } else if (left_rank == 2L && right_rank == 1L) {
     left_dims <- matrix_dims(left)
-    right_len <- dim_or_one(right, 1L)
-    row_conform <- check_elementwise_lengths(right_len, left_dims$rows)
-    if (!row_conform$ok) {
-      stop(vec_mat_msg, call. = FALSE)
-    }
-    if (row_conform$unknown) {
-      emit_elementwise_size_guard(
-        right,
-        left,
-        hoist,
-        scope,
-        vec_mat_msg,
-        right_axis = 1L
-      )
-    }
+    guard_conformable_dims(
+      dim_or_one(right, 1L),
+      left_dims$rows,
+      vec_mat_msg,
+      hoist,
+      scope,
+      left = right,
+      right = left,
+      right_axis = 1L
+    )
     right <- reshape_vector_for_matrix(right, left_dims$rows, left_dims$cols)
   }
 
@@ -415,7 +433,7 @@ mode_rank <- function(mode) {
 }
 
 # Determine the promoted mode from a list of Fortran values.
-# Used by: r2f-arithmetic.R, r2f-constructors.R
+# Used by: r2f-operators.R, r2f-constructors.R
 reduce_promoted_mode <- function(...) {
   getmode <- function(d) {
     if (inherits(d, Fortran)) {
@@ -439,7 +457,7 @@ reduce_promoted_mode <- function(...) {
 }
 
 # Create a Variable with conforming dimensions from multiple inputs.
-# Used by: r2f-arithmetic.R, r2f-logical.R, r2f-constructors.R, r2f-conditionals.R
+# Used by: r2f-operators.R, r2f-constructors.R, r2f-conditionals.R
 conform <- function(..., mode = NULL) {
   vars <- drop_nulls(list(...))
   # Report the promoted (lattice-join) mode: the emitted expression already
