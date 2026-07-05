@@ -11,7 +11,13 @@ r2f_handlers[[">="]] <- function(args, scope, ..., hoist = NULL) {
   pair <- promote_arith_pair(left, right, "comparison")
   left <- pair$left
   right <- pair$right
-  reshaped <- maybe_reshape_vector_matrix(left, right, hoist, scope)
+  reshaped <- maybe_reshape_vector_matrix(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
   left <- reshaped$left
   right <- reshaped$right
   var <- conform(left@value, right@value)
@@ -25,7 +31,13 @@ r2f_handlers[[">"]] <- function(args, scope, ..., hoist = NULL) {
   pair <- promote_arith_pair(left, right, "comparison")
   left <- pair$left
   right <- pair$right
-  reshaped <- maybe_reshape_vector_matrix(left, right, hoist, scope)
+  reshaped <- maybe_reshape_vector_matrix(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
   left <- reshaped$left
   right <- reshaped$right
   var <- conform(left@value, right@value)
@@ -39,7 +51,13 @@ r2f_handlers[["<"]] <- function(args, scope, ..., hoist = NULL) {
   pair <- promote_arith_pair(left, right, "comparison")
   left <- pair$left
   right <- pair$right
-  reshaped <- maybe_reshape_vector_matrix(left, right, hoist, scope)
+  reshaped <- maybe_reshape_vector_matrix(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
   left <- reshaped$left
   right <- reshaped$right
   var <- conform(left@value, right@value)
@@ -53,7 +71,13 @@ r2f_handlers[["<="]] <- function(args, scope, ..., hoist = NULL) {
   pair <- promote_arith_pair(left, right, "comparison")
   left <- pair$left
   right <- pair$right
-  reshaped <- maybe_reshape_vector_matrix(left, right, hoist, scope)
+  reshaped <- maybe_reshape_vector_matrix(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
   left <- reshaped$left
   right <- reshaped$right
   var <- conform(left@value, right@value)
@@ -67,7 +91,13 @@ r2f_handlers[["=="]] <- function(args, scope, ..., hoist = NULL) {
   pair <- promote_arith_pair(left, right, "comparison")
   left <- pair$left
   right <- pair$right
-  reshaped <- maybe_reshape_vector_matrix(left, right, hoist, scope)
+  reshaped <- maybe_reshape_vector_matrix(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
   left <- reshaped$left
   right <- reshaped$right
   var <- conform(left@value, right@value)
@@ -81,7 +111,13 @@ r2f_handlers[["!="]] <- function(args, scope, ..., hoist = NULL) {
   pair <- promote_arith_pair(left, right, "comparison")
   left <- pair$left
   right <- pair$right
-  reshaped <- maybe_reshape_vector_matrix(left, right, hoist, scope)
+  reshaped <- maybe_reshape_vector_matrix(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
   left <- reshaped$left
   right <- reshaped$right
   var <- conform(left@value, right@value)
@@ -142,7 +178,13 @@ register_r2f_handler(
     .[left, right] <- args
     left <- booleanize_logical_as_int(left)
     right <- booleanize_logical_as_int(right)
-    reshaped <- maybe_reshape_vector_matrix(left, right, hoist, scope)
+    reshaped <- maybe_reshape_vector_matrix(
+      left,
+      right,
+      hoist,
+      scope,
+      scalarize_one_by_one = FALSE
+    )
     left <- reshaped$left
     right <- reshaped$right
 
