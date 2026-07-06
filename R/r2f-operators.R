@@ -69,6 +69,10 @@ cast_binop_operands <- function(spec, op, left, right) {
       # `modulo` requires same-typed arguments, so cast both operands to
       # the join (logical joins as integer: R's TRUE %% TRUE is 0L).
       mode <- arith_join_mode(left, right)
+      if (identical(mode, "complex")) {
+        # Fortran modulo() has no complex form; R refuses too.
+        stop("unimplemented complex operation", call. = FALSE)
+      }
       list(
         left = cast_to_mode(left, mode, op),
         right = cast_to_mode(right, mode, op)
@@ -89,11 +93,21 @@ cast_binop_operands <- function(spec, op, left, right) {
       list(left = maybe_cast_double(left), right = maybe_cast_double(right))
     },
     # R compares logicals as integers; Fortran has no logical comparison.
-    compare = promote_arith_pair(left, right, "comparison"),
+    compare = {
+      # R supports equality on complex values but refuses ordering; refuse
+      # cleanly here instead of handing gfortran an invalid comparison.
+      if (
+        op %in% c("<", "<=", ">", ">=") &&
+          "complex" %in% c(left@value@mode, right@value@mode)
+      ) {
+        stop("invalid comparison with complex values", call. = FALSE)
+      }
+      promote_arith_pair(left, right, "comparison")
+    },
     logical = {
       for (operand in list(left, right)) {
         if (operand@value@mode != "logical") {
-          stop("must be logical")
+          stop("`", op, "` requires logical operands", call. = FALSE)
         }
       }
       list(
