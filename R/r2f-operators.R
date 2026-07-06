@@ -119,6 +119,93 @@ cast_binop_operands <- function(spec, op, left, right) {
   )
 }
 
+# Match `matrix(<scalar>, nrow, ncol)`: data a length-1 literal or a
+# declared scalar, no byrow/dimnames. Returns the matched arguments or
+# NULL. Used by compile_binop_operands() to lower the fill to a native
+# scalar broadcast instead of the O(nrow * ncol) temporary the matrix()
+# handler would otherwise materialize.
+matrix_scalar_fill_args <- function(e, scope) {
+  if (!is.call(e) || !identical(e[[1L]], quote(matrix))) {
+    return(NULL)
+  }
+  mc <- tryCatch(match.call(matrix, e), error = function(...) NULL)
+  if (is.null(mc)) {
+    return(NULL)
+  }
+  margs <- as.list(mc)[-1L]
+  if (
+    !setequal(names(margs), c("data", "nrow", "ncol")) ||
+      any(map_lgl(margs, is_missing))
+  ) {
+    return(NULL)
+  }
+  data <- margs$data
+  data_is_scalar <- (is.atomic(data) && length(data) == 1L && !is.na(data)) ||
+    (is.symbol(data) &&
+      {
+        var <- get0(as.character(data), scope)
+        inherits(var, Variable) && passes_as_scalar(var)
+      })
+  if (!data_is_scalar) {
+    return(NULL)
+  }
+  margs
+}
+
+# Compile the two operands of an elementwise binary op. The one special
+# case: `matrix(scalar, m, n)` against a genuine rank-2 array broadcasts
+# natively -- compile just the scalar and enforce the claimed dims against
+# the other operand (compile error when statically wrong, runtime guard
+# when symbolic, spelled from the dim expressions since the fill has no
+# array to size()). Everything else compiles as written.
+compile_binop_operands <- function(args, scope, ..., hoist = NULL) {
+  fills <- lapply(args, matrix_scalar_fill_args, scope = scope)
+  fill_idx <- which(!map_lgl(fills, is.null))
+
+  if (length(fill_idx) == 1L && !is.null(hoist)) {
+    j <- fill_idx
+    other <- r2f(args[[3L - j]], scope, ..., hoist = hoist)
+    fill_dims <- r2dims(list(fills[[j]]$nrow, fills[[j]]$ncol), scope)
+    fill_dims_f <- map_chr(fill_dims, \(d) dims2f(list(d), scope))
+    broadcastable <- inherits(other, Fortran) &&
+      !is.null(other@value) &&
+      other@value@rank == 2L &&
+      !passes_as_scalar(other@value) &&
+      !any(map_lgl(fill_dims, is_scalar_na)) &&
+      all(nzchar(fill_dims_f)) &&
+      !any(grepl(":", fill_dims_f, fixed = TRUE))
+    if (broadcastable) {
+      other_dims <- matrix_dims(other)
+      for (axis in 1:2) {
+        other_dim <- if (axis == 1L) other_dims$rows else other_dims$cols
+        verdict <- check_elementwise_lengths(fill_dims[[axis]], other_dim)
+        if (!verdict$ok) {
+          stop(
+            "elementwise matrix operations require matching dimensions",
+            call. = FALSE
+          )
+        }
+        if (verdict$unknown) {
+          emit_quickr_error_if(
+            glue("({fill_dims_f[[axis]]}) /= size({other}, {axis})"),
+            "elementwise matrix operations require matching dimensions",
+            hoist,
+            scope
+          )
+        }
+      }
+      fill <- r2f(fills[[j]]$data, scope, ..., hoist = hoist)
+      out <- list(fill, other)
+      return(if (j == 1L) out else rev(out))
+    }
+    fallback <- r2f(args[[j]], scope, ..., hoist = hoist)
+    out <- list(fallback, other)
+    return(if (j == 1L) out else rev(out))
+  }
+
+  lapply(args, r2f, scope, ..., hoist = hoist)
+}
+
 # Render one table row over cast, shape-resolved operands. `var` is the
 # conformed result Variable (floor_divide branches on its mode and hoists
 # a quotient temporary with its dims).
@@ -164,7 +251,7 @@ compile_binop <- function(args, scope, ..., hoist = NULL) {
     return(Fortran(glue("({op}{x})"), Variable(x@value@mode, x@value@dims)))
   }
 
-  .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
 
   .[left, right] <- cast_binop_operands(spec, op, left, right)
 
