@@ -2,7 +2,8 @@
 # Table-driven handlers for elementwise binary operators:
 #   arithmetic  + - * / ^ %% %/%   (and unary + -)
 #   comparison  < <= > >= == !=
-#   logical     & && | ||
+#   logical     & |
+# plus the scalar short-circuit forms && and || (compile_andor below).
 #
 # Each operator is a row in `binop_table`; `compile_binop` answers the two
 # framework questions with shared machinery -- result mode and operand
@@ -57,11 +58,7 @@ binop_table <- list(
   "==" = list(f = "==", mode = "compare"),
   "!=" = list(f = "/=", mode = "compare"),
   "&" = list(f = ".and.", mode = "logical", form = "bare"),
-  # TODO: && and || are compiled like & and | (elementwise, no
-  # short-circuit); the scalar forms probably need more type checking.
-  "&&" = list(f = ".and.", mode = "logical", form = "bare"),
-  "|" = list(f = ".or.", mode = "logical", form = "bare"),
-  "||" = list(f = ".or.", mode = "logical", form = "bare")
+  "|" = list(f = ".or.", mode = "logical", form = "bare")
 )
 
 # Layer 1 for one table row: cast operands per the row's mode rule.
@@ -185,3 +182,92 @@ compile_binop <- function(args, scope, ..., hoist = NULL) {
 }
 
 register_r2f_handler(names(binop_table), compile_binop)
+
+# --- Scalar short-circuit operators: && and || ---
+
+# && and || are R's *scalar* control operators: operands must be length 1
+# (R errors otherwise), and the right operand is evaluated only when the
+# left side does not already decide the answer.
+check_andor_operand <- function(x, op) {
+  if (is.null(x@value) || !identical(x@value@mode, "logical")) {
+    stop("`", op, "` requires logical operands", call. = FALSE)
+  }
+  if (!passes_as_scalar(x@value)) {
+    stop(
+      "`",
+      op,
+      "` requires length-1 operands; use `",
+      if (op == "&&") "&" else "|",
+      "` for elementwise operations",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+# TRUE when evaluating `e` eagerly is indistinguishable from R's lazy
+# right-operand evaluation: no side effects, no errors, no traps. A
+# conservative whitelist -- names, literals, and compositions of pure
+# non-trapping operations. Anything else (subscripts, %%/%/%, function
+# calls, ...) gets the conditional lowering.
+is_pure_scalar_condition <- function(e) {
+  if (is.symbol(e) || (is.atomic(e) && length(e) == 1L)) {
+    return(TRUE)
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  pure_ops <- c(
+    "(", "!", "&&", "||", "&", "|",
+    "<", "<=", ">", ">=", "==", "!=",
+    "+", "-", "*", "/", "abs"
+  )
+  if (!op %in% pure_ops) {
+    return(FALSE)
+  }
+  all(vapply(as.list(e)[-1L], is_pure_scalar_condition, logical(1L)))
+}
+
+compile_andor <- function(args, scope, ..., hoist = NULL) {
+  op <- last(list(...)$calls)
+  stopifnot(length(args) == 2L, op %in% c("&&", "||"))
+
+  # R always evaluates the left operand: its hoists stay unconditional.
+  left <- r2f(args[[1L]], scope, ..., hoist = hoist)
+  check_andor_operand(left, op)
+  left <- booleanize_logical_as_int(left)
+
+  f <- if (op == "&&") ".and." else ".or."
+
+  if (is_pure_scalar_condition(args[[2L]])) {
+    # Fortran may evaluate both operands of .and./.or.; for a pure right
+    # operand that is indistinguishable from short-circuiting, so keep
+    # the compact infix form.
+    right <- r2f(args[[2L]], scope, ..., hoist = hoist)
+    check_andor_operand(right, op)
+    right <- booleanize_logical_as_int(right)
+    return(Fortran(glue("{left} {f} {right}"), Variable("logical")))
+  }
+
+  # The right operand can error or have side effects; R reaches it only
+  # when the left side does not decide. Compile it into its own hoist and
+  # emit everything inside the conditional.
+  if (is.null(hoist)) {
+    stop("internal error: `", op, "` requires hoist context", call. = FALSE)
+  }
+  sub <- new_hoist(scope)
+  right <- r2f(args[[2L]], scope, ..., hoist = sub)
+  check_andor_operand(right, op)
+  right <- booleanize_logical_as_int(right)
+
+  tmp <- hoist$declare_tmp(mode = "logical", dims = NULL)
+  hoist$emit(glue("{tmp@name} = {left}"))
+  cond <- if (op == "&&") tmp@name else glue(".not. {tmp@name}")
+  hoist$emit(glue("if ({cond}) then"))
+  hoist$emit(indent(sub$render(glue("{tmp@name} = {right}"))))
+  hoist$emit("end if")
+  Fortran(tmp@name, tmp)
+}
+
+register_r2f_handler(c("&&", "||"), compile_andor)
