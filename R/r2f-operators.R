@@ -119,11 +119,14 @@ cast_binop_operands <- function(spec, op, left, right) {
   )
 }
 
-# Match `matrix(<scalar>, nrow, ncol)`: data a length-1 literal or a
-# declared scalar, no byrow/dimnames. Returns the matched arguments or
-# NULL. Used by compile_binop_operands() to lower the fill to a native
-# scalar broadcast instead of the O(nrow * ncol) temporary the matrix()
-# handler would otherwise materialize.
+# Match `matrix(<scalar>, nrow, ncol)`: a matrix() call
+# matrix_call_args() accepts (data/nrow/ncol present, no
+# byrow/dimnames) whose data is a length-1 literal or a declared
+# scalar. Returns the matched arguments or NULL. Used by
+# compile_binop_operands() to lower the fill to a native scalar
+# broadcast instead of the O(nrow * ncol) temporary the matrix()
+# handler would otherwise materialize; anything it declines falls back
+# to the matrix() handler, which raises the real diagnostics.
 matrix_scalar_fill_args <- function(e, scope) {
   if (!is.call(e) || !identical(e[[1L]], quote(matrix))) {
     return(NULL)
@@ -132,11 +135,11 @@ matrix_scalar_fill_args <- function(e, scope) {
   if (is.null(mc)) {
     return(NULL)
   }
-  margs <- as.list(mc)[-1L]
-  if (
-    !setequal(names(margs), c("data", "nrow", "ncol")) ||
-      any(map_lgl(margs, is_missing))
-  ) {
+  margs <- tryCatch(
+    matrix_call_args(as.list(mc)[-1L]),
+    error = function(...) NULL
+  )
+  if (is.null(margs)) {
     return(NULL)
   }
   data <- margs$data

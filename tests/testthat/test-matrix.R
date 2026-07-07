@@ -363,3 +363,18 @@ test_that("t() and diag() preserve logical mode", {
   }
   expect_quick_equal(dfn, list(m))
 })
+
+test_that("matrix() refuses byrow=TRUE and dimnames cleanly", {
+  fn_byrow <- function() {
+    m <- matrix(1, nrow = 2, ncol = 2, byrow = TRUE)
+    m
+  }
+  expect_error(quick(fn_byrow), "matrix(byrow=TRUE) is not supported", fixed = TRUE)
+
+  # dimnames used to be silently dropped (R keeps them); refuse like array()
+  fn_dimnames <- function() {
+    m <- matrix(1, nrow = 2, ncol = 2, dimnames = list(c("a", "b"), NULL))
+    m
+  }
+  expect_error(quick(fn_dimnames), "matrix(dimnames=) not supported", fixed = TRUE)
+})
