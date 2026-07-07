@@ -177,22 +177,19 @@ compile_binop_operands <- function(args, scope, ..., hoist = NULL) {
     if (broadcastable) {
       other_dims <- matrix_dims(other)
       for (axis in 1:2) {
-        other_dim <- if (axis == 1L) other_dims$rows else other_dims$cols
-        verdict <- check_elementwise_lengths(fill_dims[[axis]], other_dim)
-        if (!verdict$ok) {
-          stop(
-            "elementwise matrix operations require matching dimensions",
-            call. = FALSE
-          )
-        }
-        if (verdict$unknown) {
-          emit_quickr_error_if(
-            glue("({fill_dims_f[[axis]]}) /= size({other}, {axis})"),
-            "elementwise matrix operations require matching dimensions",
-            hoist,
-            scope
-          )
-        }
+        # The fill has no array to size(), so its side of a runtime guard
+        # is spelled from the claimed dim expression via `left_f`.
+        guard_conformable_dims(
+          fill_dims[[axis]],
+          if (axis == 1L) other_dims$rows else other_dims$cols,
+          elementwise_matrix_msg,
+          hoist,
+          scope,
+          left = NULL,
+          right = other,
+          right_axis = axis,
+          left_f = glue("({fill_dims_f[[axis]]})")
+        )
       }
       fill <- r2f(fills[[j]]$data, scope, ..., hoist = hoist)
       out <- list(fill, other)
