@@ -222,7 +222,7 @@ dim_is_one <- function(x) {
 
 # Check if a dimension expression is statically known and not 1. Symbolic
 # dimensions are FALSE: "not provably 1" is not "provably not 1".
-# Used by: resolve_elementwise()
+# Used by: conform_elementwise_operands()
 dim_known_not_one <- function(x) {
   is_wholenumber(x) && !identical(as.integer(x), 1L)
 }
@@ -254,7 +254,7 @@ dims_match <- function(left, right) {
 # Stronger than dims_match() (normalizes symbols), stricter than
 # check_elementwise_lengths() (an incomparable pair is FALSE, not a
 # deferred runtime guard).
-# Used by: r2f-matrix-blas.R (dest_dims_proven)
+# Used by: r2f-matrix-blas.R (dest_dims_proven_equal)
 dims_proven_equal <- function(left, right) {
   if (is_scalar_na(left) || is_scalar_na(right)) {
     return(FALSE)
@@ -306,7 +306,7 @@ elementwise_matrix_msg <-
 # inquiry, so applying it to operand expression text does not evaluate the
 # operand.
 # Used by: guard_conformable_dims()
-guard_dim_f <- function(dim, operand, axis = NULL, f = NULL) {
+dimension_guard_expr <- function(dim, operand, axis = NULL, f = NULL) {
   if (!is.null(f)) {
     return(f)
   }
@@ -326,9 +326,10 @@ guard_dim_f <- function(dim, operand, axis = NULL, f = NULL) {
 # runtime guard emitted before the consuming statement; provably equal
 # dims need nothing. Never warn-and-proceed. `axis` NULL compares the
 # operand's whole size (rank-1 operands).
-# Used by: resolve_elementwise(), lower_elementwise_operands(),
+# Used by: conform_elementwise_operands(), lower_elementwise_operands(),
 # r2f-conditionals.R, r2f-matrix*.R. `left_f`/`right_f` override that
-# side's guard spelling (see guard_dim_f()); its `left`/`right` operand is
+# side's guard spelling (see dimension_guard_expr()); its `left`/`right`
+# operand is
 # then unused and may be NULL.
 guard_conformable_dims <- function(
   left_dim,
@@ -344,11 +345,11 @@ guard_conformable_dims <- function(
   right_f = NULL
 ) {
   stopifnot(is_string(message))
-  conform <- check_elementwise_lengths(left_dim, right_dim)
-  if (!conform$ok) {
+  length_check <- check_elementwise_lengths(left_dim, right_dim)
+  if (!length_check$ok) {
     stop(message, call. = FALSE)
   }
-  if (conform$unknown) {
+  if (length_check$unknown) {
     if (is.null(hoist)) {
       stop(
         "cannot emit a runtime length guard here; ",
@@ -358,7 +359,7 @@ guard_conformable_dims <- function(
     }
     emit_quickr_error_if(
       glue(
-        "{guard_dim_f(left_dim, left, left_axis, left_f)} /= {guard_dim_f(right_dim, right, right_axis, right_f)}"
+        "{dimension_guard_expr(left_dim, left, left_axis, left_f)} /= {dimension_guard_expr(right_dim, right, right_axis, right_f)}"
       ),
       message,
       hoist,
@@ -369,7 +370,7 @@ guard_conformable_dims <- function(
 }
 
 # Reshape a vector to match a matrix's dimensions.
-# Used by: resolve_elementwise()
+# Used by: conform_elementwise_operands()
 reshape_vector_for_matrix <- function(vec, rows, cols) {
   stopifnot(inherits(vec, Fortran))
   out_val <- Variable(vec@value@mode, list(rows, cols))
@@ -396,7 +397,7 @@ real_floor_expr <- function(x) {
 }
 
 # Convert a 1x1 matrix to a scalar.
-# Used by: resolve_elementwise()
+# Used by: conform_elementwise_operands()
 scalarize_matrix <- function(mat) {
   stopifnot(inherits(mat, Fortran))
   out_val <- Variable(mat@value@mode)
@@ -421,7 +422,7 @@ scalarize_matrix <- function(mat) {
 # so strict callers pass FALSE and the 1x1 always takes the vector-matrix
 # path.
 # Used by: r2f-arithmetic.R and r2f-logical.R
-resolve_elementwise <- function(
+conform_elementwise_operands <- function(
   left,
   right,
   hoist = NULL,
@@ -755,7 +756,7 @@ reduce_promoted_mode <- function(...) {
 # Create a Variable with conforming dimensions from multiple inputs.
 # Used by: r2f-arithmetic.R, r2f-logical.R, r2f-constructors.R,
 # r2f-conditionals.R
-conform <- function(..., mode = NULL) {
+infer_result_variable <- function(..., mode = NULL) {
   vars <- drop_nulls(list(...))
   # Report the promoted (lattice-join) mode: the emitted expression already
   # promotes (Fortran's rules match R for numeric mixes), and `<-` copies

@@ -38,7 +38,7 @@ assert_rank_leq2 <- function(x, message) {
 }
 
 # Assert right-hand side rank is vector or matrix.
-assert_rhs_rank <- function(rank, err_scalar, err_high) {
+assert_vector_or_matrix_rhs <- function(rank, err_scalar, err_high) {
   stopifnot(is_wholenumber(rank), is_string(err_scalar), is_string(err_high))
   if (rank > 2L) {
     stop(err_high, call. = FALSE)
@@ -198,7 +198,7 @@ assert_square_matrix <- function(dims, operand, context, hoist, scope) {
 # through a hoisted temporary and the assignment shape check guards (or
 # refuses) the copy. Accepting an unproven dest passed wrong leading
 # dimensions to the BLAS call and could write past the allocation.
-dest_dims_proven <- function(dest, expected_dims) {
+dest_dims_proven_equal <- function(dest, expected_dims) {
   if (is.null(expected_dims)) {
     return(FALSE)
   }
@@ -227,7 +227,7 @@ can_use_output <- function(
   if (!identical(dest@mode, mode)) {
     return(FALSE)
   }
-  if (!dest_dims_proven(dest, expected_dims)) {
+  if (!dest_dims_proven_equal(dest, expected_dims)) {
     return(FALSE)
   }
   output_name <- dest@name
@@ -247,7 +247,7 @@ can_use_output <- function(
 # Resolve where a BLAS/LAPACK emitter writes its result: the assignment
 # destination when can_use_output() allows it, otherwise a hoisted
 # temporary declared with the expected dims. Returns list(var, name,
-# use_dest); wrap up with blas_output_fortran().
+# use_dest); wrap up with finalize_blas_output().
 resolve_blas_output <- function(
   dest,
   hoist,
@@ -275,7 +275,7 @@ resolve_blas_output <- function(
 
 # Wrap a resolved output as the emitter's return value, marking
 # destination writes so the assignment handler skips the copy.
-blas_output_fortran <- function(out) {
+finalize_blas_output <- function(out) {
   f <- Fortran(out$name, out$var)
   if (out$use_dest) {
     f@writes_to_dest <- TRUE
@@ -380,7 +380,7 @@ gemm <- function(
   hoist$emit(glue(
     "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {out$name}, {blas_int(ldc_expr)})"
   ))
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 # gemv: centralized BLAS GEMV emission with optional destination.
@@ -413,7 +413,7 @@ gemv <- function(
   hoist$emit(glue(
     "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {out$name}, 1_c_int)"
   ))
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 symmetrize_upper_to_lower <- function(target, n, hoist) {
@@ -505,7 +505,7 @@ syrk <- function(
   ))
   symmetrize_upper_to_lower(out$name, n, hoist = hoist)
 
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 # Emit BLAS outer product for vectors or scalars with optional destination.
@@ -543,7 +543,7 @@ outer_mul <- function(
   hoist$emit(glue(
     "call dger({blas_int(m)}, {blas_int(n)}, 1.0_c_double, {x_name}, 1_c_int, {y_name}, 1_c_int, {out$name}, {blas_int(m)})"
   ))
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 # Emit triangular solve (vector or matrix RHS) with optional destination.
@@ -570,7 +570,7 @@ triangular_solve <- function(
   n <- a_dims$rows
 
   b_rank <- B@value@rank
-  assert_rhs_rank(
+  assert_vector_or_matrix_rhs(
     b_rank,
     err_scalar = "triangular solve expects a vector or matrix right-hand side",
     err_high = "triangular solve only supports vector or matrix right-hand sides"
@@ -615,7 +615,7 @@ triangular_solve <- function(
     ))
   }
 
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 lapack_solve <- function(
@@ -639,7 +639,7 @@ lapack_solve <- function(
   n <- a_dims$cols
 
   b_rank <- B@value@rank
-  assert_rhs_rank(
+  assert_vector_or_matrix_rhs(
     b_rank,
     err_scalar = paste0(context, " expects a vector or matrix right-hand side"),
     err_high = paste0(
@@ -762,7 +762,7 @@ lapack_solve_gesv <- function(
     hoist,
     scope
   )
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 # Least-squares solve via the LINPACK dqrdc2/dqrcf pair (R's own qr()
@@ -878,7 +878,7 @@ end do"
       ))
     }
   }
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
@@ -929,7 +929,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
     scope
   )
 
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
@@ -968,7 +968,7 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   )
   zero_lower_triangle(out$name, n, hoist = hoist)
 
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 lapack_chol2inv <- function(
@@ -1013,7 +1013,7 @@ lapack_chol2inv <- function(
   )
   symmetrize_upper_to_lower(out$name, n, hoist = hoist)
 
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 diag_extract <- function(x, scope, hoist, dest = NULL, context = "diag") {
@@ -1045,7 +1045,7 @@ do {idx_i@name} = 1_c_int, {blas_int(diag_len)}
 end do"
   ))
 
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 diag_matrix <- function(
@@ -1107,7 +1107,7 @@ do {idx_i@name} = 1_c_int, {blas_int(diag_len)}
 end do"
   ))
 
-  blas_output_fortran(out)
+  finalize_blas_output(out)
 }
 
 svd_dims <- function(A, context = "svd") {

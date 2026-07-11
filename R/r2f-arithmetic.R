@@ -10,14 +10,17 @@ r2f_handlers[["+"]] <- function(args, scope, ..., hoist = NULL) {
 
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "+")
-  .[left, right] <- resolve_elementwise(
+  .[left, right] <- conform_elementwise_operands(
     left,
     right,
     hoist,
     scope,
     scalarize_one_by_one = TRUE
   )
-  Fortran(glue("({left} + {right})"), conform(left@value, right@value))
+  Fortran(
+    glue("({left} + {right})"),
+    infer_result_variable(left@value, right@value)
+  )
 }
 
 r2f_handlers[["-"]] <- function(args, scope, ..., hoist = NULL) {
@@ -29,41 +32,50 @@ r2f_handlers[["-"]] <- function(args, scope, ..., hoist = NULL) {
 
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "-")
-  .[left, right] <- resolve_elementwise(
+  .[left, right] <- conform_elementwise_operands(
     left,
     right,
     hoist,
     scope,
     scalarize_one_by_one = TRUE
   )
-  Fortran(glue("({left} - {right})"), conform(left@value, right@value))
+  Fortran(
+    glue("({left} - {right})"),
+    infer_result_variable(left@value, right@value)
+  )
 }
 
 r2f_handlers[["*"]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "*")
-  .[left, right] <- resolve_elementwise(
+  .[left, right] <- conform_elementwise_operands(
     left,
     right,
     hoist,
     scope,
     scalarize_one_by_one = TRUE
   )
-  Fortran(glue("({left} * {right})"), conform(left@value, right@value))
+  Fortran(
+    glue("({left} * {right})"),
+    infer_result_variable(left@value, right@value)
+  )
 }
 
 r2f_handlers[["/"]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   left <- maybe_cast_double(left)
   right <- maybe_cast_double(right)
-  .[left, right] <- resolve_elementwise(
+  .[left, right] <- conform_elementwise_operands(
     left,
     right,
     hoist,
     scope,
     scalarize_one_by_one = TRUE
   )
-  Fortran(glue("({left} / {right})"), conform(left@value, right@value))
+  Fortran(
+    glue("({left} / {right})"),
+    infer_result_variable(left@value, right@value)
+  )
 }
 
 r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
@@ -75,7 +87,7 @@ r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
   if (identical(right@value@mode, "logical")) {
     right <- cast_to_mode(right, "integer", "^")
   }
-  .[left, right] <- resolve_elementwise(
+  .[left, right] <- conform_elementwise_operands(
     left,
     right,
     hoist,
@@ -89,7 +101,7 @@ r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
   }
   Fortran(
     glue("({left} ** ({right}))"),
-    conform(left@value, right@value, mode = mode)
+    infer_result_variable(left@value, right@value, mode = mode)
   )
 }
 
@@ -103,27 +115,30 @@ r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
   }
   left <- cast_to_mode(left, mode, "%%")
   right <- cast_to_mode(right, mode, "%%")
-  .[left, right] <- resolve_elementwise(
+  .[left, right] <- conform_elementwise_operands(
     left,
     right,
     hoist,
     scope,
     scalarize_one_by_one = TRUE
   )
-  Fortran(glue("modulo({left}, {right})"), conform(left@value, right@value))
+  Fortran(
+    glue("modulo({left}, {right})"),
+    infer_result_variable(left@value, right@value)
+  )
 }
 
 r2f_handlers[["%/%"]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "%/%")
-  .[left, right] <- resolve_elementwise(
+  .[left, right] <- conform_elementwise_operands(
     left,
     right,
     hoist,
     scope,
     scalarize_one_by_one = TRUE
   )
-  out <- conform(left@value, right@value)
+  out <- infer_result_variable(left@value, right@value)
 
   expr <- switch(
     out@mode,
