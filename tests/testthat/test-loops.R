@@ -110,7 +110,9 @@ test_that("single-statement loop bodies re-run their hoisted statements", {
   # loop would freeze the body's work at its first evaluation.
   squarings_for <- function(m, k) {
     declare(type(m = double(2, 2)), type(k = integer(1)))
-    for (i in seq_len(k)) m <- m %*% m
+    for (i in seq_len(k)) {
+      m <- m %*% m
+    }
     m
   }
 
@@ -127,7 +129,9 @@ test_that("single-statement loop bodies re-run their hoisted statements", {
   # product once before the loop and never terminate.
   squarings_while <- function(m) {
     declare(type(m = double(2, 2)))
-    while (m[1, 1] < 100) m <- m %*% m
+    while (m[1, 1] < 100) {
+      m <- m %*% m
+    }
     m
   }
 
