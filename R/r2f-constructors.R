@@ -322,7 +322,7 @@ r2f_handlers[["character"]] <- r2f_handlers[["raw"]] <-
 
 # Validate matrix()'s matched arguments once for every consumer: the
 # matrix() handler and the elementwise scalar-fill fast path
-# (matrix_scalar_fill_args() in r2f-operators.R), so the two cannot
+# (matrix_scalar_fill_args() in r2f-operators-helpers.R), so the two cannot
 # drift as more vectorization contexts are added. The shared policy:
 # data is required, byrow=TRUE and dimnames are unsupported, and
 # nrow/ncol are both required. (R can infer one dimension, but quickr's

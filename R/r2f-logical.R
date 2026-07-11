@@ -1,6 +1,5 @@
 # r2f-logical.R
-# Handlers for the unary logical operator `!` and is.null().
-# Comparison operators and binary `&`/`|` are table rows in r2f-operators.R.
+# Handlers for comparison and logical operators, plus is.null().
 
 # --- Handlers ---
 
@@ -34,3 +33,226 @@ register_r2f_handler(
     Fortran(glue("(.not. present({var@optional_dummy}))"), Variable("logical"))
   }
 )
+
+compile_comparison_operands <- function(args, scope, op, ..., hoist = NULL) {
+  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  if (
+    op %in%
+      c("<", "<=", ">", ">=") &&
+      "complex" %in% c(left@value@mode, right@value@mode)
+  ) {
+    stop("invalid comparison with complex values", call. = FALSE)
+  }
+  .[left, right] <- promote_arith_pair(left, right, "comparison")
+  resolve_elementwise(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
+}
+
+comparison_result <- function(code, left, right) {
+  value <- conform(left@value, right@value)
+  value@mode <- "logical"
+  Fortran(code, value)
+}
+
+r2f_handlers[["<"]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_comparison_operands(
+    args,
+    scope,
+    "<",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("({left} < {right})"), left, right)
+}
+
+r2f_handlers[["<="]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_comparison_operands(
+    args,
+    scope,
+    "<=",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("({left} <= {right})"), left, right)
+}
+
+r2f_handlers[[">"]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_comparison_operands(
+    args,
+    scope,
+    ">",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("({left} > {right})"), left, right)
+}
+
+r2f_handlers[[">="]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_comparison_operands(
+    args,
+    scope,
+    ">=",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("({left} >= {right})"), left, right)
+}
+
+r2f_handlers[["=="]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_comparison_operands(
+    args,
+    scope,
+    "==",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("({left} == {right})"), left, right)
+}
+
+r2f_handlers[["!="]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_comparison_operands(
+    args,
+    scope,
+    "!=",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("({left} /= {right})"), left, right)
+}
+
+compile_elementwise_logical <- function(args, scope, op, ..., hoist = NULL) {
+  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  for (operand in list(left, right)) {
+    if (operand@value@mode != "logical") {
+      stop("`", op, "` requires logical operands", call. = FALSE)
+    }
+  }
+  left <- booleanize_logical_as_int(left)
+  right <- booleanize_logical_as_int(right)
+  .[left, right] <- resolve_elementwise(
+    left,
+    right,
+    hoist,
+    scope,
+    scalarize_one_by_one = FALSE
+  )
+  list(left, right)
+}
+
+r2f_handlers[["&"]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_elementwise_logical(
+    args,
+    scope,
+    "&",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("{left} .and. {right}"), left, right)
+}
+
+r2f_handlers[["|"]] <- function(args, scope, ..., hoist = NULL) {
+  .[left, right] <- compile_elementwise_logical(
+    args,
+    scope,
+    "|",
+    ...,
+    hoist = hoist
+  )
+  comparison_result(glue("{left} .or. {right}"), left, right)
+}
+
+# && and || are scalar control operators. The right operand is conditionally
+# lowered when eager evaluation could be observable.
+check_andor_operand <- function(x, op) {
+  if (is.null(x@value) || !identical(x@value@mode, "logical")) {
+    stop("`", op, "` requires logical operands", call. = FALSE)
+  }
+  if (!passes_as_scalar(x@value)) {
+    stop(
+      "`",
+      op,
+      "` requires length-1 operands; use `",
+      if (op == "&&") "&" else "|",
+      "` for elementwise operations",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+is_pure_scalar_condition <- function(e) {
+  if (is.symbol(e) || (is.atomic(e) && length(e) == 1L)) {
+    return(TRUE)
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  pure_ops <- c(
+    "(",
+    "!",
+    "&&",
+    "||",
+    "&",
+    "|",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "==",
+    "!=",
+    "+",
+    "-",
+    "*",
+    "/",
+    "abs"
+  )
+  op %in%
+    pure_ops &&
+    all(vapply(as.list(e)[-1L], is_pure_scalar_condition, logical(1L)))
+}
+
+compile_andor <- function(args, scope, op, ..., hoist = NULL) {
+  stopifnot(length(args) == 2L, op %in% c("&&", "||"))
+
+  left <- r2f(args[[1L]], scope, ..., hoist = hoist)
+  check_andor_operand(left, op)
+  left <- booleanize_logical_as_int(left)
+  fortran_op <- if (op == "&&") ".and." else ".or."
+
+  if (is_pure_scalar_condition(args[[2L]])) {
+    right <- r2f(args[[2L]], scope, ..., hoist = hoist)
+    check_andor_operand(right, op)
+    right <- booleanize_logical_as_int(right)
+    return(Fortran(glue("{left} {fortran_op} {right}"), Variable("logical")))
+  }
+
+  if (is.null(hoist)) {
+    stop("internal error: `", op, "` requires hoist context", call. = FALSE)
+  }
+  sub <- new_hoist(scope)
+  right <- r2f(args[[2L]], scope, ..., hoist = sub)
+  check_andor_operand(right, op)
+  right <- booleanize_logical_as_int(right)
+
+  tmp <- hoist$declare_tmp(mode = "logical", dims = NULL)
+  hoist$emit(glue("{tmp@name} = {left}"))
+  condition <- if (op == "&&") tmp@name else glue(".not. {tmp@name}")
+  hoist$emit(glue("if ({condition}) then"))
+  hoist$emit(indent(sub$render(glue("{tmp@name} = {right}"))))
+  hoist$emit("end if")
+  Fortran(tmp@name, tmp)
+}
+
+r2f_handlers[["&&"]] <- function(args, scope, ..., hoist = NULL) {
+  compile_andor(args, scope, "&&", ..., hoist = hoist)
+}
+
+r2f_handlers[["||"]] <- function(args, scope, ..., hoist = NULL) {
+  compile_andor(args, scope, "||", ..., hoist = hoist)
+}

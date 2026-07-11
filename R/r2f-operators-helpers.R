@@ -29,7 +29,7 @@ booleanize_logical_as_int <- function(x) {
 # The only place cast spellings live; errors on casts it cannot spell
 # (complex/character operands, or any narrowing) so an unsupported mode is
 # a clean diagnostic instead of invalid generated Fortran.
-# Used by: r2f-operators.R, r2f-constructors.R, r2f-reductions.R,
+# Used by: r2f-arithmetic.R, r2f-constructors.R, r2f-reductions.R,
 #          r2f-matrix.R
 cast_to_mode <- function(x, mode, context = "operand") {
   stopifnot(inherits(x, Fortran))
@@ -76,7 +76,7 @@ cast_to_mode <- function(x, mode, context = "operand") {
 }
 
 # Cast a value to double if it's logical or integer.
-# Used by: r2f-operators.R, r2f-math.R, r2f-matrix*.R, r2f-coercions.R
+# Used by: r2f-arithmetic.R, r2f-math.R, r2f-matrix*.R, r2f-coercions.R
 maybe_cast_double <- function(x) {
   if (x@value@mode %in% c("logical", "integer")) {
     cast_to_mode(x, "double")
@@ -118,7 +118,7 @@ promote_operands <- function(args, context = "operator") {
 
 # Lattice join for arithmetic contexts: logical joins as integer (R:
 # TRUE + TRUE is 2L, sum(TRUE) is 1L; Fortran has no logical arithmetic).
-# Used by: r2f-operators.R, r2f-math.R, r2f-reductions.R
+# Used by: r2f-arithmetic.R, r2f-math.R, r2f-reductions.R
 arith_join_mode <- function(...) {
   mode <- reduce_promoted_mode(...)
   if (identical(mode, "logical")) "integer" else mode
@@ -127,7 +127,7 @@ arith_join_mode <- function(...) {
 # Apply R's arithmetic rule for logical operands: they join as integer
 # (TRUE + TRUE is 2L), and Fortran has no logical arithmetic, so cast them.
 # int/double mixes are left alone -- Fortran's own promotion matches R.
-# Used by: r2f-operators.R
+# Used by: r2f-arithmetic.R
 promote_arith_pair <- function(left, right, context = "arithmetic") {
   if (
     identical(left@value@mode, "logical") ||
@@ -138,6 +138,81 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
     right <- cast_to_mode(right, mode, context)
   }
   list(left = left, right = right)
+}
+
+# Match matrix(<scalar>, nrow, ncol) so elementwise operators can use native
+# scalar broadcasting instead of materializing a filled matrix temporary.
+matrix_scalar_fill_args <- function(e, scope) {
+  if (!is.call(e) || !identical(e[[1L]], quote(matrix))) {
+    return(NULL)
+  }
+  mc <- tryCatch(match.call(matrix, e), error = function(...) NULL)
+  if (is.null(mc)) {
+    return(NULL)
+  }
+  margs <- tryCatch(
+    matrix_call_args(as.list(mc)[-1L]),
+    error = function(...) NULL
+  )
+  if (is.null(margs)) {
+    return(NULL)
+  }
+  data <- margs$data
+  data_is_scalar <- (is.atomic(data) && length(data) == 1L && !is.na(data)) ||
+    (is.symbol(data) &&
+      {
+        var <- get0(as.character(data), scope)
+        inherits(var, Variable) && passes_as_scalar(var)
+      })
+  if (!data_is_scalar) {
+    return(NULL)
+  }
+  margs
+}
+
+# Compile both operands of an elementwise operator. A scalar matrix fill paired
+# with a rank-2 array is lowered as a scalar broadcast, with dimension guards.
+compile_binop_operands <- function(args, scope, ..., hoist = NULL) {
+  fills <- lapply(args, matrix_scalar_fill_args, scope = scope)
+  fill_idx <- which(!map_lgl(fills, is.null))
+
+  if (length(fill_idx) == 1L && !is.null(hoist)) {
+    j <- fill_idx
+    other <- r2f(args[[3L - j]], scope, ..., hoist = hoist)
+    fill_dims <- r2dims(list(fills[[j]]$nrow, fills[[j]]$ncol), scope)
+    fill_dims_f <- map_chr(fill_dims, \(d) dims2f(list(d), scope))
+    broadcastable <- inherits(other, Fortran) &&
+      !is.null(other@value) &&
+      other@value@rank == 2L &&
+      !passes_as_scalar(other@value) &&
+      !any(map_lgl(fill_dims, is_scalar_na)) &&
+      all(nzchar(fill_dims_f)) &&
+      !any(grepl(":", fill_dims_f, fixed = TRUE))
+    if (broadcastable) {
+      other_dims <- matrix_dims(other)
+      for (axis in 1:2) {
+        guard_conformable_dims(
+          fill_dims[[axis]],
+          if (axis == 1L) other_dims$rows else other_dims$cols,
+          elementwise_matrix_msg,
+          hoist,
+          scope,
+          left = NULL,
+          right = other,
+          right_axis = axis,
+          left_f = glue("({fill_dims_f[[axis]]})")
+        )
+      }
+      fill <- r2f(fills[[j]]$data, scope, ..., hoist = hoist)
+      out <- list(fill, other)
+      return(if (j == 1L) out else rev(out))
+    }
+    fallback <- r2f(args[[j]], scope, ..., hoist = hoist)
+    out <- list(fallback, other)
+    return(if (j == 1L) out else rev(out))
+  }
+
+  lapply(args, r2f, scope, ..., hoist = hoist)
 }
 
 # Check if a dimension expression equals 1.
@@ -314,7 +389,7 @@ reshape_vector_for_matrix <- function(vec, rows, cols) {
 # silently overflow. aint(x) truncates toward 0 (real result); adjust by
 # -1 where truncation differs from floor (negative non-integers). `x` is
 # spliced three times, so callers hoist non-trivial expressions first.
-# Used by: r2f-math.R (floor), r2f-operators.R (double %/%)
+# Used by: r2f-math.R (floor), r2f-arithmetic.R (double %/%)
 real_floor_expr <- function(x) {
   aint <- glue("aint({x})")
   glue("({aint} - merge(1.0_c_double, 0.0_c_double, ({x} < {aint})))")
@@ -345,7 +420,7 @@ scalarize_matrix <- function(mat) {
 # an error where R would recycle. Comparisons and & | error in R itself,
 # so strict callers pass FALSE and the 1x1 always takes the vector-matrix
 # path.
-# Used by: r2f-operators.R
+# Used by: r2f-arithmetic.R and r2f-logical.R
 resolve_elementwise <- function(
   left,
   right,
@@ -654,7 +729,7 @@ check_reassignment_narrowing <- function(name, target, value) {
 }
 
 # Determine the promoted mode from a list of Fortran values.
-# Used by: r2f-operators.R, r2f-constructors.R
+# Used by: r2f-arithmetic.R, r2f-logical.R, r2f-constructors.R
 reduce_promoted_mode <- function(...) {
   getmode <- function(d) {
     if (inherits(d, Fortran)) {
@@ -678,7 +753,8 @@ reduce_promoted_mode <- function(...) {
 }
 
 # Create a Variable with conforming dimensions from multiple inputs.
-# Used by: r2f-operators.R, r2f-constructors.R, r2f-conditionals.R
+# Used by: r2f-arithmetic.R, r2f-logical.R, r2f-constructors.R,
+# r2f-conditionals.R
 conform <- function(..., mode = NULL) {
   vars <- drop_nulls(list(...))
   # Report the promoted (lattice-join) mode: the emitted expression already
