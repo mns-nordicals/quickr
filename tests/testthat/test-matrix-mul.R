@@ -229,7 +229,11 @@ test_that("matrix multiplication rejects incompatible destinations", {
 
   # The destination's declared rank no longer matches the result; the
   # reassignment shape check rejects it (routing through a temp first).
-  expect_error(quick(dest_mismatch), "replacement rank (2) differs", fixed = TRUE)
+  expect_error(
+    quick(dest_mismatch),
+    "replacement rank (2) differs",
+    fixed = TRUE
+  )
 })
 
 test_that("BLAS matrix ops coerce integer and logical inputs to double", {
