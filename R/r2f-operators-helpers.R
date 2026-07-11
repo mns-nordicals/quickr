@@ -142,7 +142,7 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
 
 # Match matrix(<scalar>, nrow, ncol) so elementwise operators can use native
 # scalar broadcasting instead of materializing a filled matrix temporary.
-matrix_scalar_fill_args <- function(e, scope) {
+match_scalar_matrix_fill <- function(e, scope) {
   if (!is.call(e) || !identical(e[[1L]], quote(matrix))) {
     return(NULL)
   }
@@ -172,8 +172,8 @@ matrix_scalar_fill_args <- function(e, scope) {
 
 # Compile both operands of an elementwise operator. A scalar matrix fill paired
 # with a rank-2 array is lowered as a scalar broadcast, with dimension guards.
-compile_binop_operands <- function(args, scope, ..., hoist = NULL) {
-  fills <- lapply(args, matrix_scalar_fill_args, scope = scope)
+lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
+  fills <- lapply(args, match_scalar_matrix_fill, scope = scope)
   fill_idx <- which(!map_lgl(fills, is.null))
 
   if (length(fill_idx) == 1L && !is.null(hoist)) {
@@ -326,7 +326,7 @@ guard_dim_f <- function(dim, operand, axis = NULL, f = NULL) {
 # runtime guard emitted before the consuming statement; provably equal
 # dims need nothing. Never warn-and-proceed. `axis` NULL compares the
 # operand's whole size (rank-1 operands).
-# Used by: resolve_elementwise(), compile_binop_operands(),
+# Used by: resolve_elementwise(), lower_elementwise_operands(),
 # r2f-conditionals.R, r2f-matrix*.R. `left_f`/`right_f` override that
 # side's guard spelling (see guard_dim_f()); its `left`/`right` operand is
 # then unused and may be NULL.

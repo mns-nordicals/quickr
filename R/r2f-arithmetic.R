@@ -8,7 +8,7 @@ r2f_handlers[["+"]] <- function(args, scope, ..., hoist = NULL) {
     return(Fortran(glue("(+{x})"), Variable(x@value@mode, x@value@dims)))
   }
 
-  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "+")
   .[left, right] <- resolve_elementwise(
     left,
@@ -27,7 +27,7 @@ r2f_handlers[["-"]] <- function(args, scope, ..., hoist = NULL) {
     return(Fortran(glue("(-{x})"), Variable(x@value@mode, x@value@dims)))
   }
 
-  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "-")
   .[left, right] <- resolve_elementwise(
     left,
@@ -40,7 +40,7 @@ r2f_handlers[["-"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["*"]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "*")
   .[left, right] <- resolve_elementwise(
     left,
@@ -53,7 +53,7 @@ r2f_handlers[["*"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["/"]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   left <- maybe_cast_double(left)
   right <- maybe_cast_double(right)
   .[left, right] <- resolve_elementwise(
@@ -67,7 +67,7 @@ r2f_handlers[["/"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
 
   # R's ^ always returns double. Keep integer exponents as integer so negative
   # bases with whole-number exponents use Fortran's real ** integer form.
@@ -94,7 +94,7 @@ r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
 
   # modulo() requires same-typed operands and has no complex form.
   mode <- arith_join_mode(left, right)
@@ -114,7 +114,7 @@ r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["%/%"]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- compile_binop_operands(args, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "%/%")
   .[left, right] <- resolve_elementwise(
     left,
