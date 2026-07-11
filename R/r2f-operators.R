@@ -97,7 +97,8 @@ cast_binop_operands <- function(spec, op, left, right) {
       # R supports equality on complex values but refuses ordering; refuse
       # cleanly here instead of handing gfortran an invalid comparison.
       if (
-        op %in% c("<", "<=", ">", ">=") &&
+        op %in%
+          c("<", "<=", ">", ">=") &&
           "complex" %in% c(left@value@mode, right@value@mode)
       ) {
         stop("invalid comparison with complex values", call. = FALSE)
