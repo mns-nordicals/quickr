@@ -144,7 +144,7 @@
       function(x) {
           declare(type(x = integer(1)))
           for (i in 1:10) {
-            x = x + 1L
+            x <- x + 1L
             if (x >= 5L) {
               break
             }
@@ -214,7 +214,7 @@
       function(x) {
           declare(type(x = integer(1)))
           while (x < 5L) {
-            x = x + 1L
+            x <- x + 1L
           }
           x
         }
@@ -468,7 +468,9 @@
     Output
       function(m, k) {
           declare(type(m = double(2, 2)), type(k = integer(1)))
-          for (i in seq_len(k)) m <- m %*% m
+          for (i in seq_len(k)) {
+            m <- m %*% m
+          }
           m
         }
       <environment: 0x0>
@@ -559,7 +561,9 @@
     Output
       function(m) {
           declare(type(m = double(2, 2)))
-          while (m[1, 1] < 100) m <- m %*% m
+          while (m[1, 1] < 100) {
+            m <- m %*% m
+          }
           m
         }
       <environment: 0x0>
