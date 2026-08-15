@@ -201,7 +201,11 @@ emit_elementwise_size_guard <- function(
   right_axis = left_axis
 ) {
   size_of <- function(x, axis) {
-    if (is.null(axis)) glue("size({x})") else glue("size({x}, {axis})")
+    if (is.null(axis)) {
+      glue("size({x}, kind=c_ptrdiff_t)")
+    } else {
+      glue("size({x}, {axis}, kind=c_ptrdiff_t)")
+    }
   }
   emit_quickr_error_if(
     glue("{size_of(left, left_axis)} /= {size_of(right, right_axis)}"),

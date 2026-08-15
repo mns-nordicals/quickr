@@ -80,6 +80,9 @@ test_that("symbolic differing lengths get a runtime guard", {
     declare(type(a = double(n)), type(b = double(m)))
     a + b
   }
+  fsub <- as.character(r2f(fn))
+  expect_match(fsub, "size(a, kind=c_ptrdiff_t)", fixed = TRUE)
+  expect_match(fsub, "size(b, kind=c_ptrdiff_t)", fixed = TRUE)
   qfn <- quick(fn)
   expect_identical(qfn(c(1, 2), c(10, 20)), c(11, 22))
   # was: silent truncation to c(11, 22)

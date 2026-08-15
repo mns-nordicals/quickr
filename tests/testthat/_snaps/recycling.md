@@ -34,7 +34,7 @@
         ! manifest end
       
       
-        if (size(a) /= size(b)) then
+        if (size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
           return
