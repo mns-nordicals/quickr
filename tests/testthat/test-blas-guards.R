@@ -190,6 +190,39 @@ test_that("matrix BLAS rejects known zero-sized outputs", {
   expect_error(quick(cross_mat), "zero-sized outputs are not supported")
 })
 
+test_that("matrix BLAS guards unknown output extents at runtime", {
+  matrix_matrix <- function(a, b) {
+    declare(type(a = double(NA, 2)), type(b = double(2, 3)))
+    a %*% b
+  }
+  matrix_vector <- function(a, x) {
+    declare(type(a = double(NA, 2)), type(x = double(2)))
+    a %*% x
+  }
+  cross_mat <- function(x) {
+    declare(type(x = double(2, NA)))
+    crossprod(x)
+  }
+  tcross_mat <- function(x) {
+    declare(type(x = double(NA, 2)))
+    tcrossprod(x)
+  }
+
+  q_matrix_matrix <- expect_no_warning(quick(matrix_matrix))
+  q_matrix_vector <- expect_no_warning(quick(matrix_vector))
+  q_cross_mat <- expect_no_warning(quick(cross_mat))
+  q_tcross_mat <- expect_no_warning(quick(tcross_mat))
+  message <- "zero-sized outputs are not supported"
+
+  expect_error(
+    q_matrix_matrix(matrix(double(), 0, 2), matrix(double(), 2, 3)),
+    message
+  )
+  expect_error(q_matrix_vector(matrix(double(), 0, 2), double(2)), message)
+  expect_error(q_cross_mat(matrix(double(), 2, 0)), message)
+  expect_error(q_tcross_mat(matrix(double(), 0, 2)), message)
+})
+
 test_that("NA dims are never treated as equal", {
   fn <- function(a, b) {
     declare(type(a = double(NA, NA)), type(b = double(NA, NA)))

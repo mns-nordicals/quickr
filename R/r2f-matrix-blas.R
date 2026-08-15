@@ -191,19 +191,38 @@ assert_square_matrix <- function(dims, operand, context, hoist, scope) {
 # ---- BLAS emitters ----
 
 # Generated function results cannot currently represent zero-sized arrays.
-# Reject a statically known zero output before emitting a BLAS call with an
-# invalid leading dimension. A zero contracted dimension remains supported
-# when every output extent is nonzero.
-assert_nonempty_blas_output <- function(dims, context) {
-  stopifnot(is.list(dims), length(dims) > 0L, is_string(context))
-  has_zero_extent <- any(vapply(
-    dims,
-    function(dim) is_wholenumber(dim) && as.integer(dim) == 0L,
-    logical(1)
-  ))
-  if (has_zero_extent) {
-    stop(context, " zero-sized outputs are not supported", call. = FALSE)
+# Reject a known zero output during translation and guard unknown output
+# extents at runtime before emitting a BLAS call with an invalid leading
+# dimension. A zero contracted dimension remains supported when every output
+# extent is nonzero.
+assert_nonempty_blas_output <- function(
+  dim,
+  operand,
+  axis,
+  context,
+  hoist,
+  scope
+) {
+  stopifnot(
+    inherits(operand, Fortran),
+    is.numeric(axis),
+    length(axis) == 1L,
+    is_string(context)
+  )
+  message <- paste0(context, " zero-sized outputs are not supported")
+  if (is_wholenumber(dim)) {
+    if (as.integer(dim) == 0L) {
+      stop(message, call. = FALSE)
+    }
+    return(invisible(TRUE))
   }
+
+  emit_quickr_error_if(
+    glue("{guard_dim_f(dim, operand, axis)} == 0_c_ptrdiff_t"),
+    message,
+    hoist,
+    scope
+  )
   invisible(TRUE)
 }
 
@@ -344,7 +363,22 @@ gemm <- function(
   context = "gemm"
 ) {
   assert_hoist_env(hoist)
-  assert_nonempty_blas_output(list(m, n), context)
+  assert_nonempty_blas_output(
+    m,
+    left,
+    if (opA == "N") 1L else 2L,
+    context,
+    hoist,
+    scope
+  )
+  assert_nonempty_blas_output(
+    n,
+    right,
+    if (opB == "N") 2L else 1L,
+    context,
+    hoist,
+    scope
+  )
   A_name <- ensure_blas_operand_name(left, hoist)
   B_name <- ensure_blas_operand_name(right, hoist)
 
@@ -391,7 +425,15 @@ gemv <- function(
   context = "gemv"
 ) {
   assert_hoist_env(hoist)
-  assert_nonempty_blas_output(out_dims, context)
+  output_dim <- if (transA == "N") m else n
+  assert_nonempty_blas_output(
+    output_dim,
+    A,
+    if (transA == "N") 1L else 2L,
+    context,
+    hoist,
+    scope
+  )
   A_name <- ensure_blas_operand_name(A, hoist)
   x_name <- ensure_blas_operand_name(x, hoist)
 
@@ -495,7 +537,14 @@ syrk <- function(
     k <- x_dims$cols
   }
   lda <- x_dims$rows
-  assert_nonempty_blas_output(list(n, n), context)
+  assert_nonempty_blas_output(
+    n,
+    X,
+    if (trans == "T") 2L else 1L,
+    context,
+    hoist,
+    scope
+  )
   X_name <- ensure_blas_operand_name(X, hoist)
 
   # Output is symmetric n x n matrix
