@@ -80,10 +80,16 @@ test_that("symbolic differing lengths get a runtime guard", {
     declare(type(a = double(n)), type(b = double(m)))
     a + b
   }
+  fsub <- as.character(r2f(fn))
+  expect_match(fsub, "size(a, kind=c_ptrdiff_t)", fixed = TRUE)
+  expect_match(fsub, "size(b, kind=c_ptrdiff_t)", fixed = TRUE)
   qfn <- quick(fn)
   expect_identical(qfn(c(1, 2), c(10, 20)), c(11, 22))
   # was: silent truncation to c(11, 22)
   expect_error(qfn(c(1, 2), c(10, 20, 30, 40)), "equal lengths")
+  # Runtime length one does not change an assumed-shape vector into a scalar.
+  expect_error(qfn(c(1, 2, 3), 10), "equal lengths")
+  expect_error(qfn(10, c(1, 2, 3)), "equal lengths")
 })
 
 test_that("identical symbolic lengths stay guard-free and work", {
@@ -204,17 +210,6 @@ test_that("1x1 matrix with a symbolic-length vector keeps R's shape", {
   expect_error(qrev(c(1, 2, 3), matrix(2)), "matrix first dimension")
 })
 
-test_that("guard text is pinned (one snapshot per mechanism)", {
-  fn <- function(a, b) {
-    declare(type(a = double(n)), type(b = double(m)))
-    a + b
-  }
-  expect_translation_snapshots(
-    fn,
-    note = "Symbolic differing lengths emit one statement-level size guard."
-  )
-})
-
 test_that("fill constructors spread inside c()", {
   known <- function(x) {
     declare(type(x = double(3)))
@@ -240,6 +235,21 @@ test_that("fill constructors spread inside c()", {
     c(logical(3), x)
   }
   expect_quick_identical(logical_fill, list(c(TRUE, FALSE)))
+})
+
+test_that("symbolic fill spreading preserves pointer-sized lengths", {
+  fn <- function(x) {
+    declare(type(x = double(NA)))
+    c(numeric(length(x)), 1)
+  }
+  fsub <- as.character(r2f(fn))
+  expect_match(fsub, "integer(c_ptrdiff_t) :: tmp1_", fixed = TRUE)
+  expect_match(
+    fsub,
+    "tmp1_=1_c_ptrdiff_t, int(x__len_, kind=c_ptrdiff_t)",
+    fixed = TRUE
+  )
+  expect_quick_identical(fn, list(c(2, 4, 6)))
 })
 
 test_that("local closures can shadow fill constructors in c() and array()", {
@@ -310,6 +320,13 @@ test_that("matrix(scalar, m, n) materializes where an array is required", {
     t(matrix(1, 2, 3))
   }
   expect_quick_identical(transposed, list())
+})
+
+test_that("matrix() materializes direct non-scalar fill constructors", {
+  fn <- function() {
+    matrix(numeric(2), 2, 2)
+  }
+  expect_quick_identical(fn, list())
 })
 
 test_that("a closure's return expression materializes fills and matrix()", {
