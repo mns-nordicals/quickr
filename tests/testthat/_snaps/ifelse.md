@@ -113,12 +113,12 @@
         ! manifest end
       
       
-        if (size(a, 1) /= size((c/=0), 1)) then
+        if (size(a, 1, kind=c_ptrdiff_t) /= size((c/=0), 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
           return
         end if
-        if (size(b, 1) /= size((c/=0), 1)) then
+        if (size(b, 1, kind=c_ptrdiff_t) /= size((c/=0), 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
           return

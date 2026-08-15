@@ -88,7 +88,11 @@ var_storage_bytes <- function(var) {
   switch(
     var@mode,
     double = 8,
-    integer = 4,
+    integer = if (identical(var@integer_kind, "c_ptrdiff_t")) {
+      .Machine$sizeof.pointer
+    } else {
+      4
+    },
     complex = 16,
     logical = 4,
     raw = 1,
@@ -211,7 +215,7 @@ iso_c_binding_symbols <- function(
         switch(
           var@mode,
           double = "c_double",
-          integer = "c_int",
+          integer = var@integer_kind,
           complex = "c_double_complex",
           logical = if (isTRUE(logical_is_c_int(var))) "c_int",
           raw = "c_int8_t",
@@ -277,7 +281,7 @@ emit_decl_line <- function(
   type <- switch(
     var@mode,
     double = "real(c_double)",
-    integer = "integer(c_int)",
+    integer = glue("integer({var@integer_kind})"),
     complex = "complex(c_double_complex)",
     logical = if (logical_as_int(var)) "integer(c_int)" else "logical",
     raw = "integer(c_int8_t)",
@@ -386,7 +390,7 @@ r2f.scope <- function(scope, include_errors = FALSE) {
     type <- switch(
       var@mode,
       double = "real(c_double)",
-      integer = "integer(c_int)",
+      integer = glue("integer({var@integer_kind})"),
       complex = "complex(c_double_complex)",
       logical = if (logical_as_int(var)) "integer(c_int)" else "logical",
       raw = "integer(c_int8_t)",
