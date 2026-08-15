@@ -80,6 +80,15 @@ test_that("size integer division evaluates numeric operands before casting", {
   expect_identical(qfn(3.9, 1.9), fn(3.9, 1.9))
 })
 
+test_that("size integer division rounds negative quotients down", {
+  fn <- function(x, y) {
+    declare(type(x = integer(1)), type(y = integer(1)))
+    double((x %/% y) + 3L)
+  }
+
+  expect_quick_identical(fn, list(-3L, 2L))
+})
+
 test_that("size modulo uses the divisor's sign", {
   fn <- function(x, y) {
     declare(type(x = integer(1)), type(y = integer(1)))
