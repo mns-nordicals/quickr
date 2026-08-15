@@ -24,19 +24,7 @@ skip_on_cran()
 # 2^31 (%/% in the real domain), descending ranges, TRUE/FALSE arithmetic,
 # and equal positions so == has TRUE cells.
 #
-# The default run compiles a fixed representative sample of shape pairs;
-# set QUICKR_FULL_GRID=1 to compile every pair. Sampling is deterministic
-# (a tier per pair, no randomness) so failures always reproduce.
-# Compile-error cells never reach gfortran and always run.
-
-run_full_grid <- Sys.getenv("QUICKR_FULL_GRID") %in%
-  c("1", "true", "TRUE", "yes")
-
-skip_unless_full_grid <- function() {
-  if (!run_full_grid) {
-    skip("representative sample only; set QUICKR_FULL_GRID=1 for the full grid")
-  }
-}
+# Every intended shape pair runs in the standard non-CRAN suite.
 
 # --- Axes ---------------------------------------------------------------
 
@@ -356,29 +344,6 @@ grid_pair_verdict <- function(sa, sb) {
   grid_cell_verdict(sa, sb, "add")
 }
 
-# Which shape pairs compile in the default run. Every non-error pair must
-# be listed: adding a shape without deciding its tier is an error.
-grid_pair_tiers <- c(
-  "scl.scl" = "full",
-  "scl.vec3" = "core",
-  "scl.vec4" = "full",
-  "scl.mat32" = "full",
-  "scl.mat11" = "full",
-  "scl.sym" = "full",
-  "vec3.vec3" = "core",
-  "vec3.mat32" = "core",
-  "vec3.mat11" = "full",
-  "vec3.sym" = "core",
-  "vec4.vec4" = "full",
-  "vec4.mat11" = "full",
-  "vec4.sym" = "full",
-  "mat32.mat32" = "core",
-  "mat32.sym" = "core",
-  "mat11.mat11" = "full",
-  "mat11.sym" = "full",
-  "sym.sym" = "core"
-)
-
 # --- Oracle comparison --------------------------------------------------
 
 # suppressWarnings: R deprecation-warns on 1x1-array-vs-vector recycling
@@ -416,14 +381,9 @@ for (i in seq_along(grid_pair_names)) {
         return() # handled in the compile-error section below
       }
       pair_id <- paste0(sa, ".", sb)
-      tier <- grid_pair_tiers[[pair_id]]
-      stopifnot(tier %in% c("core", "full"))
 
       for (family in names(grid_op_families)) {
         test_that(paste0("elementwise grid ", pair_id, " [", family, "]"), {
-          if (identical(tier, "full")) {
-            skip_unless_full_grid()
-          }
           fn <- make_grid_pair_fn(sa, sb, family)
           dll_paths_before <- loaded_dll_paths()
           on.exit(cleanup_new_quick_dlls(dll_paths_before), add = TRUE)
@@ -811,7 +771,6 @@ test_that("ifelse grid: symbolic branch lengths get a runtime guard", {
 })
 
 test_that("ifelse grid: matrix test shapes the result", {
-  skip_unless_full_grid()
   src <- paste0(
     "function(tm, ym, nm, yi, pd) {\n",
     "  declare(\n",
