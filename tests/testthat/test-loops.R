@@ -110,8 +110,8 @@ test_that("single-statement while/repeat bodies re-run their hoisted statements"
   # loop would freeze the body's work at its first evaluation. `for` is
   # covered in test-for-iterables.R.
   #
-  # Run-tested only via the snapshots: a regression in either would
-  # compute the product once before the loop and never terminate.
+  # The repeat variant cannot terminate; execute the finite while variant
+  # to cover the generated loop as well as its translation.
   # fmt: skip
   squarings_while <- function(m) {
     declare(type(m = double(2, 2)))
@@ -120,6 +120,7 @@ test_that("single-statement while/repeat bodies re-run their hoisted statements"
   }
 
   expect_translation_snapshots(squarings_while)
+  expect_quick_identical(squarings_while, list(diag(2) * 2))
 
   # fmt: skip
   squarings_repeat <- function(m) {

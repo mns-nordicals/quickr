@@ -131,6 +131,22 @@ test_that("&& and || require length-1 operands, like R", {
   expect_error(quick(numeric_and), "logical operands")
 })
 
+test_that("&& and || accept one-element matrices", {
+  matrix_and <- function(x, y) {
+    declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
+    x && y
+  }
+  matrix_or <- function(x, y) {
+    declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
+    x || y
+  }
+
+  true <- matrix(TRUE, 1, 1)
+  false <- matrix(FALSE, 1, 1)
+  expect_quick_identical(matrix_and, list(true, true), list(true, false))
+  expect_quick_identical(matrix_or, list(false, false), list(false, true))
+})
+
 test_that("&& and || short-circuit like R's scalar operators", {
   # The right operand indexes past the end of x whenever the left side
   # already decides; R never evaluates it.
@@ -154,6 +170,18 @@ test_that("&& and || short-circuit like R's scalar operators", {
   }
   expect_quick_identical(or_guarded, list(TRUE, c(1, 2), 9L))
   expect_quick_identical(or_guarded, list(FALSE, c(-1, 2), 2L))
+
+  shadowed_abs <- function() {
+    calls <- 0L
+    abs <- function() {
+      calls <<- calls + 1L
+      TRUE
+    }
+    and_result <- FALSE && abs()
+    or_result <- TRUE || abs()
+    list(and_result = and_result, or_result = or_result, calls = calls)
+  }
+  expect_quick_identical(shadowed_abs, list())
 })
 
 test_that("while re-evaluates hoisted condition code every iteration", {
