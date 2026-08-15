@@ -733,7 +733,7 @@ triangular_solve <- function(
     input_names = c(A_name, B_input_name),
     expected_dims = B@value@dims,
     context = context,
-    allow_alias = B_input_name,
+    allow_alias = setdiff(B_input_name, A_name),
     mode = B@value@mode %||% "double"
   )
   hoist$emit(glue("{out$name} = {B}"))

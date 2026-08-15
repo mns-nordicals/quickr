@@ -693,6 +693,18 @@ test_that("forwardsolve and backsolve match R", {
     backsolve(L, b, upper.tri = FALSE)
   }
 
+  back_alias_coefficient <- function(A) {
+    declare(type(A = double(4, 4)))
+    A <- backsolve(A, A, transpose = TRUE)
+    A
+  }
+
+  forward_alias_coefficient <- function(A) {
+    declare(type(A = double(4, 4)))
+    A <- forwardsolve(A, A, transpose = TRUE)
+    A
+  }
+
   set.seed(11)
   base <- matrix(rnorm(16), nrow = 4)
   L <- base
@@ -712,4 +724,6 @@ test_that("forwardsolve and backsolve match R", {
   expect_quick_equal(forward_upper, list(U = U, b = b_vec))
   expect_quick_equal(forward_transpose, list(L = L, b = b_vec))
   expect_quick_equal(back_lower, list(L = L, b = b_vec))
+  expect_quick_equal(back_alias_coefficient, list(A = U))
+  expect_quick_equal(forward_alias_coefficient, list(A = L))
 })
