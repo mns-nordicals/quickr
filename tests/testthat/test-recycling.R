@@ -237,6 +237,55 @@ test_that("fill constructors spread inside c()", {
   expect_quick_identical(logical_fill, list(c(TRUE, FALSE)))
 })
 
+test_that("symbolic fill spreading preserves pointer-sized lengths", {
+  fn <- function(x) {
+    declare(type(x = double(NA)))
+    c(numeric(length(x)), 1)
+  }
+  fsub <- as.character(r2f(fn))
+  expect_match(fsub, "integer(c_ptrdiff_t) :: tmp1_", fixed = TRUE)
+  expect_match(
+    fsub,
+    "tmp1_=1_c_ptrdiff_t, int(x__len_, kind=c_ptrdiff_t)",
+    fixed = TRUE
+  )
+  expect_quick_identical(fn, list(c(2, 4, 6)))
+})
+
+test_that("local closures can shadow fill constructors in c() and array()", {
+  numeric_shadow <- function() {
+    numeric <- function() c(1, 2)
+    combined <- c(numeric(), 3)
+    reshaped <- array(numeric(), dim = c(1L, 2L))
+    list(combined = combined, reshaped = reshaped)
+  }
+  expect_quick_identical(numeric_shadow, list())
+
+  integer_shadow <- function() {
+    integer <- function() c(1L, 2L)
+    combined <- c(integer(), 3L)
+    reshaped <- array(integer(), dim = c(1L, 2L))
+    list(combined = combined, reshaped = reshaped)
+  }
+  expect_quick_identical(integer_shadow, list())
+
+  double_shadow <- function() {
+    double <- function() c(1, 2)
+    combined <- c(double(), 3)
+    reshaped <- array(double(), dim = c(1L, 2L))
+    list(combined = combined, reshaped = reshaped)
+  }
+  expect_quick_identical(double_shadow, list())
+
+  logical_shadow <- function() {
+    logical <- function() c(1L, 2L)
+    combined <- c(logical(), 3L)
+    reshaped <- array(logical(), dim = c(1L, 2L))
+    list(combined = combined, reshaped = reshaped)
+  }
+  expect_quick_identical(logical_shadow, list())
+})
+
 test_that("fill constructors materialize where an array is required", {
   # A fill reaching c() through an expression is a real array, not a
   # scalar literal with claimed dims (which emitted one element where the
