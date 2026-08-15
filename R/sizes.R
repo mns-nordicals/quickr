@@ -156,9 +156,26 @@ substitute_declared_sizes <- function(e) {
 }
 
 
-unwrap_scalar_size_expr <- function(r) {
+reject_local_closure_size_call <- function(r, scope) {
+  if (!is.call(r) || !is.symbol(r[[1L]]) || is.null(scope)) {
+    return(invisible(NULL))
+  }
+  name <- as.character(r[[1L]])
+  if (inherits(get0(name, scope), LocalClosure)) {
+    stop(
+      "local closure `",
+      name,
+      "()` cannot determine a result size before the generated function runs",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
+unwrap_scalar_size_expr <- function(r, scope) {
   repeat {
     r <- unwrap_parens(r)
+    reject_local_closure_size_call(r, scope)
     if (!is_call(r, quote(c)) || length(r) != 2L) {
       return(r)
     }
@@ -167,7 +184,7 @@ unwrap_scalar_size_expr <- function(r) {
 }
 
 r2size <- function(r, scope, preserve_numeric = FALSE) {
-  r <- unwrap_scalar_size_expr(r)
+  r <- unwrap_scalar_size_expr(r, scope)
 
   sanitize_dim <- function(dim) {
     if (is.symbol(dim) || is.call(dim)) {
@@ -251,7 +268,7 @@ r2size <- function(r, scope, preserve_numeric = FALSE) {
             if (length(r) != 2L) {
               stop("as.integer() in a size expression expects one argument")
             }
-            inner_expr <- unwrap_scalar_size_expr(r[[2L]])
+            inner_expr <- unwrap_scalar_size_expr(r[[2L]], scope)
             # A scalar literal is coerced here rather than recursed into:
             # r2size() rejects a non-whole double (and a bare logical), which
             # are exactly the cases as.integer() exists to handle.
