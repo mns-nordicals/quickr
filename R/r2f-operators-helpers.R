@@ -732,7 +732,9 @@ check_assignment_compatible <- function(
     if (is.null(hoist)) {
       next
     }
-    if (dim_guard_spellable(t_dim, scope) && dim_guard_spellable(v_dim, scope)) {
+    if (
+      dim_guard_spellable(t_dim, scope) && dim_guard_spellable(v_dim, scope)
+    ) {
       condition <- glue(
         "({dims2f(list(t_dim), scope)}) /= ({dims2f(list(v_dim), scope)})"
       )
