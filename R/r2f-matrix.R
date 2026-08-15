@@ -60,7 +60,8 @@ register_r2f_handler(
         scope,
         left = left,
         right = right,
-        left_axis = if (left_trans == "N") 2L else 1L
+        left_axis = if (left_trans == "N") 2L else 1L,
+        checker = check_blas_dims
       )
       return(gemv(
         transA = left_trans,
@@ -87,7 +88,8 @@ register_r2f_handler(
         scope,
         left = left,
         right = right,
-        right_axis = if (transA == "N") 2L else 1L
+        right_axis = if (transA == "N") 2L else 1L,
+        checker = check_blas_dims
       )
       return(gemv(
         transA = transA,
@@ -127,7 +129,8 @@ register_r2f_handler(
         1L
       } else {
         2L
-      }
+      },
+      checker = check_blas_dims
     )
 
     # Matrix-Matrix
@@ -894,7 +897,8 @@ crossprod_like <- function(
     left = x,
     right = y,
     left_axis = if (opA == "N") 2L else 1L,
-    right_axis = if (opB == "N") 1L else 2L
+    right_axis = if (opB == "N") 1L else 2L,
+    checker = check_blas_dims
   )
 
   m <- x_eff$rows
