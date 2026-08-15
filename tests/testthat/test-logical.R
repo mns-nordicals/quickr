@@ -110,3 +110,37 @@ test_that("parentheses preserve logical precedence", {
   expect_quick_identical(fn_a, !!!cases)
   expect_quick_identical(fn_b, !!!cases)
 })
+
+test_that("&& and || require length-1 operands", {
+  vector_matrix_and <- function(x, y) {
+    declare(type(x = logical(2)), type(y = logical(2, 2)))
+    x && y
+  }
+  expect_error(quick(vector_matrix_and), "requires length-1 operands")
+
+  matrix_vector_or <- function(x, y) {
+    declare(type(x = logical(2, 2)), type(y = logical(2)))
+    x || y
+  }
+  expect_error(quick(matrix_vector_or), "requires length-1 operands")
+})
+
+test_that("&& and || accept one-element matrices", {
+  matrix_and <- function(x, y) {
+    declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
+    x && y
+  }
+  expect_quick_identical(
+    matrix_and,
+    list(matrix(TRUE, 1, 1), matrix(FALSE, 1, 1))
+  )
+
+  matrix_or <- function(x, y) {
+    declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
+    x || y
+  }
+  expect_quick_identical(
+    matrix_or,
+    list(matrix(FALSE, 1, 1), matrix(TRUE, 1, 1))
+  )
+})
