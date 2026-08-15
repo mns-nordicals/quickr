@@ -738,7 +738,7 @@ check_assignment_compatible <- function(
       )
     } else if (!is.null(target@name) && !is.null(value@name)) {
       condition <- glue(
-        "size({target@name}, {axis}) /= size({value@name}, {axis})"
+        "size({target@name}, {axis}, kind=c_ptrdiff_t) /= size({value@name}, {axis}, kind=c_ptrdiff_t)"
       )
     } else {
       stop(

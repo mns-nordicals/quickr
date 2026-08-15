@@ -90,7 +90,13 @@ test_that("reassignment from a deferred-shape local gets a runtime guard", {
   }
 
   code <- as.character(r2f(fn))
-  expect_match(code, "size\\(a, 1\\) /= size\\(x, 1\\)")
+  expect_match(
+    code,
+    paste0(
+      "size\\(a, 1, kind=c_ptrdiff_t\\) /= ",
+      "size\\(x, 1, kind=c_ptrdiff_t\\)"
+    )
+  )
 
   qfn := quick(fn)
   expect_identical(qfn(c(1, 2), c(3, 4)), c(3, 4))
