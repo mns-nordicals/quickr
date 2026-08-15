@@ -562,11 +562,17 @@ dims2f_eval_base_env[["["]] <- function(x, i) {
   }
 }
 dims2f_eval_base_env[["min"]] <- function(...) {
-  args <- list(...)
+  args <- map_chr(
+    list(...),
+    \(arg) glue("real({arg}, kind=c_double)")
+  )
   glue("min({str_flatten_commas(args)})")
 }
 dims2f_eval_base_env[["max"]] <- function(...) {
-  args <- list(...)
+  args <- map_chr(
+    list(...),
+    \(arg) glue("real({arg}, kind=c_double)")
+  )
   glue("max({str_flatten_commas(args)})")
 }
 
@@ -574,7 +580,10 @@ dims2f_needs_final_size_cast <- function(e) {
   if (!is.call(e)) {
     return(FALSE)
   }
-  if (as.character(e[[1L]]) %in% c("/", "%/%", "%%", "^", "as.integer")) {
+  if (
+    as.character(e[[1L]]) %in%
+      c("/", "%/%", "%%", "^", "as.integer", "min", "max")
+  ) {
     return(TRUE)
   }
   any(vapply(as.list(e)[-1L], dims2f_needs_final_size_cast, logical(1)))

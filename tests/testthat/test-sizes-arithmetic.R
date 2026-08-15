@@ -129,6 +129,36 @@ test_that("size floor division remains real before outer arithmetic", {
   )
 })
 
+test_that("size min and max use one numeric domain", {
+  min_fn <- function(n, x) {
+    declare(
+      type(n = integer(1)),
+      type(x = double(min(n %/% 2L, 5L, 6L)))
+    )
+    sum(x)
+  }
+  max_fn <- function(n, x) {
+    declare(
+      type(n = integer(1)),
+      type(x = double(max(n %/% 2L, 5L, 6L)))
+    )
+    sum(x)
+  }
+
+  min_code <- as.character(r2f(min_fn))
+  max_code <- as.character(r2f(max_fn))
+  expect_match(min_code, "min(real(", fixed = TRUE)
+  expect_match(max_code, "max(real(", fixed = TRUE)
+  for (code in list(min_code, max_code)) {
+    expect_match(code, "real(5, kind=c_double)", fixed = TRUE)
+    expect_match(code, "real(6, kind=c_double)", fixed = TRUE)
+    expect_match(code, "kind=c_ptrdiff_t", fixed = TRUE)
+  }
+
+  expect_quick_identical(min_fn, list(8L, as.double(1:4)))
+  expect_quick_identical(max_fn, list(8L, as.double(1:6)))
+})
+
 test_that("size modulo uses the divisor's sign", {
   fn <- function(x, y) {
     declare(type(x = integer(1)), type(y = integer(1)))
