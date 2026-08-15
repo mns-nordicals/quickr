@@ -196,18 +196,18 @@ guard_dim_f <- function(dim, operand, axis = NULL) {
     return(as.character(as.integer(dim)))
   }
   if (is.null(axis)) {
-    glue("size({operand})")
+    glue("size({operand}, kind=c_ptrdiff_t)")
   } else {
-    glue("size({operand}, {axis})")
+    glue("size({operand}, {axis}, kind=c_ptrdiff_t)")
   }
 }
 
-# The one conformability policy, shared by elementwise ops, ifelse(), and
-# the BLAS/LAPACK lowerings: a statically known mismatch is a compile
-# error; dims that cannot be compared statically get a statement-level
-# runtime guard emitted before the consuming statement; provably equal
-# dims need nothing. Never warn-and-proceed. `axis` NULL compares the
-# operand's whole size (rank-1 operands).
+# Shared conformability guard emitter. `checker` supplies the caller's
+# static policy: elementwise operations require equal nonzero dimensions,
+# while BLAS/LAPACK callers use equality semantics that permit zero.
+# A statically known mismatch is a compile error; unknown dimensions get a
+# statement-level runtime guard; provably equal dimensions need nothing.
+# `axis` NULL compares the operand's whole size (rank-1 operands).
 #
 # `hoist` is always live: r2f() opens one per statement before dispatching
 # to a handler, and every caller forwards the one it received.
@@ -222,10 +222,11 @@ guard_conformable_dims <- function(
   left,
   right,
   left_axis = NULL,
-  right_axis = NULL
+  right_axis = NULL,
+  checker = check_elementwise_lengths
 ) {
-  stopifnot(is_string(message))
-  conform <- check_elementwise_lengths(left_dim, right_dim)
+  stopifnot(is_string(message), is.function(checker))
+  conform <- checker(left_dim, right_dim)
   if (!conform$ok) {
     stop(message, call. = FALSE)
   }
@@ -278,10 +279,12 @@ scalarize_matrix <- function(mat) {
 }
 
 # Reshape vector/matrix operands to match ranks for binary operations, and
-# enforce the elementwise conformability policy via guard_conformable_dims()
-# -- known-mismatched lengths are compile errors (R-style recycling is not
-# supported; scalar broadcast is native), lengths that cannot be compared
-# statically get a runtime size guard through `hoist`.
+# enforce the elementwise conformability policy via guard_conformable_dims():
+# known-mismatched lengths are compile errors (R-style recycling is not
+# supported), while unknown lengths get a runtime guard. Scalar broadcast
+# requires a value represented as scalar at translation time, such as
+# `double(1)`; an assumed-shape `double(NA)` remains a vector even when its
+# runtime length is one.
 #
 # `scalarize_one_by_one` mirrors R's split over length-1 arrays: arithmetic
 # recycles a 1x1 matrix against a vector of statically known length != 1

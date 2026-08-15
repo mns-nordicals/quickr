@@ -54,7 +54,7 @@
           weights = ((weights / sum(weights)) * size(weights))
         end if
         do i = 1, size(out)
-          if (size(x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i))) /= size(weights)) then
+          if (size(x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i)), kind=c_ptrdiff_t) /= size(weights, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
             return
