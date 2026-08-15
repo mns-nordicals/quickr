@@ -313,6 +313,25 @@ test_that("diag matches R for vectors, matrices, and sizes", {
   expect_quick_equal(diag_named_order, list(x = c(1, 2)))
 })
 
+test_that("diag sizes identities from length-one expressions", {
+  diag_c <- function() {
+    out <- diag(c(3L))
+    out
+  }
+  diag_parens <- function() {
+    out <- diag((3L))
+    out
+  }
+  diag_logical <- function() {
+    out <- diag(c(TRUE))
+    out
+  }
+
+  expect_quick_equal(diag_c, list())
+  expect_quick_equal(diag_parens, list())
+  expect_quick_equal(diag_logical, list())
+})
+
 test_that("diag handles missing x with nrow/ncol and 1x1 matrices", {
   diag_nrow <- function(n) {
     declare(type(n = integer(1)))

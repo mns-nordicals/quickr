@@ -715,14 +715,26 @@ register_r2f_handler(
     # length-1 vector takes it too (R: diag(c(3)) is the 3x3 identity).
     # The size comes from x's *value*, and the result is always double.
     if (!has_nrow && !has_ncol && passes_as_scalar(x@value)) {
+      size_arg <- x_arg
+      repeat {
+        size_arg <- unwrap_parens(size_arg)
+        if (!is_call(size_arg, quote(c)) || length(size_arg) != 2L) {
+          break
+        }
+        size_arg <- size_arg[[2L]]
+      }
       # R sizes the identity with as.integer(x), so a double or logical `x`
       # is fine and truncates toward zero. Coerce in the size expression
       # rather than requiring an integer, so diag(n) works whatever the
       # caller declared. An integer `x` needs no wrapper.
       size_arg <- if (identical(x@value@mode, "integer")) {
-        x_arg
+        size_arg
       } else if (x@value@mode %in% c("double", "logical")) {
-        call("as.integer", x_arg)
+        if (is.atomic(size_arg) && length(size_arg) == 1L) {
+          as.integer(size_arg)
+        } else {
+          call("as.integer", size_arg)
+        }
       } else {
         stop(
           "diag(x) with a length-1 `x` builds an identity matrix of size ",
