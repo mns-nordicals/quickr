@@ -55,6 +55,14 @@
           allocate(btmp4_(a__dim_2_))
           allocate(btmp5_(a__dim_2_, 2))
           allocate(btmp8_(int((min(real(a__dim_1_, kind=c_double), real(a__dim_2_, kind=c_double))), kind=c_ptrdiff_t), 1))
+          if (size(a, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
+            return
+          end if
+          if (size(a, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
+            return
+          end if
           btmp1_ = a
           btmp2_ = 0.0_c_double
           btmp2_(1:a__dim_1_, 1) = b
@@ -219,6 +227,14 @@
           allocate(btmp4_(a__dim_2_))
           allocate(btmp5_(a__dim_2_, 2))
           allocate(btmp8_(int((min(real(a__dim_1_, kind=c_double), real(a__dim_2_, kind=c_double))), kind=c_ptrdiff_t), b__dim_2_))
+          if (size(a, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
+            return
+          end if
+          if (size(a, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
+            return
+          end if
           btmp1_ = a
           btmp2_ = 0.0_c_double
           btmp2_(1:a__dim_1_, 1:b__dim_2_) = b
@@ -232,10 +248,12 @@
             return
           end if
           btmp8_ = 0.0_c_double
-          call dqrcf(btmp1_, int(a__dim_1_, kind=c_int), btmp6_, btmp3_, btmp2_, int(b__dim_2_, kind=c_int), btmp8_, btmp9_)
-          if (btmp9_ /= 0_c_int) then
-            call quickr_set_error_msg("exact singularity in 'qr.coef'")
-            return
+          if (int(b__dim_2_, kind=c_int) > 0_c_int) then
+            call dqrcf(btmp1_, int(a__dim_1_, kind=c_int), btmp6_, btmp3_, btmp2_, int(b__dim_2_, kind=c_int), btmp8_, btmp9_)
+            if (btmp9_ /= 0_c_int) then
+              call quickr_set_error_msg("exact singularity in 'qr.coef'")
+              return
+            end if
           end if
           out_ = 0.0_c_double
           do btmp11_ = 1_c_int, int(b__dim_2_, kind=c_int)
