@@ -137,6 +137,59 @@ test_that("%*% returns zeros for a symbolic empty contracted dimension", {
   )
 })
 
+test_that("symmetric products return zeros for known empty contractions", {
+  cross_vec <- function(x) {
+    declare(type(x = double(0)))
+    crossprod(x)
+  }
+  cross_mat <- function(x) {
+    declare(type(x = double(0, 2)))
+    crossprod(x)
+  }
+  tcross_mat <- function(x) {
+    declare(type(x = double(2, 0)))
+    tcrossprod(x)
+  }
+  cross_symbolic <- function(x, n) {
+    declare(type(x = double(n, 2)), type(n = integer(1)))
+    crossprod(x)
+  }
+  tcross_symbolic <- function(x, n) {
+    declare(type(x = double(2, n)), type(n = integer(1)))
+    tcrossprod(x)
+  }
+
+  expect_quick_identical(cross_vec, list(double()))
+  expect_quick_identical(cross_mat, list(matrix(double(), 0, 2)))
+  expect_quick_identical(tcross_mat, list(matrix(double(), 2, 0)))
+  expect_quick_identical(cross_symbolic, list(matrix(double(), 0, 2), 0L))
+  expect_quick_identical(tcross_symbolic, list(matrix(double(), 2, 0), 0L))
+})
+
+test_that("matrix BLAS rejects known zero-sized outputs", {
+  matrix_matrix <- function(a, b) {
+    declare(type(a = double(0, 2)), type(b = double(2, 3)))
+    a %*% b
+  }
+  matrix_vector <- function(a, x) {
+    declare(type(a = double(0, 2)), type(x = double(2)))
+    a %*% x
+  }
+  tcross_vec <- function(x) {
+    declare(type(x = double(0)))
+    tcrossprod(x)
+  }
+  cross_mat <- function(x) {
+    declare(type(x = double(0, 0)))
+    crossprod(x)
+  }
+
+  expect_error(quick(matrix_matrix), "zero-sized outputs are not supported")
+  expect_error(quick(matrix_vector), "zero-sized outputs are not supported")
+  expect_error(quick(tcross_vec), "zero-sized outputs are not supported")
+  expect_error(quick(cross_mat), "zero-sized outputs are not supported")
+})
+
 test_that("NA dims are never treated as equal", {
   fn <- function(a, b) {
     declare(type(a = double(NA, NA)), type(b = double(NA, NA)))

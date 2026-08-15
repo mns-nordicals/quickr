@@ -190,6 +190,23 @@ assert_square_matrix <- function(dims, operand, context, hoist, scope) {
 
 # ---- BLAS emitters ----
 
+# Generated function results cannot currently represent zero-sized arrays.
+# Reject a statically known zero output before emitting a BLAS call with an
+# invalid leading dimension. A zero contracted dimension remains supported
+# when every output extent is nonzero.
+assert_nonempty_blas_output <- function(dims, context) {
+  stopifnot(is.list(dims), length(dims) > 0L, is_string(context))
+  has_zero_extent <- any(vapply(
+    dims,
+    function(dim) is_wholenumber(dim) && as.integer(dim) == 0L,
+    logical(1)
+  ))
+  if (has_zero_extent) {
+    stop(context, " zero-sized outputs are not supported", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
 # Check that destination dimensions match expected output dimensions.
 assert_dest_dims_compatible <- function(dest, expected_dims, context) {
   if (is.null(dest) || is.null(expected_dims)) {
@@ -327,6 +344,7 @@ gemm <- function(
   context = "gemm"
 ) {
   assert_hoist_env(hoist)
+  assert_nonempty_blas_output(list(m, n), context)
   A_name <- ensure_blas_operand_name(left, hoist)
   B_name <- ensure_blas_operand_name(right, hoist)
 
@@ -373,6 +391,7 @@ gemv <- function(
   context = "gemv"
 ) {
   assert_hoist_env(hoist)
+  assert_nonempty_blas_output(out_dims, context)
   A_name <- ensure_blas_operand_name(A, hoist)
   x_name <- ensure_blas_operand_name(x, hoist)
 
@@ -464,8 +483,6 @@ syrk <- function(
   context = "syrk"
 ) {
   assert_hoist_env(hoist)
-  X_name <- ensure_blas_operand_name(X, hoist)
-
   x_dims <- matrix_dims(X)
 
   # For trans = "T": C = t(X) %*% X, so C is k x k where k = ncol(X)
@@ -478,6 +495,8 @@ syrk <- function(
     k <- x_dims$cols
   }
   lda <- x_dims$rows
+  assert_nonempty_blas_output(list(n, n), context)
+  X_name <- ensure_blas_operand_name(X, hoist)
 
   # Output is symmetric n x n matrix
   writes_to_dest <- FALSE
@@ -500,9 +519,10 @@ syrk <- function(
     out_name <- out_var@name
   }
 
-  hoist$emit(glue(
+  blas_call <- glue(
     "call dsyrk('U', '{trans}', {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {X_name}, {blas_int(lda)}, 0.0_c_double, {out_name}, {blas_int(n)})"
-  ))
+  )
+  emit_blas_contraction(blas_call, out_name, k, hoist)
   symmetrize_upper_to_lower(out_name, n, hoist = hoist)
 
   out <- Fortran(out_name, out_var)
