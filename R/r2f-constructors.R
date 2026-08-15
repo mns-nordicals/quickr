@@ -60,9 +60,16 @@ r2f_handlers[["c"]] <- function(args, scope = NULL, ...) {
           call. = FALSE
         )
       }
-      spread_var <- spread_var %||% scope_unique_var(scope, "integer")
+      spread_var <- spread_var %||%
+        scope_unique_var(
+          scope,
+          "integer",
+          integer_kind = "c_ptrdiff_t"
+        )
       ff[[j]] <- Fortran(
-        glue("({ff[[j]]}, {spread_var}=1, int({len_f}))"),
+        glue(
+          "({ff[[j]]}, {spread_var}=1_c_ptrdiff_t, int({len_f}, kind=c_ptrdiff_t))"
+        ),
         ff[[j]]@value
       )
     }
