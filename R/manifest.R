@@ -568,17 +568,31 @@ dims2f_eval_base_env[["["]] <- function(x, i) {
 # Fortran min()/max() require operands of one type and kind. Normalize their
 # operands to c_double, then apply the single final extent cast in dims2f().
 dims2f_eval_base_env[["min"]] <- function(...) {
+  args <- list(...)
+  if (!length(args)) {
+    stop("min() size expressions require at least one argument", call. = FALSE)
+  }
   args <- map_chr(
-    list(...),
+    args,
     \(arg) glue("real({arg}, kind=c_double)")
   )
+  if (length(args) == 1L) {
+    return(args[[1L]])
+  }
   glue("min({str_flatten_commas(args)})")
 }
 dims2f_eval_base_env[["max"]] <- function(...) {
+  args <- list(...)
+  if (!length(args)) {
+    stop("max() size expressions require at least one argument", call. = FALSE)
+  }
   args <- map_chr(
-    list(...),
+    args,
     \(arg) glue("real({arg}, kind=c_double)")
   )
+  if (length(args) == 1L) {
+    return(args[[1L]])
+  }
   glue("max({str_flatten_commas(args)})")
 }
 

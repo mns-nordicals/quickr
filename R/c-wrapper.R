@@ -718,7 +718,11 @@ dims2c_expr <- function(
 
   if (op %in% c("min", "max")) {
     if (!length(args)) {
-      return("0")
+      stop(
+        op,
+        "() size expressions require at least one argument",
+        call. = FALSE
+      )
     }
     rendered <- lapply(
       args,
@@ -727,6 +731,9 @@ dims2c_expr <- function(
       c_hoist = c_hoist,
       preserve_numeric = preserve_numeric
     )
+    if (length(rendered) == 1L) {
+      return(rendered[[1L]])
+    }
     cmp <- if (identical(op, "min")) "<" else ">"
     reduce(rendered, \(a, b) glue("(({a}) {cmp} ({b}) ? ({a}) : ({b}))"))
   } else {

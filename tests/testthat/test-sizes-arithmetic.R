@@ -159,6 +159,42 @@ test_that("size min and max use one numeric domain", {
   expect_quick_identical(max_fn, list(8L, as.double(1:6)))
 })
 
+test_that("one-argument size min and max are identity operations", {
+  min_fn <- function(n, x) {
+    declare(type(n = integer(1)), type(x = double(min(n))))
+    sum(x)
+  }
+  max_fn <- function(n, x) {
+    declare(type(n = integer(1)), type(x = double(max(n))))
+    sum(x)
+  }
+
+  expect_quick_identical(min_fn, list(3L, as.double(1:3)))
+  expect_quick_identical(max_fn, list(4L, as.double(1:4)))
+})
+
+test_that("zero-argument size min and max fail at translation", {
+  min_fn <- function(x) {
+    declare(type(x = double(min())))
+    sum(x)
+  }
+  max_fn <- function(x) {
+    declare(type(x = double(max())))
+    sum(x)
+  }
+
+  expect_error(
+    quick(min_fn),
+    "min() size expressions require at least one argument",
+    fixed = TRUE
+  )
+  expect_error(
+    quick(max_fn),
+    "max() size expressions require at least one argument",
+    fixed = TRUE
+  )
+})
+
 test_that("size modulo uses the divisor's sign", {
   fn <- function(x, y) {
     declare(type(x = integer(1)), type(y = integer(1)))
