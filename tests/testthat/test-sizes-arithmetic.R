@@ -178,6 +178,29 @@ test_that("size powers use the double domain before casting", {
   expect_quick_identical(constant, list())
 })
 
+test_that("size powers retain integer exponent type", {
+  fn <- function(x, exponent, scale) {
+    declare(
+      type(x = integer(1)),
+      type(exponent = integer(1)),
+      type(scale = integer(1))
+    )
+    out <- double(as.integer((x^exponent) * scale) + 10L)
+    for (i in seq_len(length(out))) {
+      out[i] <- as.double(i)
+    }
+    out
+  }
+
+  code <- r2f(fn)
+  expect_match(as.character(code), "**(exponent)", fixed = TRUE)
+  expect_false(
+    grepl("real(exponent, kind=c_double)", as.character(code), fixed = TRUE)
+  )
+
+  expect_quick_identical(fn, list(-2L, -1L, 4L))
+})
+
 test_that("dim/length/nrow/ncol are supported in allocation sizes", {
   vec <- function(x) {
     declare(type(x = double(NA)))

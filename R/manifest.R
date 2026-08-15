@@ -518,9 +518,7 @@ dims2f_eval_base_env[["%%"]] <- function(e1, e2) {
   )
 }
 dims2f_eval_base_env[["^"]] <- function(e1, e2) {
-  glue(
-    "(real({e1}, kind=c_double))**(real({e2}, kind=c_double))"
-  )
+  glue("(real({e1}, kind=c_double))**({e2})")
 }
 dims2f_eval_base_env[["abs"]] <- function(x) glue("abs({x})")
 # Fortran INT() truncates toward zero, like as.integer() in R.
