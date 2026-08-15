@@ -97,9 +97,26 @@ test_that("size modulo uses the divisor's sign", {
 
   code <- r2f(fn)
   expect_match(as.character(code), "modulo(", fixed = TRUE)
-  expect_match(code@c_bridge, "floor(", fixed = TRUE)
+  expect_match(code@c_bridge, "fmod(fmod(", fixed = TRUE)
 
   expect_quick_identical(fn, list(-3L, 2L))
+})
+
+test_that("size modulo avoids cancellation in the C bridge", {
+  fn <- function(x, y) {
+    declare(type(x = double(1)), type(y = double(1)))
+    out <- double(as.integer((x %% y) * 20) + 10L)
+    for (i in seq_len(length(out))) {
+      out[i] <- as.double(i)
+    }
+    out
+  }
+
+  code <- r2f(fn)
+  expect_match(code@c_bridge, "fmod(fmod(", fixed = TRUE)
+  expect_match(code@c_bridge, "#include <math.h>", fixed = TRUE)
+
+  expect_quick_identical(fn, list(1, 0.1), list(1, -0.1))
 })
 
 test_that("size powers use the double domain before casting", {

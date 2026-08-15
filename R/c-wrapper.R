@@ -163,7 +163,8 @@ make_c_bridge <- function(
 
   c_args <- paste("SEXP", names(formals(closure)), collapse = ", ")
   needs_rmath <- any(grepl("R_pow(", c_body, fixed = TRUE))
-  needs_math <- any(grepl("floor(", c_body, fixed = TRUE))
+  needs_math <- any(grepl("floor(", c_body, fixed = TRUE)) ||
+    any(grepl("fmod(", c_body, fixed = TRUE))
   c_body <- as_glue(str_flatten_lines(c_body))
 
   c_func_def <- glue("SEXP {fsub@name}_(SEXP _args) {c_block(c_body)}")
@@ -708,7 +709,8 @@ dims2c_expr <- function(
       `/` = glue("((double)({e1}) / (double)({e2}))"),
       `%/%` = glue("floor((double)({e1}) / (double)({e2}))"),
       `%%` = glue(
-        "(({e1}) - ({e2}) * floor((double)({e1}) / (double)({e2})))"
+        "fmod(fmod((double)({e1}), (double)({e2})) + ",
+        "(double)({e2}), (double)({e2}))"
       ),
       `^` = glue("R_pow((double)({e1}), (double)({e2}))")
     ))
