@@ -337,6 +337,30 @@ test_that("diag sizes identities from length-one expressions", {
   expect_quick_equal(diag_computed, list())
 })
 
+test_that("diag size folding rejects shadowed local closures", {
+  shadow_c <- function() {
+    c <- function(x) 2L
+    out <- diag(c(3L))
+    out
+  }
+  expect_error(
+    quick(shadow_c),
+    "local closure `c()` cannot determine a result size",
+    fixed = TRUE
+  )
+
+  shadow_abs <- function() {
+    abs <- function(x) 2L
+    out <- diag(abs(-3L))
+    out
+  }
+  expect_error(
+    quick(shadow_abs),
+    "local closure `abs()` cannot determine a result size",
+    fixed = TRUE
+  )
+})
+
 test_that("diag handles missing x with nrow/ncol and 1x1 matrices", {
   diag_nrow <- function(n) {
     declare(type(n = integer(1)))
