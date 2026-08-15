@@ -25,6 +25,8 @@ value — never a different value.
 
 > `quick(f)(x)` either returns exactly what `f(x)` returns — same values,
 > same `typeof()`, same shape — or raises an error. Never a third thing.
+> The unchecked `NA` inputs and out-of-bounds runtime subscripts documented
+> below are outside this contract and have undefined behavior.
 
 When quickr cannot reproduce R's behavior, it refuses. It prefers to
 refuse at compile time, when `quick()` is called; when the decision
