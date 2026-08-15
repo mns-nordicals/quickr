@@ -326,10 +326,15 @@ test_that("diag sizes identities from length-one expressions", {
     out <- diag(c(TRUE))
     out
   }
+  diag_computed <- function() {
+    out <- diag(abs(-3L))
+    out
+  }
 
   expect_quick_equal(diag_c, list())
   expect_quick_equal(diag_parens, list())
   expect_quick_equal(diag_logical, list())
+  expect_quick_equal(diag_computed, list())
 })
 
 test_that("diag handles missing x with nrow/ncol and 1x1 matrices", {

@@ -156,7 +156,19 @@ substitute_declared_sizes <- function(e) {
 }
 
 
+unwrap_scalar_size_expr <- function(r) {
+  repeat {
+    r <- unwrap_parens(r)
+    if (!is_call(r, quote(c)) || length(r) != 2L) {
+      return(r)
+    }
+    r <- r[[2L]]
+  }
+}
+
 r2size <- function(r, scope) {
+  r <- unwrap_scalar_size_expr(r)
+
   sanitize_dim <- function(dim) {
     if (is.symbol(dim) || is.call(dim)) {
       return(r2size(dim, scope))
@@ -213,7 +225,7 @@ r2size <- function(r, scope) {
       language = {
         op <- as.character(r[[1]])
 
-        if (op %in% c("+", "-", "/", "*", "^", "%/%", "%%")) {
+        if (op %in% c("+", "-", "/", "*", "^", "%/%", "%%", "abs")) {
           args <- as.list(r)[-1]
           args <- lapply(args, r2size, scope)
           if (anyNA(rapply(args, as.list))) {
@@ -232,16 +244,21 @@ r2size <- function(r, scope) {
             if (length(r) != 2L) {
               stop("as.integer() in a size expression expects one argument")
             }
-            # A numeric literal is coerced here rather than recursed into:
-            # r2size() rejects a non-whole double, which is exactly the
-            # case as.integer() exists to handle.
-            if (is.numeric(r[[2L]]) && length(r[[2L]]) == 1L) {
-              return(as.integer(r[[2L]]))
+            inner_expr <- unwrap_scalar_size_expr(r[[2L]])
+            # A scalar literal is coerced here rather than recursed into:
+            # r2size() rejects a non-whole double (and a bare logical), which
+            # are exactly the cases as.integer() exists to handle.
+            if (
+              is.atomic(inner_expr) &&
+                typeof(inner_expr) %in% c("logical", "integer", "double") &&
+                length(inner_expr) == 1L
+            ) {
+              return(as.integer(inner_expr))
             }
             # An explicit coercion is exactly what the "not an integer"
             # warning asks for, so don't also warn about the operand.
             inner <- withCallingHandlers(
-              r2size(r[[2L]], scope),
+              r2size(inner_expr, scope),
               warning = function(w) {
                 if (
                   grepl(
