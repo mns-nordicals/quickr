@@ -8,10 +8,14 @@
 # double(k), numeric(k). These lower to a single scalar literal carrying
 # array dims, so splicing contexts must spread them explicitly.
 # Used by: c(), array()
-is_fill_constructor_call <- function(e) {
-  is.call(e) &&
-    is.symbol(e[[1L]]) &&
-    as.character(e[[1L]]) %in% c("logical", "integer", "double", "numeric")
+is_fill_constructor_call <- function(e, scope) {
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  name <- as.character(e[[1L]])
+  name %in%
+    c("logical", "integer", "double", "numeric") &&
+    (is.null(scope) || !inherits(scope[[name]], LocalClosure))
 }
 
 # Name of the call one frame above the current handler ("" at top level).
@@ -44,7 +48,7 @@ r2f_handlers[["c"]] <- function(args, scope = NULL, ...) {
   mode <- promoted$mode
   # Fill constructors are one scalar literal claiming length k; spread them
   # as implied-dos so the emitted element count matches the claimed length.
-  fill_idx <- which(map_lgl(args, is_fill_constructor_call))
+  fill_idx <- which(map_lgl(args, is_fill_constructor_call, scope = scope))
   if (length(fill_idx)) {
     spread_var <- NULL
     for (j in fill_idx) {
@@ -383,7 +387,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       }
       shape <- glue("int([{dims_f}])")
 
-      is_fill_constructor <- is_fill_constructor_call(args$data)
+      is_fill_constructor <- is_fill_constructor_call(args$data, scope)
 
       axis_terms <- vapply(
         target_dims,
