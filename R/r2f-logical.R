@@ -176,11 +176,17 @@ register_r2f_handler(
 # && and || are R's *scalar* control operators: operands must be length 1
 # (R errors otherwise), and the right operand is evaluated only when the
 # left side does not already decide the answer.
+andor_operand_is_length_one <- function(x) {
+  passes_as_scalar(x@value) ||
+    x@value@rank > 0L &&
+      all(vapply(x@value@dims, dim_is_one, logical(1L)))
+}
+
 check_andor_operand <- function(x, op) {
   if (is.null(x@value) || !identical(x@value@mode, "logical")) {
     stop("`", op, "` requires logical operands", call. = FALSE)
   }
-  if (!passes_as_scalar(x@value)) {
+  if (!andor_operand_is_length_one(x)) {
     stop(
       "`",
       op,
@@ -193,12 +199,35 @@ check_andor_operand <- function(x, op) {
   invisible(TRUE)
 }
 
+scalarize_andor_operand <- function(x, op, hoist) {
+  check_andor_operand(x, op)
+  if (passes_as_scalar(x@value)) {
+    return(booleanize_logical_as_int(x))
+  }
+  if (is.null(hoist)) {
+    stop("internal error: `", op, "` requires hoist context", call. = FALSE)
+  }
+
+  if (isTRUE(x@logical_booleanized)) {
+    tmp <- hoist$declare_tmp(mode = "logical", dims = x@value@dims)
+    hoist$emit(glue("{tmp@name} = {x}"))
+    x <- Fortran(tmp@name, tmp)
+  } else {
+    x <- hoist_unless_name(x, hoist)
+  }
+  idxs <- rep("1", x@value@rank)
+  Fortran(
+    glue("{x}({str_flatten_commas(idxs)})"),
+    Variable("logical")
+  )
+}
+
 # TRUE when evaluating `e` eagerly is indistinguishable from R's lazy
 # right-operand evaluation: no side effects, no errors, no traps. A
 # conservative whitelist -- names, literals, and compositions of pure
 # non-trapping operations. Anything else (subscripts, %%/%/%, function
 # calls, ...) gets the conditional lowering.
-is_pure_scalar_condition <- function(e) {
+is_pure_scalar_condition <- function(e, scope) {
   if (is.symbol(e) || (is.atomic(e) && length(e) == 1L)) {
     return(TRUE)
   }
@@ -228,7 +257,15 @@ is_pure_scalar_condition <- function(e) {
   if (!op %in% pure_ops) {
     return(FALSE)
   }
-  all(vapply(as.list(e)[-1L], is_pure_scalar_condition, logical(1L)))
+  if (inherits(scope[[op]], LocalClosure)) {
+    return(FALSE)
+  }
+  all(vapply(
+    as.list(e)[-1L],
+    is_pure_scalar_condition,
+    logical(1L),
+    scope = scope
+  ))
 }
 
 compile_andor <- function(args, scope, ..., hoist = NULL) {
@@ -237,18 +274,16 @@ compile_andor <- function(args, scope, ..., hoist = NULL) {
 
   # R always evaluates the left operand: its hoists stay unconditional.
   left <- r2f(args[[1L]], scope, ..., hoist = hoist)
-  check_andor_operand(left, op)
-  left <- booleanize_logical_as_int(left)
+  left <- scalarize_andor_operand(left, op, hoist)
 
   f <- if (op == "&&") ".and." else ".or."
 
-  if (is_pure_scalar_condition(args[[2L]])) {
+  if (is_pure_scalar_condition(args[[2L]], scope)) {
     # Fortran may evaluate both operands of .and./.or.; for a pure right
     # operand that is indistinguishable from short-circuiting, so keep
     # the compact infix form.
     right <- r2f(args[[2L]], scope, ..., hoist = hoist)
-    check_andor_operand(right, op)
-    right <- booleanize_logical_as_int(right)
+    right <- scalarize_andor_operand(right, op, hoist)
     return(Fortran(glue("{left} {f} {right}"), Variable("logical")))
   }
 
@@ -260,8 +295,7 @@ compile_andor <- function(args, scope, ..., hoist = NULL) {
   }
   sub <- new_hoist(scope)
   right <- r2f(args[[2L]], scope, ..., hoist = sub)
-  check_andor_operand(right, op)
-  right <- booleanize_logical_as_int(right)
+  right <- scalarize_andor_operand(right, op, sub)
 
   tmp <- hoist$declare_tmp(mode = "logical", dims = NULL)
   hoist$emit(glue("{tmp@name} = {left}"))
