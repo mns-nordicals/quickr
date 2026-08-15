@@ -201,7 +201,11 @@ emit_elementwise_size_guard <- function(
   right_axis = left_axis
 ) {
   size_of <- function(x, axis) {
-    if (is.null(axis)) glue("size({x})") else glue("size({x}, {axis})")
+    if (is.null(axis)) {
+      glue("size({x}, kind=c_ptrdiff_t)")
+    } else {
+      glue("size({x}, {axis}, kind=c_ptrdiff_t)")
+    }
   }
   emit_quickr_error_if(
     glue("{size_of(left, left_axis)} /= {size_of(right, right_axis)}"),
@@ -239,7 +243,9 @@ scalarize_matrix <- function(mat) {
 # enforce the elementwise conformability policy: known-mismatched lengths
 # are compile errors (R-style recycling is not supported; scalar broadcast
 # is native), lengths that cannot be compared statically get a runtime
-# size guard through `hoist`.
+# size guard through `hoist`. Scalar broadcast requires a value represented
+# as scalar at translation time, such as `double(1)`. An assumed-shape
+# `double(NA)` remains a vector when its runtime length is one.
 #
 # `scalarize_one_by_one` mirrors R's split over length-1 arrays: arithmetic
 # recycles a 1x1 matrix against a vector of statically known length != 1

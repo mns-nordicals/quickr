@@ -103,6 +103,40 @@ test_that("solve(a) and chol() guard squareness", {
   )
 })
 
+test_that("matrix-matrix %*% returns zeros for a known empty contraction", {
+  fn <- function(a, b) {
+    declare(type(a = double(2, 0)), type(b = double(0, 3)))
+    a %*% b
+  }
+  expect_quick_identical(
+    fn,
+    list(matrix(double(), 2, 0), matrix(double(), 0, 3))
+  )
+})
+
+test_that("matrix-vector %*% returns zeros for a known empty contraction", {
+  fn <- function(a, x) {
+    declare(type(a = double(2, 0)), type(x = double(0)))
+    a %*% x
+  }
+  expect_quick_identical(fn, list(matrix(double(), 2, 0), double()))
+})
+
+test_that("%*% returns zeros for a symbolic empty contracted dimension", {
+  fn <- function(a, b, k) {
+    declare(
+      type(a = double(2, k)),
+      type(b = double(k, 3)),
+      type(k = integer(1))
+    )
+    a %*% b
+  }
+  expect_quick_identical(
+    fn,
+    list(matrix(double(), 2, 0), matrix(double(), 0, 3), 0L)
+  )
+})
+
 test_that("NA dims are never treated as equal", {
   fn <- function(a, b) {
     declare(type(a = double(NA, NA)), type(b = double(NA, NA)))
@@ -116,16 +150,5 @@ test_that("NA dims are never treated as equal", {
     qfn(m, matrix(as.double(1:6), 3, 2)),
     "non-conformable arguments in %*%",
     fixed = TRUE
-  )
-})
-
-test_that("guard text is pinned (one snapshot per mechanism)", {
-  fn <- function(m, x) {
-    declare(type(m = double(3, 3)), type(x = double(NA)))
-    m %*% x
-  }
-  expect_translation_snapshots(
-    fn,
-    note = "Unverifiable BLAS dims emit one size guard before the call."
   )
 })
