@@ -78,6 +78,23 @@ test_that("solve() guards an unknown RHS length", {
   expect_error(qfn(diag(2), c(1, 2, 3)), "non-conformable arguments in solve")
 })
 
+test_that("solve() rejects a zero-width matrix right-hand side", {
+  known <- function(a, b) {
+    declare(type(a = double(2, 2)), type(b = double(2, 0)))
+    solve(a, b)
+  }
+  dynamic <- function(a, b) {
+    declare(type(a = double(2, 2)), type(b = double(2, NA)))
+    solve(a, b)
+  }
+  a <- diag(2)
+  b <- matrix(double(), 2, 0)
+
+  expect_error(quick(known), "no right-hand side in 'b'", fixed = TRUE)
+  q_dynamic <- expect_no_warning(quick(dynamic))
+  expect_error(q_dynamic(a, b), "no right-hand side in 'b'", fixed = TRUE)
+})
+
 
 test_that("solve(a) and chol() guard squareness", {
   inv <- function(a) {

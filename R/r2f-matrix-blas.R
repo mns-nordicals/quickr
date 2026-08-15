@@ -862,6 +862,23 @@ lapack_solve_gesv <- function(
   scope
 ) {
   assert_square_matrix(a_dims, A, context, hoist, scope)
+  if (b_rank == 2L) {
+    message <- "no right-hand side in 'b'"
+    if (is_wholenumber(nrhs)) {
+      if (as.integer(nrhs) == 0L) {
+        stop(message, call. = FALSE)
+      }
+    } else {
+      emit_quickr_error_if(
+        condition = glue(
+          "{dimension_guard_expr(nrhs, B, 2L)} == 0_c_ptrdiff_t"
+        ),
+        message = message,
+        hoist = hoist,
+        scope = scope
+      )
+    }
+  }
   A_work <- hoist$declare_tmp(mode = "double", dims = list(m, m))
   hoist$emit(glue("{A_work@name} = {A_name}"))
 
