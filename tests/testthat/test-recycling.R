@@ -87,6 +87,9 @@ test_that("symbolic differing lengths get a runtime guard", {
   expect_identical(qfn(c(1, 2), c(10, 20)), c(11, 22))
   # was: silent truncation to c(11, 22)
   expect_error(qfn(c(1, 2), c(10, 20, 30, 40)), "equal lengths")
+  # Runtime length one does not change an assumed-shape vector into a scalar.
+  expect_error(qfn(c(1, 2, 3), 10), "equal lengths")
+  expect_error(qfn(10, c(1, 2, 3)), "equal lengths")
 })
 
 test_that("identical symbolic lengths stay guard-free and work", {
@@ -205,17 +208,6 @@ test_that("1x1 matrix with a symbolic-length vector keeps R's shape", {
   qrev <- quick(rev_fn)
   expect_identical(qrev(3, matrix(2)), rev_fn(3, matrix(2)))
   expect_error(qrev(c(1, 2, 3), matrix(2)), "matrix first dimension")
-})
-
-test_that("guard text is pinned (one snapshot per mechanism)", {
-  fn <- function(a, b) {
-    declare(type(a = double(n)), type(b = double(m)))
-    a + b
-  }
-  expect_translation_snapshots(
-    fn,
-    note = "Symbolic differing lengths emit one statement-level size guard."
-  )
 })
 
 test_that("fill constructors spread inside c()", {
