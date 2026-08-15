@@ -480,8 +480,16 @@ c_bridge_hoist_seq_checks <- function(hoist, from, to, by) {
 }
 
 
-as_c_name <- function(var, c_hoist = NULL) {
+as_c_name <- function(var, c_hoist = NULL, preserve_numeric = FALSE) {
   stopifnot(inherits(var, Variable))
+  if (isTRUE(preserve_numeric)) {
+    if (identical(var@mode, "double")) {
+      return(glue("Rf_asReal({var@name})"))
+    }
+    if (!var@mode %in% c("integer", "logical")) {
+      stop("unsupported numeric size expression mode: ", var@mode)
+    }
+  }
   expr <- glue("Rf_asInteger({var@name})")
   if (is.null(c_hoist)) {
     return(expr)
@@ -531,13 +539,22 @@ dims2c_dim_index_expr <- function(cl, scope) {
   get_size_name(var, axis)
 }
 
-dims2c_expr <- function(e, scope, c_hoist = NULL) {
+dims2c_expr <- function(
+  e,
+  scope,
+  c_hoist = NULL,
+  preserve_numeric = FALSE
+) {
   if (is.null(e)) {
     return(NULL)
   }
 
   if (inherits(e, Variable)) {
-    return(as_c_name(e, c_hoist = c_hoist))
+    return(as_c_name(
+      e,
+      c_hoist = c_hoist,
+      preserve_numeric = preserve_numeric
+    ))
   }
 
   if (is_scalar_integer(e)) {
@@ -560,7 +577,11 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (!inherits(var, Variable)) {
       stop("could not resolve size: ", nm)
     }
-    return(as_c_name(var, c_hoist = c_hoist))
+    return(as_c_name(
+      var,
+      c_hoist = c_hoist,
+      preserve_numeric = preserve_numeric
+    ))
   }
 
   if (!is.call(e)) {
@@ -574,7 +595,12 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (length(args) != 1L) {
       stop("unsupported size expression: ", deparse1(e))
     }
-    return(dims2c_expr(args[[1L]], scope, c_hoist = c_hoist))
+    return(dims2c_expr(
+      args[[1L]],
+      scope,
+      c_hoist = c_hoist,
+      preserve_numeric = preserve_numeric
+    ))
   }
 
   if (identical(op, "length")) {
@@ -623,7 +649,12 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (length(args) != 1L) {
       stop("abs() expects one argument")
     }
-    e1 <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+    e1 <- dims2c_expr(
+      args[[1L]],
+      scope,
+      c_hoist = c_hoist,
+      preserve_numeric = preserve_numeric
+    )
     return(glue("(({e1}) < 0 ? -({e1}) : ({e1}))"))
   }
 
@@ -633,20 +664,40 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     }
     # a C cast to an integer type truncates toward zero, as R's
     # as.integer() does
-    e1 <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+    e1 <- dims2c_expr(
+      args[[1L]],
+      scope,
+      c_hoist = c_hoist,
+      preserve_numeric = TRUE
+    )
     return(glue("((R_xlen_t)({e1}))"))
   }
 
   if (op %in% c("+", "-", "*", "/", "%/%", "%%", "^")) {
     if (length(args) == 1L && op %in% c("+", "-")) {
-      e1 <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+      e1 <- dims2c_expr(
+        args[[1L]],
+        scope,
+        c_hoist = c_hoist,
+        preserve_numeric = preserve_numeric
+      )
       return(glue("({op}({e1}))"))
     }
     if (length(args) != 2L) {
       stop("unsupported size expression: ", deparse1(e))
     }
-    e1 <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
-    e2 <- dims2c_expr(args[[2L]], scope, c_hoist = c_hoist)
+    e1 <- dims2c_expr(
+      args[[1L]],
+      scope,
+      c_hoist = c_hoist,
+      preserve_numeric = preserve_numeric
+    )
+    e2 <- dims2c_expr(
+      args[[2L]],
+      scope,
+      c_hoist = c_hoist,
+      preserve_numeric = preserve_numeric
+    )
     return(switch(
       op,
       `+` = glue("({e1} + {e2})"),
@@ -663,7 +714,13 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (!length(args)) {
       return("0")
     }
-    rendered <- lapply(args, dims2c_expr, scope = scope, c_hoist = c_hoist)
+    rendered <- lapply(
+      args,
+      dims2c_expr,
+      scope = scope,
+      c_hoist = c_hoist,
+      preserve_numeric = preserve_numeric
+    )
     cmp <- if (identical(op, "min")) "<" else ">"
     reduce(rendered, \(a, b) glue("(({a}) {cmp} ({b}) ? ({a}) : ({b}))"))
   } else {
