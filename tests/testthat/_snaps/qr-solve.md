@@ -19,7 +19,7 @@
       cat(fsub)
     Output
       subroutine fn(a, b, out_, a__dim_1_, a__dim_2_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -54,7 +54,7 @@
           allocate(btmp3_(a__dim_2_))
           allocate(btmp4_(a__dim_2_))
           allocate(btmp5_(a__dim_2_, 2))
-          allocate(btmp8_(min(a__dim_1_, a__dim_2_), 1))
+          allocate(btmp8_(int((min(real(a__dim_1_, kind=c_double), real(a__dim_2_, kind=c_double))), kind=c_ptrdiff_t), 1))
           btmp1_ = a
           btmp2_ = 0.0_c_double
           btmp2_(1:a__dim_1_, 1) = b
@@ -181,7 +181,7 @@
       cat(fsub)
     Output
       subroutine fn(a, b, out_, a__dim_1_, a__dim_2_, b__dim_2_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -218,7 +218,7 @@
           allocate(btmp3_(a__dim_2_))
           allocate(btmp4_(a__dim_2_))
           allocate(btmp5_(a__dim_2_, 2))
-          allocate(btmp8_(min(a__dim_1_, a__dim_2_), b__dim_2_))
+          allocate(btmp8_(int((min(real(a__dim_1_, kind=c_double), real(a__dim_2_, kind=c_double))), kind=c_ptrdiff_t), b__dim_2_))
           btmp1_ = a
           btmp2_ = 0.0_c_double
           btmp2_(1:a__dim_1_, 1:b__dim_2_) = b

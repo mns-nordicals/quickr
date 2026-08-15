@@ -22,16 +22,16 @@
       cat(fsub)
     Output
       subroutine fn(n, m, a, b, out) bind(c)
-        use iso_c_binding, only: c_double, c_int
+        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
         implicit none
       
         ! manifest start
         ! args
         integer(c_int), intent(in) :: n
         integer(c_int), intent(in) :: m
-        real(c_double), intent(in) :: a(min(n, m))
-        real(c_double), intent(in) :: b(min(n, m))
-        real(c_double), intent(out) :: out(min(n, m))
+        real(c_double), intent(in) :: a(int((min(real(n, kind=c_double), real(m, kind=c_double))), kind=c_ptrdiff_t))
+        real(c_double), intent(in) :: b(int((min(real(n, kind=c_double), real(m, kind=c_double))), kind=c_ptrdiff_t))
+        real(c_double), intent(out) :: out(int((min(real(n, kind=c_double), real(m, kind=c_double))), kind=c_ptrdiff_t))
       
         ! locals
         integer(c_int) :: i
