@@ -223,6 +223,52 @@ test_that("matrix BLAS guards unknown output extents at runtime", {
   expect_error(q_tcross_mat(matrix(double(), 0, 2)), message)
 })
 
+test_that("outer products reject known zero-sized outputs", {
+  outer_empty_x <- function(x, y) {
+    declare(type(x = double(0)), type(y = double(2)))
+    outer(x, y)
+  }
+  percent_outer_empty_y <- function(x, y) {
+    declare(type(x = double(2)), type(y = double(0)))
+    x %o% y
+  }
+
+  expect_error(
+    quick(outer_empty_x),
+    "outer zero-sized outputs are not supported",
+    fixed = TRUE
+  )
+  expect_error(
+    quick(percent_outer_empty_y),
+    "%o% zero-sized outputs are not supported",
+    fixed = TRUE
+  )
+})
+
+test_that("outer products guard unknown output extents at runtime", {
+  outer_unknown_x <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(2)))
+    outer(x, y)
+  }
+  percent_outer_unknown_y <- function(x, y) {
+    declare(type(x = double(2)), type(y = double(NA)))
+    x %o% y
+  }
+
+  q_outer_unknown_x <- expect_no_warning(quick(outer_unknown_x))
+  q_percent_outer_unknown_y <- expect_no_warning(quick(percent_outer_unknown_y))
+  expect_error(
+    q_outer_unknown_x(double(), as.double(1:2)),
+    "outer zero-sized outputs are not supported",
+    fixed = TRUE
+  )
+  expect_error(
+    q_percent_outer_unknown_y(as.double(1:2), double()),
+    "%o% zero-sized outputs are not supported",
+    fixed = TRUE
+  )
+})
+
 test_that("NA dims are never treated as equal", {
   fn <- function(a, b) {
     declare(type(a = double(NA, NA)), type(b = double(NA, NA)))
