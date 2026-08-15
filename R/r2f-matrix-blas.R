@@ -61,6 +61,25 @@ assert_rhs_rank <- function(
   invisible(TRUE)
 }
 
+# BLAS/LAPACK dimensions use equality semantics: equal zero contracted
+# dimensions are conformable and can still produce a non-empty result.
+check_blas_dims <- function(left, right) {
+  if (is_wholenumber(left) && is_wholenumber(right)) {
+    return(list(
+      ok = identical(as.integer(left), as.integer(right)),
+      unknown = FALSE
+    ))
+  }
+  if (!is_scalar_na(left) && !is_scalar_na(right)) {
+    left_norm <- fortranize_expr_symbols(left)
+    right_norm <- fortranize_expr_symbols(right)
+    if (identical(left_norm, right_norm)) {
+      return(list(ok = TRUE, unknown = FALSE))
+    }
+  }
+  list(ok = TRUE, unknown = TRUE)
+}
+
 # Return the R symbol name if operand is a bare symbol; otherwise NULL.
 symbol_name_or_null <- function(x) {
   stopifnot(inherits(x, Fortran))
@@ -164,7 +183,8 @@ assert_square_matrix <- function(dims, operand, context, hoist, scope) {
     left = operand,
     right = operand,
     left_axis = 1L,
-    right_axis = 2L
+    right_axis = 2L,
+    checker = check_blas_dims
   )
 }
 
@@ -260,6 +280,32 @@ blas_int <- function(x) {
   glue("int({x_str}, kind=c_int)")
 }
 
+# Emit a BLAS call for positive contractions and fill the result with zero
+# without calling BLAS when the contracted dimension is zero.
+emit_blas_contraction <- function(call, output, contracted_dim, hoist) {
+  stopifnot(is_string(call), is_string(output))
+  assert_hoist_env(hoist)
+
+  if (is_wholenumber(contracted_dim)) {
+    if (as.integer(contracted_dim) == 0L) {
+      hoist$emit(glue("{output} = 0.0_c_double"))
+    } else {
+      hoist$emit(call)
+    }
+    return(invisible(TRUE))
+  }
+
+  hoist$emit(glue(
+    "
+if ({blas_int(contracted_dim)} == 0_c_int) then
+  {output} = 0.0_c_double
+else
+  {call}
+end if"
+  ))
+  invisible(TRUE)
+}
+
 # Centralized GEMM emission with optional destination
 # gemm: centralized BLAS GEMM emission.
 # - 'hoist' is required and provided by r2f(); handlers thread it through so
@@ -292,18 +338,20 @@ gemm <- function(
       context = context
     )
   ) {
-    hoist$emit(glue(
+    blas_call <- glue(
       "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {dest@name}, {blas_int(ldc_expr)})"
-    ))
+    )
+    emit_blas_contraction(blas_call, dest@name, k, hoist)
     out <- Fortran(dest@name, dest)
     out@writes_to_dest <- TRUE
     return(out)
   }
 
   output_var <- hoist$declare_tmp(mode = "double", dims = list(m, n))
-  hoist$emit(glue(
+  blas_call <- glue(
     "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {output_var@name}, {blas_int(ldc_expr)})"
-  ))
+  )
+  emit_blas_contraction(blas_call, output_var@name, k, hoist)
   Fortran(output_var@name, output_var)
 }
 
@@ -337,18 +385,22 @@ gemv <- function(
     )
   ) {
     # Assign output to output destination
-    hoist$emit(glue(
+    blas_call <- glue(
       "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {dest@name}, 1_c_int)"
-    ))
+    )
+    contracted_dim <- if (transA == "N") n else m
+    emit_blas_contraction(blas_call, dest@name, contracted_dim, hoist)
     out <- Fortran(dest@name, dest)
     out@writes_to_dest <- TRUE
     return(out)
   }
   # Else assign to a temporary variable
   output_var <- hoist$declare_tmp(mode = "double", dims = out_dims)
-  hoist$emit(glue(
+  blas_call <- glue(
     "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {output_var@name}, 1_c_int)"
-  ))
+  )
+  contracted_dim <- if (transA == "N") n else m
+  emit_blas_contraction(blas_call, output_var@name, contracted_dim, hoist)
   Fortran(output_var@name, output_var)
 }
 
@@ -547,7 +599,8 @@ triangular_solve <- function(
     left = A,
     right = B,
     left_axis = 1L,
-    right_axis = if (b_rank == 1L) NULL else 1L
+    right_axis = if (b_rank == 1L) NULL else 1L,
+    checker = check_blas_dims
   )
 
   A_name <- ensure_blas_operand_name(A, hoist)
@@ -635,7 +688,8 @@ lapack_solve <- function(
     left = A,
     right = B,
     left_axis = 1L,
-    right_axis = if (b_rank == 1L) NULL else 1L
+    right_axis = if (b_rank == 1L) NULL else 1L,
+    checker = check_blas_dims
   )
 
   A_name <- ensure_blas_operand_name(A, hoist)
