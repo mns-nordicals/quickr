@@ -83,7 +83,7 @@
       cat(fsub)
     Output
       subroutine fn(n, out_) bind(c)
-        use iso_c_binding, only: c_double, c_int
+        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -95,7 +95,8 @@
         real(c_double), allocatable :: out(:)
         ! manifest end
       
-        allocate(out((int(n) / int(2) + mod(int(n), int(2)))))
+      allocate(out(int(((floor((real(n, kind=c_double) / real(2, kind=c_double)), kind=c_ptrdiff_t) + modulo(real(n, kind=c_double),&
+      & real(2, kind=c_double)))), kind=c_ptrdiff_t)))
       
       
         out = 0.0_c_double
@@ -149,7 +150,7 @@
       cat(fsub)
     Output
       subroutine fn(n, out_) bind(c)
-        use iso_c_binding, only: c_double, c_int
+        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -161,7 +162,7 @@
         real(c_double), allocatable :: out(:, :)
         ! manifest end
       
-        allocate(out((n + 1), (int(n) / int(2) + 1)))
+        allocate(out((n + 1), int(((floor((real(n, kind=c_double) / real(2, kind=c_double)), kind=c_ptrdiff_t) + 1)), kind=c_ptrdiff_t)))
       
       
         out = 1.0_c_double

@@ -166,12 +166,12 @@ unwrap_scalar_size_expr <- function(r) {
   }
 }
 
-r2size <- function(r, scope) {
+r2size <- function(r, scope, preserve_numeric = FALSE) {
   r <- unwrap_scalar_size_expr(r)
 
   sanitize_dim <- function(dim) {
     if (is.symbol(dim) || is.call(dim)) {
-      return(r2size(dim, scope))
+      return(r2size(dim, scope, preserve_numeric = preserve_numeric))
     }
     dim
   }
@@ -193,6 +193,8 @@ r2size <- function(r, scope) {
       double = {
         if (is_wholenumber(r)) {
           as.integer(r)
+        } else if (isTRUE(preserve_numeric)) {
+          r
         } else {
           stop("size must be an integer, found: ", r)
         }
@@ -220,14 +222,19 @@ r2size <- function(r, scope) {
         # symbol, or fail gracefully and return NA.
         # closure-locals with unspecified shape are declared allocatable
         # input and/or output args with unspecified shape signal an error.
-        r2size(var@r, scope)
+        r2size(var@r, scope, preserve_numeric = preserve_numeric)
       },
       language = {
         op <- as.character(r[[1]])
 
         if (op %in% c("+", "-", "/", "*", "^", "%/%", "%%", "abs")) {
           args <- as.list(r)[-1]
-          args <- lapply(args, r2size, scope)
+          args <- lapply(
+            args,
+            r2size,
+            scope,
+            preserve_numeric = preserve_numeric
+          )
           if (anyNA(rapply(args, as.list))) {
             return(NA_integer_)
           }
@@ -258,7 +265,7 @@ r2size <- function(r, scope) {
             # An explicit coercion is exactly what the "not an integer"
             # warning asks for, so don't also warn about the operand.
             inner <- withCallingHandlers(
-              r2size(inner_expr, scope),
+              r2size(inner_expr, scope, preserve_numeric = TRUE),
               warning = function(w) {
                 if (
                   grepl(

@@ -396,7 +396,7 @@ compile_internal_subroutine <- function(
   body_code <- str_flatten_lines(optional_inits, body_prefix, assign_code)
   used_iso_bindings <- iso_c_binding_symbols(
     vars = vars_declared,
-    body_code = body_code,
+    body_code = str_flatten_lines(decls, body_code),
     logical_is_c_int = logical_as_int,
     uses_rng = FALSE
   )

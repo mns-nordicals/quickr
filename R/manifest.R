@@ -503,16 +503,30 @@ dims2f_eval_base_env[["("]] <- baseenv()[["("]]
 dims2f_eval_base_env[["+"]] <- function(e1, e2) glue("({e1} + {e2})")
 dims2f_eval_base_env[["-"]] <- function(e1, e2) glue("({e1} - {e2})")
 dims2f_eval_base_env[["*"]] <- function(e1, e2) glue("({e1} * {e2})")
-dims2f_eval_base_env[["/"]] <- function(e1, e2) glue("real({e1}) / real({e2})")
-# dividing integers truncates towards 0
-dims2f_eval_base_env[["%/%"]] <- function(e1, e2) glue("int({e1}) / int({e2})")
-dims2f_eval_base_env[["%%"]] <- function(e1, e2) {
-  glue("mod(int({e1}), int({e2}))")
+dims2f_eval_base_env[["/"]] <- function(e1, e2) {
+  glue("real({e1}, kind=c_double) / real({e2}, kind=c_double)")
 }
-dims2f_eval_base_env[["^"]] <- function(e1, e2) glue("({e1})**({e2})")
+dims2f_eval_base_env[["%/%"]] <- function(e1, e2) {
+  quotient <- glue(
+    "(real({e1}, kind=c_double) / real({e2}, kind=c_double))"
+  )
+  glue("floor({quotient}, kind=c_ptrdiff_t)")
+}
+dims2f_eval_base_env[["%%"]] <- function(e1, e2) {
+  glue(
+    "modulo(real({e1}, kind=c_double), real({e2}, kind=c_double))"
+  )
+}
+dims2f_eval_base_env[["^"]] <- function(e1, e2) {
+  glue(
+    "(real({e1}, kind=c_double))**(real({e2}, kind=c_double))"
+  )
+}
 dims2f_eval_base_env[["abs"]] <- function(x) glue("abs({x})")
 # Fortran INT() truncates toward zero, like as.integer() in R.
-dims2f_eval_base_env[["as.integer"]] <- function(x) glue("int({x})")
+dims2f_eval_base_env[["as.integer"]] <- function(x) {
+  glue("int({x}, kind=c_ptrdiff_t)")
+}
 dims2f_eval_base_env[["quickr_seq_length"]] <- function(from, to, by) {
   safe_by <- glue("merge(int({by}), 1, int({by}) /= 0)")
   glue("(abs((int({to}) - int({from})) / {safe_by}) + 1)")
@@ -558,6 +572,16 @@ dims2f_eval_base_env[["max"]] <- function(...) {
   glue("max({str_flatten_commas(args)})")
 }
 
+dims2f_needs_final_size_cast <- function(e) {
+  if (!is.call(e)) {
+    return(FALSE)
+  }
+  if (as.character(e[[1L]]) %in% c("/", "%/%", "%%", "^", "as.integer")) {
+    return(TRUE)
+  }
+  any(vapply(as.list(e)[-1L], dims2f_needs_final_size_cast, logical(1)))
+}
+
 
 dims2f <- function(dims, scope) {
   syms <- unique(unlist(lapply(dims, \(d) if (is.language(d)) all.vars(d))))
@@ -567,15 +591,16 @@ dims2f <- function(dims, scope) {
   names(vars) <- syms
   eval_env <- list2env(vars, parent = dims2f_eval_base_env)
   dims <- map_chr(dims, function(d) {
+    original <- d
     d <- eval(d, eval_env)
     if (is.symbol(d)) {
-      as.character(d)
+      d <- as.character(d)
     } else if (is_wholenumber(d)) {
-      as.character(d)
+      d <- as.character(d)
     } else if (is_scalar_na(d)) {
-      ":"
+      return(":")
     } else if (is_string(d)) {
-      d
+      d <- d
     } else if (inherits(d, Variable)) {
       # a locally allocated var that is a return var
       if (!d@modified && d@is_arg) {
@@ -583,6 +608,10 @@ dims2f <- function(dims, scope) {
       }
       stop("unexpected axis size value")
     }
+    if (dims2f_needs_final_size_cast(original)) {
+      d <- glue("int(({d}), kind=c_ptrdiff_t)")
+    }
+    d
   })
   if (!length(dims) || identical(dims, "1")) {
     ""

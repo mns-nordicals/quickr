@@ -49,7 +49,7 @@ test_that("size division keeps double precision until the final cast", {
     double(as.integer(x / y))
   }
 
-  code <- r2f(fn)
+  code <- suppressWarnings(r2f(fn))
   expect_match(
     as.character(code),
     "real(x, kind=c_double) / real(y, kind=c_double)",
@@ -58,6 +58,8 @@ test_that("size division keeps double precision until the final cast", {
   expect_match(as.character(code), "kind=c_ptrdiff_t", fixed = TRUE)
   expect_match(code@c_bridge, "Rf_asReal(x)", fixed = TRUE)
   expect_match(code@c_bridge, "Rf_asReal(y)", fixed = TRUE)
+
+  expect_quick_identical(fn, list(1.99999999, 1))
 })
 
 test_that("size integer division evaluates numeric operands before casting", {
@@ -66,13 +68,16 @@ test_that("size integer division evaluates numeric operands before casting", {
     double(x %/% y)
   }
 
-  code <- r2f(fn)
+  code <- suppressWarnings(r2f(fn))
   expect_match(as.character(code), "floor(", fixed = TRUE)
   expect_match(as.character(code), "real(x, kind=c_double)", fixed = TRUE)
   expect_match(as.character(code), "real(y, kind=c_double)", fixed = TRUE)
   expect_match(code@c_bridge, "floor(", fixed = TRUE)
   expect_match(code@c_bridge, "Rf_asReal(x)", fixed = TRUE)
   expect_match(code@c_bridge, "Rf_asReal(y)", fixed = TRUE)
+
+  qfn <- suppressWarnings(quick(fn))
+  expect_identical(qfn(3.9, 1.9), fn(3.9, 1.9))
 })
 
 test_that("size modulo uses the divisor's sign", {
@@ -84,6 +89,8 @@ test_that("size modulo uses the divisor's sign", {
   code <- r2f(fn)
   expect_match(as.character(code), "modulo(", fixed = TRUE)
   expect_match(code@c_bridge, "floor(", fixed = TRUE)
+
+  expect_quick_identical(fn, list(-3L, 2L))
 })
 
 test_that("size powers use the double domain before casting", {
@@ -96,6 +103,13 @@ test_that("size powers use the double domain before casting", {
   expect_match(as.character(code), "real(x, kind=c_double)", fixed = TRUE)
   expect_match(as.character(code), "kind=c_ptrdiff_t", fixed = TRUE)
   expect_match(code@c_bridge, "R_pow", fixed = TRUE)
+
+  expect_quick_identical(fn, list(2L, 4L))
+
+  constant <- function() {
+    double(as.integer((2L^-1L) * 4L))
+  }
+  expect_quick_identical(constant, list())
 })
 
 test_that("dim/length/nrow/ncol are supported in allocation sizes", {

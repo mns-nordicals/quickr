@@ -163,6 +163,7 @@ make_c_bridge <- function(
 
   c_args <- paste("SEXP", names(formals(closure)), collapse = ", ")
   needs_rmath <- any(grepl("R_pow(", c_body, fixed = TRUE))
+  needs_math <- any(grepl("floor(", c_body, fixed = TRUE))
   c_body <- as_glue(str_flatten_lines(c_body))
 
   c_func_def <- glue("SEXP {fsub@name}_(SEXP _args) {c_block(c_body)}")
@@ -171,6 +172,7 @@ make_c_bridge <- function(
 
   c_headers <- str_flatten_lines(
     "#define R_NO_REMAP",
+    if (needs_math) "#include <math.h>",
     "#include <R.h>",
     "#include <Rinternals.h>",
     if (needs_rmath || isTRUE(force_rmath_header)) "#include <Rmath.h>",
@@ -704,8 +706,10 @@ dims2c_expr <- function(
       `-` = glue("({e1} - {e2})"),
       `*` = glue("({e1} * {e2})"),
       `/` = glue("((double)({e1}) / (double)({e2}))"),
-      `%/%` = glue("((R_xlen_t){e1} / (R_xlen_t){e2})"),
-      `%%` = glue("((R_xlen_t){e1} % (R_xlen_t){e2})"),
+      `%/%` = glue("floor((double)({e1}) / (double)({e2}))"),
+      `%%` = glue(
+        "(({e1}) - ({e2}) * floor((double)({e1}) / (double)({e2})))"
+      ),
       `^` = glue("R_pow((double)({e1}), (double)({e2}))")
     ))
   }
@@ -732,7 +736,13 @@ dims2c <- function(dims, scope, c_hoist = NULL) {
   if (!length(dims) || identical(dims, list(1L))) {
     return(list(NULL, "1"))
   }
-  lapply(dims, dims2c_expr, scope = scope, c_hoist = c_hoist)
+  lapply(
+    dims,
+    dims2c_expr,
+    scope = scope,
+    c_hoist = c_hoist,
+    preserve_numeric = TRUE
+  )
 }
 
 c_dims2c_len <- function(c_dims) {
