@@ -18,13 +18,16 @@ knitr::opts_chunk$set(
 quickr compiles a subset of R. This vignette documents the semantics of
 that subset: what type a result has, when shapes are checked, and every
 place where a compiled function deliberately behaves differently from R.
-All differences take the same form — an error where R would return a
-value — never a different value.
+Except for the `prod()` result type documented below, all differences
+take the same form — an error where R would return a value — never a
+different value.
 
 ## The contract
 
 > `quick(f)(x)` either returns exactly what `f(x)` returns — same values,
 > same `typeof()`, same shape — or raises an error. Never a third thing.
+> Integer and logical `prod()` results have the documented type divergence
+> below.
 > The unchecked `NA` inputs and out-of-bounds runtime subscripts documented
 > below are outside this contract and have undefined behavior.
 
@@ -54,8 +57,7 @@ complex support is narrower than the lattice suggests — see
 [complex values](#complex) under the differences below.
 
 An operation's result type is the "join" of its operands' types — the
-highest type among them — except where R fixes the result type, which
-quickr then matches:
+highest type among them — except where the table says otherwise:
 
 | Operation | Result type |
 |---|---|
@@ -66,8 +68,9 @@ quickr then matches:
 | `<` `<=` `>` `>=` `==` `!=` | logical |
 | `&`, `|`, `!`, `&&`, `||` | logical (see [logical operators](#logical-operators) below) |
 | `c()` | join of all argument types (`c(TRUE, FALSE)` stays logical, as in R) |
-| multi-argument `min()` / `max()` / `sum()` / `prod()` | join of all argument types; logicals count as integers (in R, `sum(TRUE, TRUE)` is `2L`) |
-| single-argument reductions (`sum(x)`, ...), `abs()` | type of `x`; logical counts as integer |
+| multi-argument `min()` / `max()` / `sum()` | join of all argument types; logicals count as integers (in R, `sum(TRUE, TRUE)` is `2L`) |
+| single-argument `min()` / `max()` / `sum()`, `abs()` | type of `x`; logical counts as integer |
+| `prod()` | join of the argument types; unlike R, an integer/logical-only product is integer rather than double |
 | `ifelse(test, yes, no)` | join of `yes` and `no` (but see [ifelse](#ifelse) below) |
 | `%*%`, `crossprod()`, `solve()`, and other linear algebra | always double, as in R; complex operands are a compile error (see [complex values](#complex)) |
 | `t(x)`, `diag(x)` | same type as `x`; the identity forms `diag(n)` are double, as in R |
@@ -267,6 +270,12 @@ operands produce a zero-length result, as in R).
 `x <- x + 0.5` on an integer `x` is a compile-time error, as described
 under [Types](#reassignment-cannot-narrow-a-type). R instead promotes
 the variable to double.
+
+### `prod()` keeps integer products
+
+quickr preserves the joined input type for `prod()`. A product whose
+inputs are all integer or logical therefore has integer type. R instead
+returns double from `prod()` even when every input is integer or logical.
 
 ### Complex values are elementwise-only {#complex}
 
