@@ -278,6 +278,13 @@ test_that("matrix(scalar, m, n) materializes where an array is required", {
   expect_quick_identical(transposed, list())
 })
 
+test_that("matrix() materializes direct non-scalar fill constructors", {
+  fn <- function() {
+    matrix(numeric(2), 2, 2)
+  }
+  expect_quick_identical(fn, list())
+})
+
 test_that("a closure's return expression materializes fills and matrix()", {
   # A local closure's return expression is compiled on its own, with no
   # enclosing call: the materialization decision sees an empty call stack,
