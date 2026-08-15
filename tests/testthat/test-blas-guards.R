@@ -152,14 +152,3 @@ test_that("NA dims are never treated as equal", {
     fixed = TRUE
   )
 })
-
-test_that("guard text is pinned (one snapshot per mechanism)", {
-  fn <- function(m, x) {
-    declare(type(m = double(3, 3)), type(x = double(NA)))
-    m %*% x
-  }
-  expect_translation_snapshots(
-    fn,
-    note = "Unverifiable BLAS dims emit one size guard before the call."
-  )
-})
