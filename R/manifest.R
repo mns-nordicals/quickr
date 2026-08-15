@@ -510,7 +510,7 @@ dims2f_eval_base_env[["%/%"]] <- function(e1, e2) {
   quotient <- glue(
     "(real({e1}, kind=c_double) / real({e2}, kind=c_double))"
   )
-  glue("floor({quotient}, kind=c_ptrdiff_t)")
+  real_floor_expr(quotient)
 }
 dims2f_eval_base_env[["%%"]] <- function(e1, e2) {
   glue(

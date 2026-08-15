@@ -69,7 +69,7 @@ test_that("size integer division evaluates numeric operands before casting", {
   }
 
   code <- suppressWarnings(r2f(fn))
-  expect_match(as.character(code), "floor(", fixed = TRUE)
+  expect_match(as.character(code), "aint(", fixed = TRUE)
   expect_match(as.character(code), "real(x, kind=c_double)", fixed = TRUE)
   expect_match(as.character(code), "real(y, kind=c_double)", fixed = TRUE)
   expect_match(code@c_bridge, "floor(", fixed = TRUE)
@@ -87,6 +87,46 @@ test_that("size integer division rounds negative quotients down", {
   }
 
   expect_quick_identical(fn, list(-3L, 2L))
+})
+
+test_that("size floor division remains real before outer arithmetic", {
+  fn <- function(x, y, z) {
+    declare(
+      type(x = double(1)),
+      type(y = double(1)),
+      type(z = double(1))
+    )
+    out <- double(1)
+    local <- double(as.integer((x %/% y) / z) + 10L)
+    out[1] <- as.double(length(local))
+    out
+  }
+
+  code <- r2f(fn)
+  expect_match(as.character(code), "aint(", fixed = TRUE)
+  expect_quick_identical(
+    fn,
+    list(1e20, 3, 1e19),
+    list(-1e20, 3, 1e19)
+  )
+
+  returned <- function(x, y, z) {
+    declare(
+      type(x = double(1)),
+      type(y = double(1)),
+      type(z = double(1))
+    )
+    out <- double(as.integer((x %/% y) / z) + 10L)
+    for (i in seq_len(length(out))) {
+      out[i] <- as.double(i)
+    }
+    out
+  }
+  expect_quick_identical(
+    returned,
+    list(1e20, 3, 1e19),
+    list(-1e20, 3, 1e19)
+  )
 })
 
 test_that("size modulo uses the divisor's sign", {
