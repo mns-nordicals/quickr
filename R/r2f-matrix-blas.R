@@ -211,11 +211,9 @@ assert_square_matrix <- function(dims, operand, context, hoist, scope) {
 
 # ---- BLAS emitters ----
 
-# Generated function results cannot currently represent zero-sized arrays.
-# Reject a known zero output during translation and guard unknown output
-# extents at runtime before emitting a BLAS call with an invalid leading
-# dimension. A zero contracted dimension remains supported when every output
-# extent is nonzero.
+# Reject zero output extents where GEMM/GEMV/SYRK/DGER would receive an invalid
+# leading dimension. A zero contracted dimension remains supported when every
+# output extent is nonzero.
 assert_nonempty_blas_output <- function(
   dim,
   operand,
@@ -920,6 +918,25 @@ lapack_solve_qr <- function(
   hoist,
   scope
 ) {
+  design_message <- "qr.solve coefficient matrices with zero extents are not supported"
+  for (axis in 1:2) {
+    dim <- list(m, n)[[axis]]
+    if (is_wholenumber(dim)) {
+      if (as.integer(dim) == 0L) {
+        stop(design_message, call. = FALSE)
+      }
+    } else {
+      emit_quickr_error_if(
+        condition = glue(
+          "size({A_name}, {axis}, kind=c_ptrdiff_t) == 0_c_ptrdiff_t"
+        ),
+        message = design_message,
+        hoist = hoist,
+        scope = scope
+      )
+    }
+  }
+
   A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
   hoist$emit(glue("{A_work@name} = {A_name}"))
 
@@ -970,17 +987,31 @@ end do"
     dims = list(mn, nrhs)
   )
   hoist$emit(glue("{coef_work@name} = 0.0_c_double"))
-  info <- hoist$declare_tmp(mode = "integer", dims = NULL)
 
-  hoist$emit(glue(
-    "call dqrcf({A_work@name}, {blas_int(m)}, {rank@name}, {qraux@name}, {B_work@name}, {blas_int(nrhs)}, {coef_work@name}, {info@name})"
-  ))
-  emit_quickr_error_if(
-    condition = glue("{info@name} /= 0_c_int"),
-    message = "exact singularity in 'qr.coef'",
-    hoist = hoist,
-    scope = scope
-  )
+  emit_dqrcf <- function(target, info) {
+    target$emit(glue(
+      "call dqrcf({A_work@name}, {blas_int(m)}, {rank@name}, {qraux@name}, {B_work@name}, {blas_int(nrhs)}, {coef_work@name}, {info@name})"
+    ))
+    emit_quickr_error_if(
+      condition = glue("{info@name} /= 0_c_int"),
+      message = "exact singularity in 'qr.coef'",
+      hoist = target,
+      scope = scope
+    )
+  }
+  if (is_wholenumber(nrhs)) {
+    if (as.integer(nrhs) > 0L) {
+      info <- hoist$declare_tmp(mode = "integer", dims = NULL)
+      emit_dqrcf(hoist, info)
+    }
+  } else {
+    info <- hoist$declare_tmp(mode = "integer", dims = NULL)
+    sub <- new_hoist(scope)
+    emit_dqrcf(sub, info)
+    hoist$emit(glue("if ({blas_int(nrhs)} > 0_c_int) then"))
+    hoist$emit(indent(sub$render(character())))
+    hoist$emit("end if")
+  }
 
   out <- resolve_blas_output(
     dest,
