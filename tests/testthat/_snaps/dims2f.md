@@ -95,8 +95,9 @@
         real(c_double), allocatable :: out(:)
         ! manifest end
       
-      allocate(out(int(((floor((real(n, kind=c_double) / real(2, kind=c_double)), kind=c_ptrdiff_t) + modulo(real(n, kind=c_double),&
-      & real(2, kind=c_double)))), kind=c_ptrdiff_t)))
+      allocate(out(int((((aint((real(n, kind=c_double) / real(2, kind=c_double))) - merge(1.0_c_double, 0.0_c_double, ((real(n,&
+      & kind=c_double) / real(2, kind=c_double)) < aint((real(n, kind=c_double) / real(2, kind=c_double)))))) + modulo(real(n,&
+      & kind=c_double), real(2, kind=c_double)))), kind=c_ptrdiff_t)))
       
       
         out = 0.0_c_double
@@ -162,7 +163,8 @@
         real(c_double), allocatable :: out(:, :)
         ! manifest end
       
-        allocate(out((n + 1), int(((floor((real(n, kind=c_double) / real(2, kind=c_double)), kind=c_ptrdiff_t) + 1)), kind=c_ptrdiff_t)))
+      allocate(out((n + 1), int((((aint((real(n, kind=c_double) / real(2, kind=c_double))) - merge(1.0_c_double, 0.0_c_double, ((real(n,&
+      & kind=c_double) / real(2, kind=c_double)) < aint((real(n, kind=c_double) / real(2, kind=c_double)))))) + 1)), kind=c_ptrdiff_t)))
       
       
         out = 1.0_c_double
