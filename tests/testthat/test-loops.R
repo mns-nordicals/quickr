@@ -110,8 +110,9 @@ test_that("single-statement while/repeat bodies re-run their hoisted statements"
   # loop would freeze the body's work at its first evaluation. `for` is
   # covered in test-for-iterables.R.
   #
-  # The repeat variant cannot terminate; execute the finite while variant
-  # to cover the generated loop as well as its translation.
+  # Keep the direct repeat assignment as a translation regression because
+  # it cannot terminate. Exercise the generated repeat path separately with
+  # a bounded one-statement body whose else branch repeats the same BLAS work.
   # fmt: skip
   squarings_while <- function(m) {
     declare(type(m = double(2, 2)))
@@ -130,4 +131,13 @@ test_that("single-statement while/repeat bodies re-run their hoisted statements"
   }
 
   expect_translation_snapshots(squarings_repeat)
+
+  # fmt: skip
+  bounded_squarings_repeat <- function(m) {
+    declare(type(m = double(2, 2)))
+    repeat if (m[1, 1] >= 100) break else m <- m %*% m
+    m
+  }
+
+  expect_quick_identical(bounded_squarings_repeat, list(diag(2) * 2))
 })
