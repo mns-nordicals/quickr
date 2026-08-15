@@ -77,6 +77,29 @@ test_that("reassignment with symbolic dims gets a runtime shape guard", {
   )
 })
 
+test_that("reassignment from a deferred-shape local gets a runtime guard", {
+  fn <- function(a, b) {
+    declare(
+      type(a = double(NA)),
+      type(b = double(NA)),
+      type(x = double(NA))
+    )
+    x <- b
+    a <- x
+    a
+  }
+
+  code <- as.character(r2f(fn))
+  expect_match(code, "size\\(a, 1\\) /= size\\(x, 1\\)")
+
+  qfn := quick(fn)
+  expect_identical(qfn(c(1, 2), c(3, 4)), c(3, 4))
+  expect_error(
+    qfn(c(1, 2), c(3, 4, 5)),
+    "reassignment must preserve the shape of `a`"
+  )
+})
+
 test_that("shape-preserving reassignments still compile", {
   # same symbolic dims: provably equal, no guard needed
   fn_same <- function(a) {

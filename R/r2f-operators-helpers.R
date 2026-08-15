@@ -729,16 +729,25 @@ check_assignment_compatible <- function(
     ) {
       next
     }
-    if (
-      is.null(hoist) ||
-        !dim_guard_spellable(t_dim, scope) ||
-        !dim_guard_spellable(v_dim, scope)
-    ) {
+    if (is.null(hoist)) {
       next
     }
-    condition <- glue(
-      "({dims2f(list(t_dim), scope)}) /= ({dims2f(list(v_dim), scope)})"
-    )
+    if (dim_guard_spellable(t_dim, scope) && dim_guard_spellable(v_dim, scope)) {
+      condition <- glue(
+        "({dims2f(list(t_dim), scope)}) /= ({dims2f(list(v_dim), scope)})"
+      )
+    } else if (!is.null(target@name) && !is.null(value@name)) {
+      condition <- glue(
+        "size({target@name}, {axis}) /= size({value@name}, {axis})"
+      )
+    } else {
+      stop(
+        "cannot reassign `",
+        name,
+        "`: runtime shape cannot be validated",
+        call. = FALSE
+      )
+    }
     # Different axes can spell the same guard (e.g. a square dest vs a
     # square result, m/=k on both axes); emit each condition once.
     if (condition %in% emitted) {
