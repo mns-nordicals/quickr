@@ -51,16 +51,37 @@
         out = 0.0_c_double
         n = size(weights)
         if ((normalize/=0)) then
-          weights = ((weights / sum(weights)) * size(weights))
-        end if
-        do i = 1, size(out)
-      if (size(x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i)), kind=c_ptrdiff_t) == 0 .or. size(x(i:(((i + n) -&
-      & 1_c_int)):sign(1, (((i + n) - 1_c_int))-i)), kind=c_ptrdiff_t) /= size(weights, kind=c_ptrdiff_t)) then
+          block
+            real(c_double), allocatable :: btmp1_(:)
+      
+            allocate(btmp1_(weights__len_))
+            if (size(weights, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          out(i) = (sum((x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i)) * weights)) / real(size(weights), kind=c_double))
+              return
+            end if
+            btmp1_ = (weights / sum(weights))
+            if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+              return
+            end if
+            weights = (btmp1_ * size(weights))
+          end block
+        end if
+        do i = 1, size(out)
+          block
+            real(c_double), allocatable :: btmp1_(:)
+      
+            allocate(btmp1_((abs((((i + n) - 1) - i)) + 1)))
+            btmp1_ = x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i))
+            if (size(btmp1_, kind=c_ptrdiff_t) == 0 .or. size(btmp1_, kind=c_ptrdiff_t) /= size(weights, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+              return
+            end if
+            out(i) = (sum((btmp1_ * weights)) / real(size(weights), kind=c_double))
+          end block
         end do
       
         contains

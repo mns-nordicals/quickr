@@ -35,12 +35,31 @@
         ! manifest end
       
       
-      if (size((x >= left), kind=c_ptrdiff_t) == 0 .or. size((x >= left), kind=c_ptrdiff_t) /= size((x <= right), kind=c_ptrdiff_t)) then
+        block
+          logical, allocatable :: btmp1_(:) ! logical
+          logical, allocatable :: btmp2_(:) ! logical
+      
+          allocate(btmp1_(x__len_))
+          allocate(btmp2_(x__len_))
+          if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        out = (x >= left) .and. (x <= right)
+            return
+          end if
+          if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+            return
+          end if
+          btmp1_ = (x >= left)
+          btmp2_ = (x <= right)
+          if (size(btmp1_, kind=c_ptrdiff_t) == 0 .or. size(btmp1_, kind=c_ptrdiff_t) /= size(btmp2_, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+            return
+          end if
+          out = btmp1_ .and. btmp2_
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
@@ -422,23 +441,39 @@
         ! manifest end
       
       
-        if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+        block
+          real(c_double), allocatable :: btmp1_(:)
+          logical, allocatable :: btmp2_(:) ! logical
+          logical, allocatable :: btmp3_(:) ! logical
+      
+          allocate(btmp1_(a__len_))
+          allocate(btmp2_(a__len_))
+          allocate(btmp3_(a__len_))
+          if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+            return
+          end if
+          if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-      if (size(((a /= b)), kind=c_ptrdiff_t) == 0 .or. size(((a /= b)), kind=c_ptrdiff_t) /= size((abs((a - b)) <= 3.0_c_double),&
-      & kind=c_ptrdiff_t)) then
+            return
+          end if
+          btmp1_ = abs((a - b))
+          if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        out = ((a /= b)) .and. (abs((a - b)) <= 3.0_c_double)
+            return
+          end if
+          btmp2_ = ((a /= b))
+          btmp3_ = (btmp1_ <= 3.0_c_double)
+          if (size(btmp2_, kind=c_ptrdiff_t) == 0 .or. size(btmp2_, kind=c_ptrdiff_t) /= size(btmp3_, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+            return
+          end if
+          out = btmp2_ .and. btmp3_
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
@@ -697,21 +732,20 @@
         integer(c_int), intent(in) :: i
         real(c_double), intent(in) :: x(3)
         real(c_double), intent(out) :: out
+      
+        ! locals
+        logical :: tmp1_ ! logical
         ! manifest end
       
       
         out = 0.0_c_double
-        block
-          logical :: btmp1_ ! logical
-      
-          btmp1_ = (i <= 3_c_int)
-          if (btmp1_) then
-            btmp1_ = (x(i) > 0.0_c_double)
-          end if
-          if (btmp1_) then
-            out = 1.0_c_double
-          end if
-        end block
+        tmp1_ = (i <= 3_c_int)
+        if (tmp1_) then
+          tmp1_ = (x(i) > 0.0_c_double)
+        end if
+        if (tmp1_) then
+          out = 1.0_c_double
+        end if
       end subroutine
     Code
       cat(cwrapper)
@@ -793,21 +827,18 @@
       
         ! locals
         integer(c_int) :: n
+        logical :: tmp1_ ! logical
         ! manifest end
       
       
         i = 1_c_int
         n = size(x)
         do
-          block
-            logical :: btmp1_ ! logical
-      
-            btmp1_ = (i <= n)
-            if (btmp1_) then
-              btmp1_ = (x(i) > 0.0_c_double)
-            end if
-            if (.not. (btmp1_)) exit
-          end block
+          tmp1_ = (i <= n)
+          if (tmp1_) then
+            tmp1_ = (x(i) > 0.0_c_double)
+          end if
+          if (.not. (tmp1_)) exit
           i = (i + 1_c_int)
         end do
       end subroutine
