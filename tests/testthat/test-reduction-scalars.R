@@ -1,5 +1,3 @@
-skip_on_cran()
-
 test_that("min handles scalar arguments without reduction", {
   fn <- function(a, b, m) {
     declare(
@@ -56,6 +54,24 @@ test_that("reductions over vectors still use intrinsics", {
   expect_identical(fn(x1), -2L)
   expect_identical(fn(x2), 1L)
   expect_quick_identical(fn, x1, x2)
+})
+
+test_that("multi-argument reductions preserve evaluation order", {
+  fn <- function() {
+    sum(runif(1), 10 * runif(1))
+  }
+  qfn <- quick(fn)
+
+  set.seed(732)
+  expected <- fn()
+  expected_seed <- .Random.seed
+
+  set.seed(732)
+  actual <- qfn()
+  actual_seed <- .Random.seed
+
+  expect_identical(actual, expected)
+  expect_identical(actual_seed, expected_seed)
 })
 
 

@@ -11,7 +11,8 @@ register_r2f_handler(
   function(
     args,
     scope,
-    ...
+    ...,
+    hoist = NULL
   ) {
     # Named arguments like `na.rm` would otherwise be treated as data
     # arguments (e.g. `sum(x, na.rm = TRUE)` -> `(sum(x) + .true.)`).
@@ -32,6 +33,7 @@ register_r2f_handler(
     )
 
     reduce_arg <- function(arg) {
+      captured_hoist <- hoist$capture()
       mask_hoist <- create_mask_hoist()
       # Nested reductions (e.g., min(max(...), ...)) can thread an existing
       # hoist_mask through `...`. We always want a single mask hoister per
@@ -41,7 +43,7 @@ register_r2f_handler(
         arg,
         scope,
         calls = dots$calls,
-        hoist = dots$hoist,
+        hoist = captured_hoist,
         hoist_mask = mask_hoist$try_set
       )
       if (mask_hoist$has_conflict()) {
@@ -50,6 +52,7 @@ register_r2f_handler(
           call. = FALSE
         )
       }
+      x <- finish_captured_operand(x, captured_hoist, hoist)
       # R's numeric reductions treat logicals as integers (sum(TRUE) is 1L),
       # and Fortran's sum/product/minval/maxval reject logical arrays.
       x <- cast_to_mode(
