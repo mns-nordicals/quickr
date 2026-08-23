@@ -19,6 +19,9 @@ register_r2f_handler(
       stop("%*% only supports vectors/matrices (rank <= 2)")
     }
 
+    left <- hoist_unless_name(left, hoist)
+    right <- hoist_unless_name(right, hoist)
+
     left_dims <- matrix_dims(
       left,
       orientation = if (left_rank == 1) "rowvec" else "matrix"
@@ -933,6 +936,9 @@ crossprod_like <- function(
   }
 
   y <- maybe_cast_double(r2f(y_arg, scope, ..., hoist = hoist))
+
+  x <- hoist_unless_name(x, hoist)
+  y <- hoist_unless_name(y, hoist)
 
   x_dims <- matrix_dims(x)
   y_dims <- matrix_dims(y)
