@@ -751,6 +751,21 @@ register_r2f_handler(
       ))
     }
 
+    if (
+      !has_nrow &&
+        !has_ncol &&
+        x_rank == 1L &&
+        !is_wholenumber(x@value@dims[[1L]])
+    ) {
+      x <- hoist_unless_name(x, hoist)
+      emit_quickr_error_if(
+        glue("size({x}, kind=c_ptrdiff_t) == 1_c_ptrdiff_t"),
+        "diag(x) with runtime length 1 is not supported",
+        hoist,
+        scope
+      )
+    }
+
     nrow <- if (has_nrow) r2size(nrow_arg, scope) else NULL
     ncol <- if (has_ncol) r2size(ncol_arg, scope) else NULL
 
