@@ -37,6 +37,10 @@
         ! manifest end
       
       
+        if (x__len_ < 0) then
+          call quickr_set_error_msg("invalid 'length' argument")
+          return
+        end if
         out = 0.0_c_double
         do tmp1_ = 1_c_int, x__len_
           call closure1_(tmp1_, out(tmp1_))
