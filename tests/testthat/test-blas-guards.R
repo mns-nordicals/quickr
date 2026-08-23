@@ -17,6 +17,20 @@ test_that("matrix-vector %*% guards an unknown vector length", {
   )
 })
 
+test_that("crossprod and tcrossprod reject arrays above rank two", {
+  one_arg <- function(x) {
+    declare(type(x = double(2, 2, 2)))
+    crossprod(x)
+  }
+  two_args <- function(x, y) {
+    declare(type(x = double(2, 2)), type(y = double(2, 2, 2)))
+    tcrossprod(x, y)
+  }
+
+  expect_error(quick(one_arg), "only supports rank 0-2 inputs")
+  expect_error(quick(two_args), "only supports rank 0-2 inputs")
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))

@@ -939,6 +939,7 @@ crossprod_like <- function(
 
   x <- lower_r2f_operand_in_order(x_arg, scope, ..., hoist = hoist)
   x <- cast_linalg_double(x, context)
+  assert_rank_leq2(x, paste0(context, " only supports rank 0-2 inputs"))
 
   if (is.null(y_arg)) {
     return(syrk(
@@ -955,6 +956,7 @@ crossprod_like <- function(
     lower_r2f_operand_in_order(y_arg, scope, ..., hoist = hoist),
     context
   )
+  assert_rank_leq2(y, paste0(context, " only supports rank 0-2 inputs"))
 
   x <- hoist_unless_name(x, hoist)
   y <- hoist_unless_name(y, hoist)
