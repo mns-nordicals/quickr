@@ -654,8 +654,10 @@ register_r2f_handler(
     tol <- if (is.null(tol_arg) || is_missing(tol_arg)) {
       r2f(1e-7, scope, ..., hoist = hoist)
     } else {
-      tol <- maybe_cast_double(r2f(tol_arg, scope, ..., hoist = hoist))
-      if (tol@value@rank != 0L) {
+      tol <- maybe_cast_double(
+        lower_r2f_operand_in_order(tol_arg, scope, ..., hoist = hoist)
+      )
+      if (!passes_as_scalar(tol@value)) {
         stop("qr.solve() expects a scalar `tol`", call. = FALSE)
       }
       tol
