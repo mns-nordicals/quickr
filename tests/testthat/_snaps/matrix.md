@@ -104,12 +104,18 @@
       
       
       
-        if (size(a1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(a1, kind=c_ptrdiff_t) /= size(a2(1_c_int, :), kind=c_ptrdiff_t)) then
+        block
+          real(c_double), allocatable :: btmp1_(:)
+      
+          allocate(btmp1_(a1__len_))
+          btmp1_ = a2(1_c_int, :)
+          if (size(a1, kind=c_ptrdiff_t) == 0 .or. size(a1, kind=c_ptrdiff_t) /= size(btmp1_, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        out = (a1 + a2(1_c_int, :))
+            return
+          end if
+          out = (a1 + btmp1_)
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
