@@ -2074,13 +2074,31 @@
       
         ! locals
         logical, allocatable :: y(:) ! logical
+        integer(c_int), allocatable :: tmp1_(:)
         ! manifest end
       
         allocate(y(x__len_))
+        allocate(tmp1_(x__len_))
       
       
         y = (.not. (x/=0))
-        out = merge(1_c_int, 0_c_int, y)
+        if (any(y)) then
+          block
+            integer(c_int) :: btmp1_
+      
+            btmp1_ = 1_c_int
+            where (y) tmp1_ = btmp1_
+          end block
+        end if
+        if (any(.not. y)) then
+          block
+            integer(c_int) :: btmp1_
+      
+            btmp1_ = 0_c_int
+            where (.not. y) tmp1_ = btmp1_
+          end block
+        end if
+        out = tmp1_
       end subroutine
     Code
       cat(cwrapper)
