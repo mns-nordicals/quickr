@@ -831,6 +831,7 @@ lapack_solve <- function(
       B = B,
       B_input_name = B_input_name,
       m = m,
+      n = n,
       nrhs = nrhs,
       b_rank = b_rank,
       expected_dims = expected_dims,
@@ -854,6 +855,7 @@ lapack_solve_gesv <- function(
   B,
   B_input_name,
   m,
+  n,
   nrhs,
   b_rank,
   expected_dims,
@@ -880,7 +882,7 @@ lapack_solve_gesv <- function(
       )
     }
   }
-  A_work <- hoist$declare_tmp(mode = "double", dims = list(m, m))
+  A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
   hoist$emit(glue("{A_work@name} = {A_name}"))
 
   out <- resolve_blas_output(
