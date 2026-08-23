@@ -157,8 +157,9 @@ dims_match <- function(left, right) {
 # ok+known (no guard needed), not-ok+known (compile error at the caller),
 # or unknown (caller emits a runtime guard). Known lengths must be equal
 # and nonzero -- R-style recycling is never implemented, and quickr cannot
-# represent length-0 results. NA dims are always unknown: two unknown
-# lengths are not the same quantity.
+# represent length-0 results. Symbolic dims are always unknown because their
+# positivity must be checked at runtime, even when both operands use the same
+# expression.
 # Used by: maybe_reshape_vector_matrix()
 check_elementwise_lengths <- function(left, right) {
   if (is_wholenumber(left) && is_wholenumber(right)) {
@@ -171,13 +172,6 @@ check_elementwise_lengths <- function(left, right) {
       (is_wholenumber(right) && as.integer(right) == 0L)
   ) {
     return(list(ok = FALSE, unknown = FALSE))
-  }
-  if (!is_scalar_na(left) && !is_scalar_na(right)) {
-    left_norm <- fortranize_expr_symbols(left)
-    right_norm <- fortranize_expr_symbols(right)
-    if (identical(left_norm, right_norm)) {
-      return(list(ok = TRUE, unknown = FALSE))
-    }
   }
   list(ok = TRUE, unknown = TRUE)
 }
@@ -207,8 +201,10 @@ emit_elementwise_size_guard <- function(
       glue("size({x}, {axis}, kind=c_ptrdiff_t)")
     }
   }
+  left_size <- size_of(left, left_axis)
+  right_size <- size_of(right, right_axis)
   emit_quickr_error_if(
-    glue("{size_of(left, left_axis)} /= {size_of(right, right_axis)}"),
+    glue("{left_size} == 0_c_ptrdiff_t .or. {left_size} /= {right_size}"),
     message,
     hoist,
     scope
