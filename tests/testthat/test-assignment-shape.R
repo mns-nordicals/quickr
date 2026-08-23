@@ -77,6 +77,27 @@ test_that("reassignment with symbolic dims gets a runtime shape guard", {
   )
 })
 
+test_that("reassignment guards use actual extents after size variables change", {
+  fn <- function(x, y, n, m) {
+    declare(
+      type(x = double(n)),
+      type(y = double(m)),
+      type(n = integer(1)),
+      type(m = integer(1))
+    )
+    n <- m
+    x <- y
+    x
+  }
+
+  qfn <- quick(fn)
+  expect_identical(qfn(c(1, 2), c(3, 4), 2L, 2L), c(3, 4))
+  expect_error(
+    qfn(c(1, 2), c(3, 4, 5), 2L, 3L),
+    "reassignment must preserve the shape of `x`"
+  )
+})
+
 test_that("reassignment from a deferred-shape local gets a runtime guard", {
   fn <- function(a, b) {
     declare(

@@ -771,17 +771,17 @@ check_assignment_compatible <- function(
     if (is.null(hoist)) {
       next
     }
-    if (
+    if (!is.null(target@name) && !is.null(value@name)) {
+      condition <- glue(
+        "size({target@name}, {axis}, kind=c_ptrdiff_t) /= size({value@name}, {axis}, kind=c_ptrdiff_t)"
+      )
+    } else if (
       !unknown_extent &&
         dim_guard_spellable(t_dim, scope) &&
         dim_guard_spellable(v_dim, scope)
     ) {
       condition <- glue(
         "({dims2f(list(t_dim), scope)}) /= ({dims2f(list(v_dim), scope)})"
-      )
-    } else if (!is.null(target@name) && !is.null(value@name)) {
-      condition <- glue(
-        "size({target@name}, {axis}, kind=c_ptrdiff_t) /= size({value@name}, {axis}, kind=c_ptrdiff_t)"
       )
     } else {
       stop(
