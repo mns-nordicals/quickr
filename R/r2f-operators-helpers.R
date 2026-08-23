@@ -146,11 +146,12 @@ dim_is_one <- function(x) {
   is_wholenumber(x) && identical(as.integer(x), 1L)
 }
 
-# Check if a dimension expression is statically known and not 1. Symbolic
-# dimensions are FALSE: "not provably 1" is not "provably not 1".
+# Check if a dimension expression is statically known and greater than 1.
+# Symbolic dimensions and zero are FALSE: neither is a supported scalarized
+# vector length.
 # Used by: maybe_reshape_vector_matrix()
-dim_known_not_one <- function(x) {
-  is_wholenumber(x) && !identical(as.integer(x), 1L)
+dim_known_greater_than_one <- function(x) {
+  is_wholenumber(x) && as.integer(x) > 1L
 }
 
 # Check if a Fortran value is a 1x1 matrix.
@@ -357,7 +358,7 @@ maybe_reshape_vector_matrix <- function(
       is_one_by_one(left)
   ) {
     right_len <- dim_or_one(right, 1L)
-    if (dim_known_not_one(right_len)) {
+    if (dim_known_greater_than_one(right_len)) {
       left <- scalarize_via_hoist(left)
       left_rank <- 0L
     }
@@ -368,7 +369,7 @@ maybe_reshape_vector_matrix <- function(
       is_one_by_one(right)
   ) {
     left_len <- dim_or_one(left, 1L)
-    if (dim_known_not_one(left_len)) {
+    if (dim_known_greater_than_one(left_len)) {
       right <- scalarize_via_hoist(right)
       right_rank <- 0L
     }
