@@ -285,7 +285,7 @@ fill_constructor_value <- function(literal, mode, args, scope, ..., hoist) {
   } else if (!is_scalar_na(length_dim)) {
     length_f <- dims2f(list(length_dim), scope)
     emit_quickr_error_if(
-      glue("{length_f} < 0_c_ptrdiff_t"),
+      glue("{length_f} < 0"),
       "invalid 'length' argument",
       hoist,
       scope
