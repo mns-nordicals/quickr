@@ -118,7 +118,10 @@ compile_for_body <- function(body, scope, ..., parallel, private = NULL) {
   body <- r2f(body, scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
 
-  directives <- openmp_directives(parallel, private = private)
+  directives <- openmp_directives(
+    parallel,
+    private = c(private, openmp_private_vars(scope))
+  )
   if (!is.null(parallel)) {
     mark_openmp_used(scope)
   }

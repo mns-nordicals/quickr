@@ -283,7 +283,6 @@ is_pure_scalar_condition <- function(e, scope) {
     "+",
     "-",
     "*",
-    "/",
     "abs"
   )
   if (!op %in% pure_ops) {
@@ -300,11 +299,30 @@ is_pure_scalar_condition <- function(e, scope) {
   ))
 }
 
-lower_short_circuit_operator <- function(args, scope, op, ..., hoist = NULL) {
+lower_short_circuit_operator <- function(
+  args,
+  scope,
+  op,
+  ...,
+  hoist = NULL,
+  defer_andor_length_error = FALSE
+) {
   stopifnot(length(args) == 2L, op %in% c("&&", "||"))
 
-  left <- r2f(args[[1L]], scope, ..., hoist = hoist)
-  left <- scalarize_andor_operand(left, op, hoist, scope)
+  left <- r2f(
+    args[[1L]],
+    scope,
+    ...,
+    hoist = hoist,
+    defer_andor_length_error = defer_andor_length_error
+  )
+  left <- scalarize_andor_operand(
+    left,
+    op,
+    hoist,
+    scope,
+    defer_length_error = defer_andor_length_error
+  )
 
   f <- if (op == "&&") ".and." else ".or."
 
@@ -312,8 +330,20 @@ lower_short_circuit_operator <- function(args, scope, op, ..., hoist = NULL) {
     # Fortran may evaluate both operands of .and./.or.; for a pure right
     # operand that is indistinguishable from short-circuiting, so keep
     # the compact infix form.
-    right <- r2f(args[[2L]], scope, ..., hoist = hoist)
-    right <- scalarize_andor_operand(right, op, hoist, scope)
+    right <- r2f(
+      args[[2L]],
+      scope,
+      ...,
+      hoist = hoist,
+      defer_andor_length_error = defer_andor_length_error
+    )
+    right <- scalarize_andor_operand(
+      right,
+      op,
+      hoist,
+      scope,
+      defer_length_error = defer_andor_length_error
+    )
     return(Fortran(glue("{left} {f} {right}"), Variable("logical")))
   }
 
@@ -324,11 +354,15 @@ lower_short_circuit_operator <- function(args, scope, op, ..., hoist = NULL) {
   # Declare it in the procedure scope so block-local temporaries cannot
   # shadow it.
   tmp <- scope_unique_var(scope, mode = "logical", dims = NULL)
+  register_openmp_private(scope, tmp@name)
   sub <- new_hoist(scope)
-  # Intentional boundary: translation still validates the complete RHS.
-  # Only runtime work and runtime diagnostics are placed behind this branch;
-  # a statically unsupported nested RHS remains a compile-time error.
-  right <- r2f(args[[2L]], scope, ..., hoist = sub)
+  right <- r2f(
+    args[[2L]],
+    scope,
+    ...,
+    hoist = sub,
+    defer_andor_length_error = TRUE
+  )
   right <- scalarize_andor_operand(
     right,
     op,

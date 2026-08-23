@@ -422,18 +422,12 @@
             real(c_double), intent(out) :: res(:)
       
       
-            block
-              real(c_double), allocatable :: btmp1_(:)
-      
-              allocate(btmp1_(x__dim_1_))
-              btmp1_ = x(:, j)
-              if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            if (size(x(:, j), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
           call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
           & supported")
-                return
-              end if
-              res = (btmp1_ * 2.0_c_double)
-            end block
+              return
+            end if
+            res = (x(:, j) * 2.0_c_double)
           end subroutine
           subroutine quickr_set_error_msg(msg)
             character(len=*), intent(in) :: msg
@@ -557,25 +551,19 @@
       
         contains
           subroutine closure1_(j, res)
-            use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
+            use iso_c_binding, only: c_int, c_ptrdiff_t
             implicit none
       
             integer(c_int), intent(in) :: j
             integer(c_int), intent(out) :: res(:) ! logical
       
       
-            block
-              real(c_double), allocatable :: btmp1_(:)
-      
-              allocate(btmp1_(x__dim_1_))
-              btmp1_ = x(:, j)
-              if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            if (size(x(:, j), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
           call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
           & supported")
-                return
-              end if
-              res = (btmp1_ > thresh)
-            end block
+              return
+            end if
+            res = (x(:, j) > thresh)
           end subroutine
           subroutine quickr_set_error_msg(msg)
             character(len=*), intent(in) :: msg
@@ -884,21 +872,15 @@
             real(c_double), intent(out) :: res(:, :)
       
       
-            block
-              real(c_double), allocatable :: btmp1_(:, :)
-      
-              allocate(btmp1_(x__dim_1_, x__dim_2_))
-              btmp1_ = x(:, :, t)
-              if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
-                call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
-                return
-              end if
-              if (size(btmp1_, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
-                call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
-                return
-              end if
-              res = (btmp1_ + 1.0_c_double)
-            end block
+            if (size(x(:, :, t), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
+              return
+            end if
+            if (size(x(:, :, t), 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
+              return
+            end if
+            res = (x(:, :, t) + 1.0_c_double)
           end subroutine
           subroutine quickr_set_error_msg(msg)
             character(len=*), intent(in) :: msg
@@ -1043,25 +1025,19 @@
             real(c_double), intent(out) :: res(:, :, :)
       
       
-            block
-              real(c_double), allocatable :: btmp1_(:, :, :)
-      
-              allocate(btmp1_(x__dim_1_, x__dim_2_, x__dim_3_))
-              btmp1_ = x(:, :, :, t)
-              if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
-                call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
-                return
-              end if
-              if (size(btmp1_, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
-                call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
-                return
-              end if
-              if (size(btmp1_, 3, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
-                call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
-                return
-              end if
-              res = (btmp1_ * 2.0_c_double)
-            end block
+            if (size(x(:, :, :, t), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
+              return
+            end if
+            if (size(x(:, :, :, t), 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
+              return
+            end if
+            if (size(x(:, :, :, t), 3, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("elementwise matrix operations require matching dimensions")
+              return
+            end if
+            res = (x(:, :, :, t) * 2.0_c_double)
           end subroutine
           subroutine quickr_set_error_msg(msg)
             character(len=*), intent(in) :: msg
@@ -1468,18 +1444,12 @@
             real(c_double), intent(out) :: res(:)
       
       
-            block
-              real(c_double), allocatable :: btmp1_(:)
-      
-              allocate(btmp1_(x__dim_1_))
-              btmp1_ = out(:, j)
-              if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            if (size(out(:, j), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
           call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
           & supported")
-                return
-              end if
-              res = (btmp1_ + 1.0_c_double)
-            end block
+              return
+            end if
+            res = (out(:, j) + 1.0_c_double)
           end subroutine
           subroutine quickr_set_error_msg(msg)
             character(len=*), intent(in) :: msg

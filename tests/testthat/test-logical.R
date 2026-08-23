@@ -201,6 +201,37 @@ test_that("short-circuiting does not read absent optional arguments", {
   expect_quick_identical(fn, list(0))
 })
 
+test_that("short-circuited nested operands defer length errors", {
+  skipped_and <- function() {
+    FALSE && (logical(2) && TRUE)
+  }
+  skipped_or <- function() {
+    TRUE || (logical(2) || FALSE)
+  }
+  reached_and <- function() {
+    TRUE && (logical(2) && TRUE)
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_quick_identical(skipped_or, list())
+  expect_error(quick(reached_and)(), "requires length-1 operands")
+})
+
+test_that("short-circuited division is not evaluated eagerly", {
+  skipped_and <- function(x) {
+    declare(type(x = double(1)))
+    FALSE && (1 / x > 0)
+  }
+  skipped_or <- function(x) {
+    declare(type(x = double(1)))
+    TRUE || (1 / x > 0)
+  }
+
+  expect_translation_snapshots(skipped_and)
+  expect_quick_identical(skipped_and, list(0))
+  expect_quick_identical(skipped_or, list(0))
+})
+
 test_that("&& and || accept one-element matrices", {
   matrix_and <- function(x, y) {
     declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
@@ -252,6 +283,26 @@ test_that("&& and || short-circuit like R's scalar operators", {
     list(and_result = and_result, or_result = or_result, calls = calls)
   }
   expect_quick_identical(shadowed_abs, list())
+})
+
+test_that("short-circuit results are private to parallel iterations", {
+  parallel_and <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    n <- length(x)
+    out <- logical(n)
+    declare(parallel())
+    for (i in seq_along(x)) {
+      out[i] <- x[i] > 0 && y[i] > 0
+    }
+    out
+  }
+
+  x <- rep(c(-1, 1), 500)
+  y <- rep(1, length(x))
+  expected <- parallel_and(x, y)
+  expect_translation_snapshots(parallel_and)
+  qfn <- quick(parallel_and)
+  expect_identical(qfn(x, y), expected)
 })
 
 test_that("while re-evaluates hoisted condition code every iteration", {
