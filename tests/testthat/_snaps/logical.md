@@ -16,13 +16,16 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(x, left, right, out, x__len_) bind(c)
-        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
+      subroutine fn(x, left, right, out, x__len_, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
         ! sizes
         integer(c_ptrdiff_t), intent(in), value :: x__len_
+      
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
       
         ! args
         real(c_double), intent(in) :: x(x__len_)
@@ -32,7 +35,25 @@
         ! manifest end
       
       
+      if (size((x >= left), kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size((x >= left), kind=c_ptrdiff_t) /= size((x <= right),&
+      & kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+          return
+        end if
         out = (x >= left) .and. (x <= right)
+      
+        contains
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -47,7 +68,8 @@
         const double* const left__, 
         const double* const right__, 
         int* const out__, 
-        const R_xlen_t x__len_);
+        const R_xlen_t x__len_, 
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // x
@@ -87,12 +109,20 @@
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
         
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
         fn(
           x__,
           left__,
           right__,
           out__,
-          x__len_);
+          x__len_,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
         
         UNPROTECT(1);
         return out;
@@ -375,13 +405,16 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(a, b, out, a__len_) bind(c)
-        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
+      subroutine fn(a, b, out, a__len_, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
         ! sizes
         integer(c_ptrdiff_t), intent(in), value :: a__len_
+      
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
       
         ! args
         real(c_double), intent(in) :: a(a__len_)
@@ -390,7 +423,35 @@
         ! manifest end
       
       
+        if (size(a, kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+          return
+        end if
+        if (size(a, kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+          return
+        end if
+      if (size(((a /= b)), kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(((a /= b)), kind=c_ptrdiff_t) /= size((abs((a - b)) <=&
+      & 3.0_c_double), kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+          return
+        end if
         out = ((a /= b)) .and. (abs((a - b)) <= 3.0_c_double)
+      
+        contains
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -404,7 +465,8 @@
         const double* const a__, 
         const double* const b__, 
         int* const out__, 
-        const R_xlen_t a__len_);
+        const R_xlen_t a__len_, 
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // a
@@ -433,11 +495,19 @@
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
         
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
         fn(
           a__,
           b__,
           out__,
-          a__len_);
+          a__len_,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
         
         UNPROTECT(1);
         return out;
