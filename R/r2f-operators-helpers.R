@@ -122,6 +122,45 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
   list(left = left, right = right)
 }
 
+# Lower operands into isolated hoists and materialize call expressions into
+# the parent hoist before lowering the next operand. Nested lowering can emit
+# guards that return from the generated procedure, so sharing one hoist and
+# materializing only after every operand has been lowered can reverse R's
+# left-to-right evaluation order.
+# Used by: r2f-arithmetic.R, r2f-logical.R
+lower_elementwise_operands <- function(args, scope, ..., hoist) {
+  stopifnot(length(args) == 2L, !is.null(hoist))
+
+  lapply(args, function(arg) {
+    if (is.symbol(arg) || is_scalar_atomic(arg)) {
+      return(r2f(arg, scope, ..., hoist = hoist))
+    }
+
+    operand_hoist <- hoist$capture()
+    operand <- r2f(arg, scope, ..., hoist = operand_hoist)
+    stopifnot(inherits(operand@value, Variable))
+
+    # runif() is the only expression-valued effect currently emitted by a
+    # handler. Other effectful constructs emit statements into the captured
+    # hoist, which are replayed before the next operand without forcing an
+    # otherwise-pure expression through a temporary.
+    if (grepl("unif_rand()", as.character(operand), fixed = TRUE)) {
+      tmp <- hoist$declare_tmp(
+        mode = operand@value@mode,
+        dims = operand@value@dims,
+        logical_as_int = logical_as_int(operand@value) &&
+          !isTRUE(operand@logical_booleanized)
+      )
+      hoist$emit(operand_hoist$render(glue("{tmp@name} = {operand}")))
+      return(Fortran(tmp@name, tmp))
+    }
+    if (operand_hoist$has_code()) {
+      hoist$emit(operand_hoist$render(character()))
+    }
+    operand
+  })
+}
+
 # Check if a dimension expression equals 1.
 # Used by: r2f-arithmetic.R, r2f-logical.R
 dim_is_one <- function(x) {
@@ -370,35 +409,41 @@ maybe_reshape_vector_matrix <- function(
     }
   }
 
-  if (left_rank == 2L && right_rank == 2L) {
-    matrix_msg <- "elementwise matrix operations require matching dimensions"
-    left_dims <- matrix_dims(left)
-    right_dims <- matrix_dims(right)
-    row_conform <- check_elementwise_lengths(left_dims$rows, right_dims$rows)
-    col_conform <- check_elementwise_lengths(left_dims$cols, right_dims$cols)
-    if (!row_conform$ok || !col_conform$ok) {
-      stop(matrix_msg, call. = FALSE)
+  if (left_rank >= 2L && left_rank == right_rank) {
+    array_msg <- if (left_rank == 2L) {
+      "elementwise matrix operations require matching dimensions"
+    } else {
+      "elementwise array operations require matching dimensions"
     }
-    if (row_conform$unknown) {
-      emit_elementwise_size_guard(
-        left,
-        right,
-        hoist,
-        scope,
-        matrix_msg,
-        left_axis = 1L
+    for (axis in seq_len(left_rank)) {
+      conform <- check_elementwise_lengths(
+        dim_or_one(left, axis),
+        dim_or_one(right, axis)
       )
+      if (!conform$ok) {
+        stop(array_msg, call. = FALSE)
+      }
+      if (conform$unknown) {
+        emit_elementwise_size_guard(
+          left,
+          right,
+          hoist,
+          scope,
+          array_msg,
+          left_axis = axis
+        )
+      }
     }
-    if (col_conform$unknown) {
-      emit_elementwise_size_guard(
-        left,
-        right,
-        hoist,
-        scope,
-        matrix_msg,
-        left_axis = 2L
-      )
-    }
+  } else if (
+    left_rank > 0L &&
+      right_rank > 0L &&
+      left_rank != right_rank &&
+      !setequal(c(left_rank, right_rank), c(1L, 2L))
+  ) {
+    stop(
+      "elementwise array operations require matching dimensions",
+      call. = FALSE
+    )
   }
 
   vec_mat_msg <- paste0(
@@ -407,6 +452,7 @@ maybe_reshape_vector_matrix <- function(
   )
   if (left_rank == 1L && right_rank == 2L) {
     right_dims <- matrix_dims(right)
+    check_nonempty(right, vec_mat_msg)
     left_len <- dim_or_one(left, 1L)
     row_conform <- check_elementwise_lengths(left_len, right_dims$rows)
     if (!row_conform$ok) {
@@ -425,6 +471,7 @@ maybe_reshape_vector_matrix <- function(
     left <- reshape_vector_for_matrix(left, right_dims$rows, right_dims$cols)
   } else if (left_rank == 2L && right_rank == 1L) {
     left_dims <- matrix_dims(left)
+    check_nonempty(left, vec_mat_msg)
     right_len <- dim_or_one(right, 1L)
     row_conform <- check_elementwise_lengths(right_len, left_dims$rows)
     if (!row_conform$ok) {
