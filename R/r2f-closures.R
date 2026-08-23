@@ -459,6 +459,28 @@ optional_arg_used <- function(expr, nm) {
   }
 
   if (
+    is_call(expr, quote(`||`)) &&
+      is_call(expr[[2L]], quote(is.null)) &&
+      length(expr[[2L]]) == 2L &&
+      is.symbol(expr[[2L]][[2L]]) &&
+      identical(as.character(expr[[2L]][[2L]]), nm)
+  ) {
+    return(FALSE)
+  }
+
+  if (
+    is_call(expr, quote(`&&`)) &&
+      is_call(expr[[2L]], quote(`!`)) &&
+      length(expr[[2L]]) == 2L &&
+      is_call(expr[[2L]][[2L]], quote(is.null)) &&
+      length(expr[[2L]][[2L]]) == 2L &&
+      is.symbol(expr[[2L]][[2L]][[2L]]) &&
+      identical(as.character(expr[[2L]][[2L]][[2L]]), nm)
+  ) {
+    return(FALSE)
+  }
+
+  if (
     is_call(expr, quote(is.null)) &&
       length(expr) == 2L &&
       is.symbol(expr[[2L]]) &&

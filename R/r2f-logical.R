@@ -251,6 +251,9 @@ scalarize_andor_operand <- function(
 is_pure_scalar_condition <- function(e, scope) {
   if (is.symbol(e)) {
     var <- get0(as.character(e), scope)
+    if (inherits(var, Variable) && !is.null(var@optional_dummy)) {
+      return(FALSE)
+    }
     return(
       !inherits(var, Variable) ||
         passes_as_scalar(var) ||
