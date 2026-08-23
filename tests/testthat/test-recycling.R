@@ -188,6 +188,20 @@ test_that("1x1 matrix operands follow R: arithmetic scalarizes, strict ops rejec
   expect_error(qcmp(c(1, 2, 3), matrix(5)), "matrix first dimension")
 })
 
+test_that("1x1 matrix arithmetic rejects known empty vectors", {
+  matrix_left <- function(m, x) {
+    declare(type(m = double(1, 1)), type(x = double(0)))
+    m + x
+  }
+  expect_error(quick(matrix_left), "matrix first dimension")
+
+  matrix_right <- function(x, m) {
+    declare(type(x = double(0)), type(m = double(1, 1)))
+    x + m
+  }
+  expect_error(quick(matrix_right), "matrix first dimension")
+})
+
 test_that("1x1 matrix with a symbolic-length vector keeps R's shape", {
   # The result's shape depends on the runtime length: R keeps the 1x1
   # dims for a length-1 vector and drops them for any other length, so no
