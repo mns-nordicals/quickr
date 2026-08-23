@@ -244,7 +244,21 @@ r2size <- function(r, scope, preserve_numeric = FALSE) {
       language = {
         op <- as.character(r[[1]])
 
-        if (op %in% c("+", "-", "/", "*", "^", "%/%", "%%", "abs")) {
+        if (
+          op %in%
+            c(
+              "+",
+              "-",
+              "/",
+              "*",
+              "^",
+              "%/%",
+              "%%",
+              "abs",
+              "min",
+              "max"
+            )
+        ) {
           args <- as.list(r)[-1]
           args <- lapply(
             args,

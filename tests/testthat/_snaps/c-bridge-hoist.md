@@ -21,11 +21,14 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(n, m, a, b, out) bind(c)
-        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
+      subroutine fn(n, m, a, b, out, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
+      
         ! args
         integer(c_int), intent(in) :: n
         integer(c_int), intent(in) :: m
@@ -38,10 +41,26 @@
         ! manifest end
       
       
+        if (int((min(real(n, kind=c_double), real(m, kind=c_double))), kind=c_ptrdiff_t) < 0) then
+          call quickr_set_error_msg("invalid 'length' argument")
+          return
+        end if
         out = 0.0_c_double
         do i = 1, size(out)
           out(i) = (a(i) + b(i))
         end do
+      
+        contains
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -56,7 +75,8 @@
         const int* const m__,
         const double* const a__,
         const double* const b__,
-        double* const out__);
+        double* const out__,
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // n
@@ -121,12 +141,20 @@
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
         fn(
           n__,
           m__,
           a__,
           b__,
-          out__);
+          out__,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
         
         UNPROTECT(1);
         return out;
