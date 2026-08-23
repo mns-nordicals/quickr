@@ -176,7 +176,13 @@ register_r2f_handler(
 # && and || are R's *scalar* control operators: operands must be length 1
 # (R errors otherwise), and the right operand is evaluated only when the
 # left side does not already decide the answer.
-scalarize_andor_operand <- function(x, op, hoist, scope) {
+scalarize_andor_operand <- function(
+  x,
+  op,
+  hoist,
+  scope,
+  defer_length_error = FALSE
+) {
   if (is.null(x@value) || !identical(x@value@mode, "logical")) {
     stop("`", op, "` requires logical operands", call. = FALSE)
   }
@@ -193,17 +199,16 @@ scalarize_andor_operand <- function(x, op, hoist, scope) {
   }
 
   dims <- lapply(x@value@dims, r2size, scope = scope)
-  if (
-    any(vapply(
-      dims,
-      \(dim) is_wholenumber(dim) && !dim_is_one(dim),
-      logical(1L)
-    ))
-  ) {
-    stop(
-      message,
-      call. = FALSE
-    )
+  length_known_bad <- any(vapply(
+    dims,
+    \(dim) is_wholenumber(dim) && !dim_is_one(dim),
+    logical(1L)
+  ))
+  if (length_known_bad) {
+    if (!defer_length_error) {
+      stop(message, call. = FALSE)
+    }
+    emit_quickr_error_if(".true.", message, hoist, scope)
   }
   if (is.null(hoist)) {
     stop("internal error: `", op, "` requires hoist context", call. = FALSE)
@@ -217,7 +222,10 @@ scalarize_andor_operand <- function(x, op, hoist, scope) {
     x <- hoist_unless_name(x, hoist)
   }
 
-  if (!all(vapply(dims, dim_is_one, logical(1L)))) {
+  if (
+    !length_known_bad &&
+      !all(vapply(dims, dim_is_one, logical(1L)))
+  ) {
     emit_quickr_error_if(
       glue("size({x}, kind=c_ptrdiff_t) /= 1_c_ptrdiff_t"),
       message,
@@ -317,7 +325,13 @@ compile_andor <- function(args, scope, ..., hoist = NULL) {
   tmp <- scope_unique_var(scope, mode = "logical", dims = NULL)
   sub <- new_hoist(scope)
   right <- r2f(args[[2L]], scope, ..., hoist = sub)
-  right <- scalarize_andor_operand(right, op, sub, scope)
+  right <- scalarize_andor_operand(
+    right,
+    op,
+    sub,
+    scope,
+    defer_length_error = TRUE
+  )
 
   hoist$emit(glue("{tmp@name} = {left}"))
   cond <- if (op == "&&") tmp@name else glue(".not. {tmp@name}")

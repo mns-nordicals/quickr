@@ -154,6 +154,26 @@ test_that("&& and || guard unknown operand lengths at runtime", {
   expect_error(qor(FALSE, c(FALSE, TRUE)), "requires length-1 operands")
 })
 
+test_that("short-circuited right operands defer length errors", {
+  skipped_and <- function() {
+    FALSE && logical(2)
+  }
+  skipped_or <- function() {
+    TRUE || logical(2)
+  }
+  reached_and <- function() {
+    TRUE && logical(2)
+  }
+  reached_or <- function() {
+    FALSE || logical(2)
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_quick_identical(skipped_or, list())
+  expect_error(quick(reached_and)(), "requires length-1 operands")
+  expect_error(quick(reached_or)(), "requires length-1 operands")
+})
+
 test_that("&& and || accept one-element matrices", {
   matrix_and <- function(x, y) {
     declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
