@@ -187,7 +187,8 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
 # would otherwise contribute one element where its dims claim two -- so
 # materialize the fill into a hoisted temporary there.
 fill_constructor_value <- function(literal, mode, args, scope, ..., hoist) {
-  var <- Variable(mode = mode, dims = r2dims(args, scope))
+  dims <- if (length(args)) r2dims(args, scope) else list(0L)
+  var <- Variable(mode = mode, dims = dims)
   length_dim <- var@dims[[1L]]
   if (is_wholenumber(length_dim)) {
     if (as.integer(length_dim) < 0L) {
