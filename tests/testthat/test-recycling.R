@@ -673,6 +673,19 @@ test_that("a left matrix fill is evaluated before its right operand", {
   expect_quick_identical(fn, list(matrix(as.double(1:4), 2, 2), 1, 2L))
 })
 
+test_that("a left matrix fill keeps dimensions captured before a scalar RHS", {
+  fn <- function(n) {
+    declare(type(n = integer(1)))
+    bump <- function() {
+      n <<- n + 1L
+      1
+    }
+    matrix(1, n, 1) + bump()
+  }
+
+  expect_quick_identical(fn, list(2L))
+})
+
 test_that("scalar-backed array expressions materialize before shape guards", {
   fn <- function(mat, n, k) {
     declare(
