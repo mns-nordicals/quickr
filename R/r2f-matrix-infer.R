@@ -105,7 +105,16 @@ infer_dest_crossprod_like <- function(args, scope, trans) {
   }
   y_arg <- args$y %||% if (length(args) > 1L) args[[2L]] else NULL
   y <- if (!is.null(y_arg)) infer_symbol_var(y_arg, scope) else NULL
-  x_dims <- matrix_dims_var(x)
+  x_dims <- matrix_dims_var(
+    x,
+    orientation = if (
+      identical(trans, "N") && x@rank == 1L && !is.null(y) && y@rank == 2L
+    ) {
+      "rowvec"
+    } else {
+      "matrix"
+    }
+  )
   if (is.null(y)) {
     n <- if (identical(trans, "T")) x_dims$cols else x_dims$rows
     return(Variable("double", list(n, n)))
