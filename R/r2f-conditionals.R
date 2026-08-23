@@ -29,6 +29,65 @@ ifelse_axis_verdict <- function(test_dim, branch_dim) {
   list(ok = TRUE, unknown = TRUE)
 }
 
+# A pure, non-trapping branch can stay inline in a WHERE assignment: evaluating
+# only selected elements is observably equivalent to evaluating the full R
+# branch, and avoids a full-size temporary. Keep the whitelist conservative;
+# calls that can consume RNG state, fail, or trap must still be materialized.
+ifelse_branch_is_pure <- function(e, scope) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(!inherits(var, Variable) || is.null(var@optional_dummy))
+  }
+  if (is.atomic(e)) {
+    return(TRUE)
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  if (
+    !op %in%
+      c(
+        "(",
+        "!",
+        "&",
+        "|",
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "==",
+        "!=",
+        "+",
+        "-",
+        "*",
+        "abs"
+      )
+  ) {
+    return(FALSE)
+  }
+  all(vapply(as.list(e)[-1L], ifelse_branch_is_pure, logical(1L), scope))
+}
+
+ifelse_branch_shape_is_known <- function(branch, mask) {
+  if (
+    passes_as_scalar(branch@value) ||
+      branch@value@rank != mask@value@rank
+  ) {
+    return(TRUE)
+  }
+  all(vapply(
+    seq_len(mask@value@rank),
+    function(axis) {
+      !ifelse_axis_verdict(
+        dim_or_one(mask, axis),
+        dim_or_one(branch, axis)
+      )$unknown
+    },
+    logical(1L)
+  ))
+}
+
 # Enforce the shape contract for one ifelse() branch: scalars broadcast
 # natively; a non-scalar branch must match `test`'s shape, because
 # merge() requires conformable arguments and a runtime mismatch would
@@ -75,25 +134,46 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
 # --- Handlers ---
 
 r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
-  .[mask, tsource, fsource] <- lower_operands_in_order(
-    args,
+  mask <- lower_operands_in_order(
+    args[1L],
     scope,
     ...,
     hoist = hoist
-  )
+  )[[1L]]
+  mask_code <- trimws(as.character(mask))
+  if (is.null(mask@value@name) || !identical(mask_code, mask@value@name)) {
+    # Keep the selector in the parent statement block. Branch captures share
+    # this declaration scope, so their temporary names cannot shadow it.
+    mask_tmp <- hoist$declare_tmp(
+      mode = mask@value@mode,
+      dims = mask@value@dims,
+      logical_as_int = logical_as_int(mask@value) &&
+        !isTRUE(mask@logical_booleanized)
+    )
+    hoist$emit(glue("{mask_tmp@name} = {mask}"))
+    mask <- Fortran(mask_tmp@name, mask_tmp)
+  }
 
-  # SIZE() guards below are inquiries and do not evaluate expressions. Name
-  # array-valued operands first, in R argument order, so their effects happen
-  # before an error and each expression is evaluated only once.
-  if (!passes_as_scalar(mask@value)) {
-    mask <- hoist_unless_name(mask, hoist)
+  lower_branch <- function(arg) {
+    sub <- hoist$capture()
+    branch <- r2f(arg, scope, ..., hoist = sub)
+    if (
+      !passes_as_scalar(mask@value) &&
+        (!ifelse_branch_is_pure(arg, scope) ||
+          !ifelse_branch_shape_is_known(branch, mask))
+    ) {
+      # WHERE may evaluate only selected RHS elements. Materialize a branch
+      # when full evaluation is observable or a runtime shape guard needs its
+      # actual extent.
+      branch <- hoist_unless_name(branch, sub)
+    }
+    list(value = branch, hoist = sub)
   }
-  if (!passes_as_scalar(tsource@value)) {
-    tsource <- hoist_unless_name(tsource, hoist)
-  }
-  if (!passes_as_scalar(fsource@value)) {
-    fsource <- hoist_unless_name(fsource, hoist)
-  }
+
+  yes <- lower_branch(args[[2L]])
+  no <- lower_branch(args[[3L]])
+  tsource <- yes$value
+  fsource <- no$value
 
   # R: the result is shaped like `test` (branches only contribute values).
   # A scalar test with array branches is not representable with merge().
@@ -108,19 +188,39 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     )
   }
 
-  # Checked before casts so guards splice the bare operand text.
-  check_ifelse_branch_shape(tsource, mask, hoist, scope)
-  check_ifelse_branch_shape(fsource, mask, hoist, scope)
+  # Checked before casts so guards splice the bare operand text. Keep each
+  # guard with its branch because an unselected branch is not evaluated by R.
+  check_ifelse_branch_shape(tsource, mask, yes$hoist, scope)
+  check_ifelse_branch_shape(fsource, mask, no$hoist, scope)
 
   mask <- booleanize_logical_as_int(mask)
 
-  # merge() requires same-typed branches; promote both to their common mode.
+  # Assign both branches into one result, promoting them to a common mode.
   promoted <- promote_operands(list(tsource, fsource), context = "ifelse()")
   .[tsource, fsource] <- promoted$args
   mode <- promoted$mode
+  result <- hoist$declare_tmp(mode = mode, dims = mask@value@dims)
 
-  Fortran(
-    glue("merge({tsource}, {fsource}, {mask})"),
-    Variable(mode, mask@value@dims)
-  )
+  if (passes_as_scalar(mask@value)) {
+    hoist$emit(glue("if ({mask}) then"))
+    hoist$emit(indent(yes$hoist$render(glue("{result@name} = {tsource}"))))
+    hoist$emit("else")
+    hoist$emit(indent(no$hoist$render(glue("{result@name} = {fsource}"))))
+    hoist$emit("end if")
+  } else {
+    selectors <- list(mask, glue(".not. {mask}"))
+    branches <- list(tsource, fsource)
+    branch_hoists <- list(yes$hoist, no$hoist)
+    for (i in seq_along(branches)) {
+      selector <- selectors[[i]]
+      hoist$emit(glue("if (any({selector})) then"))
+      assignment <- glue(
+        "where ({selector}) {result@name} = {branches[[i]]}"
+      )
+      hoist$emit(indent(branch_hoists[[i]]$render(assignment)))
+      hoist$emit("end if")
+    }
+  }
+
+  Fortran(result@name, result)
 }

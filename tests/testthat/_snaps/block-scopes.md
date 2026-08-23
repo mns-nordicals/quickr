@@ -29,9 +29,17 @@
       
         block
           logical :: btmp1_(3, 4) ! logical
+          logical :: btmp2_ ! logical
+          real(c_double) :: btmp3_
       
           btmp1_ = ((x > 0.0_c_double))
-          out = merge(1.0_c_double, 0.0_c_double, btmp1_(2_c_int, 3_c_int))
+          btmp2_ = btmp1_(2_c_int, 3_c_int)
+          if (btmp2_) then
+            btmp3_ = 1.0_c_double
+          else
+            btmp3_ = 0.0_c_double
+          end if
+          out = btmp3_
         end block
       end subroutine
     Code
@@ -115,6 +123,8 @@
       
         block
           logical, allocatable :: btmp1_(:, :) ! logical
+          logical :: btmp2_ ! logical
+          real(c_double) :: btmp3_
       
           allocate(btmp1_(x__dim_1_, x__dim_2_))
           if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
@@ -126,7 +136,13 @@
             return
           end if
           btmp1_ = ((x > 0.0_c_double))
-          out = merge(1.0_c_double, 0.0_c_double, btmp1_(1_c_int, 1_c_int))
+          btmp2_ = btmp1_(1_c_int, 1_c_int)
+          if (btmp2_) then
+            btmp3_ = 1.0_c_double
+          else
+            btmp3_ = 0.0_c_double
+          end if
+          out = btmp3_
         end block
       
         contains
