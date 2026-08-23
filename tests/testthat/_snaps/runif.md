@@ -108,12 +108,17 @@
         end interface
       
       
-        if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+        block
+          real(c_double) :: btmp1_
+      
+          btmp1_ = unif_rand()
+          if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        out_ = (x * unif_rand())
+            return
+          end if
+          out_ = (x * btmp1_)
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
