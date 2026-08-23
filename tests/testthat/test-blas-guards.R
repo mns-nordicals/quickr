@@ -101,6 +101,15 @@ test_that("double BLAS entry points reject raw storage", {
   expect_error(quick(fn), "does not support raw")
 })
 
+test_that("tcrossprod materializes scalar-backed array operands", {
+  fn <- function(n) {
+    declare(type(n = integer(1)))
+    tcrossprod(array(0, dim = n))
+  }
+
+  expect_quick_identical(fn, list(3L))
+})
+
 test_that("vector-matrix %*% guards an unknown vector length", {
   fn <- function(x, m) {
     declare(type(x = double(NA)), type(m = double(3, 3)))
