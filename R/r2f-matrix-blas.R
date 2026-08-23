@@ -364,6 +364,8 @@ gemm <- function(
   context = "gemm"
 ) {
   assert_hoist_env(hoist)
+  left <- cast_linalg_double(left, context)
+  right <- cast_linalg_double(right, context)
   assert_nonempty_blas_output(
     m,
     left,
@@ -426,6 +428,8 @@ gemv <- function(
   context = "gemv"
 ) {
   assert_hoist_env(hoist)
+  A <- cast_linalg_double(A, context)
+  x <- cast_linalg_double(x, context)
   output_dim <- if (transA == "N") m else n
   assert_nonempty_blas_output(
     output_dim,
@@ -526,6 +530,7 @@ syrk <- function(
   context = "syrk"
 ) {
   assert_hoist_env(hoist)
+  X <- cast_linalg_double(X, context)
   x_dims <- matrix_dims(X)
 
   # For trans = "T": C = t(X) %*% X, so C is k x k where k = ncol(X)
