@@ -117,6 +117,43 @@ hoist_unless_name <- function(x, hoist) {
   Fortran(tmp@name, tmp)
 }
 
+# Replay statements captured while lowering one operand before the next
+# operand is lowered. runif() is the only effectful expression that remains
+# inline; materialize it so its RNG effect also happens at this point.
+finish_captured_operand <- function(operand, captured_hoist, hoist) {
+  stopifnot(
+    inherits(operand, Fortran),
+    inherits(operand@value, Variable),
+    inherits(captured_hoist, "environment"),
+    inherits(hoist, "environment")
+  )
+
+  if (grepl("unif_rand()", as.character(operand), fixed = TRUE)) {
+    tmp <- hoist$declare_tmp(
+      mode = operand@value@mode,
+      dims = operand@value@dims,
+      logical_as_int = logical_as_int(operand@value) &&
+        !isTRUE(operand@logical_booleanized)
+    )
+    hoist$emit(captured_hoist$render(glue("{tmp@name} = {operand}")))
+    return(Fortran(tmp@name, tmp))
+  }
+  if (captured_hoist$has_code()) {
+    hoist$emit(captured_hoist$render(character()))
+  }
+  operand
+}
+
+lower_r2f_operand_in_order <- function(arg, scope, ..., hoist) {
+  if (is.symbol(arg) || is_scalar_atomic(arg)) {
+    return(r2f(arg, scope, ..., hoist = hoist))
+  }
+
+  captured_hoist <- hoist$capture()
+  operand <- r2f(arg, scope, ..., hoist = captured_hoist)
+  finish_captured_operand(operand, captured_hoist, hoist)
+}
+
 
 # --- Scope Helpers ---
 
