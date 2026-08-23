@@ -212,13 +212,21 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
 
   if (length(fill_idx) == 1L && !is.null(hoist)) {
     j <- fill_idx
-    fill_dims <- r2dims(list(fills[[j]]$nrow, fills[[j]]$ncol), scope)
+    fill_args <- fills[[j]]
+    fill_dims <- lapply(list(fill_args$nrow, fill_args$ncol), function(dim) {
+      if (is.numeric(dim) && length(dim) == 1L && is.finite(dim)) {
+        as.integer(dim)
+      } else {
+        dim
+      }
+    })
     fill_dims_f <- map_chr(fill_dims, bind_dim_int)
-    fill <- NULL
-
-    if (j == 1L) {
-      capture <- function(arg) {
+    lower_fill <- function(materialize = FALSE) {
+      lower_arg <- function(arg) {
         value <- lower_one(arg)
+        if (!materialize) {
+          return(value)
+        }
         materialize_via_hoist(
           value,
           value@value@mode,
@@ -226,14 +234,21 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
           hoist
         )
       }
-      fill <- capture(fills[[j]]$data)
-      fill_dims_f <- map_chr(
-        list(fills[[j]]$nrow, fills[[j]]$ncol),
-        \(arg) paste0("int(", as.character(capture(arg)), ")")
+      value <- lower_arg(fill_args$data)
+      dims <- lapply(list(fill_args$nrow, fill_args$ncol), lower_arg)
+      list(
+        value = value,
+        dims_f = map_chr(dims, \(dim) glue("int({dim})"))
       )
     }
 
-    other <- lower_one(args[[3L - j]])
+    if (j == 1L) {
+      fill <- lower_fill(materialize = TRUE)
+      fill_dims_f <- fill$dims_f
+      other <- lower_one(args[[2L]])
+    } else {
+      other <- lower_one(args[[1L]])
+    }
     broadcastable <- inherits(other, Fortran) &&
       !is.null(other@value) &&
       other@value@rank == 2L &&
@@ -242,6 +257,10 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       all(nzchar(fill_dims_f)) &&
       !any(grepl(":", fill_dims_f, fixed = TRUE))
     if (broadcastable) {
+      if (j == 2L) {
+        fill <- lower_fill()
+        fill_dims_f <- fill$dims_f
+      }
       other_dims <- matrix_dims(other)
       for (axis in 1:2) {
         # The fill has no array to size(), so its side of a runtime guard
@@ -258,14 +277,13 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
           left_f = glue("({fill_dims_f[[axis]]})")
         )
       }
-      fill <- fill %||% lower_one(fills[[j]]$data)
-      out <- list(fill, other)
+      out <- list(fill$value, other)
       return(if (j == 1L) out else rev(out))
     }
     fallback <- if (j == 1L) {
       materialize_via_hoist(
-        fill,
-        fill@value@mode,
+        fill$value,
+        fill$value@value@mode,
         fill_dims,
         hoist
       )
