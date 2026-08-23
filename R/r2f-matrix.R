@@ -197,8 +197,24 @@ register_r2f_handler(
       stop("drop() only supports rank 0-2 inputs", call. = FALSE)
     }
 
-    row_dim <- x@value@dims[[1L]]
-    col_dim <- x@value@dims[[2L]]
+    row_dim <- r2size(x@value@dims[[1L]], scope)
+    col_dim <- r2size(x@value@dims[[2L]], scope)
+    dims <- list(row_dim, col_dim)
+    unknown_axes <- which(!vapply(dims, is_wholenumber, logical(1L)))
+    if (length(unknown_axes)) {
+      x <- hoist_unless_name(x, hoist)
+      conditions <- vapply(
+        unknown_axes,
+        function(axis) glue("size({x}, {axis}) == 1"),
+        character(1L)
+      )
+      emit_quickr_error_if(
+        paste(conditions, collapse = " .or. "),
+        "drop() requires singleton dimensions to be known at compile time",
+        hoist,
+        scope
+      )
+    }
     row_is_one <- dim_is_one(row_dim)
     col_is_one <- dim_is_one(col_dim)
 
