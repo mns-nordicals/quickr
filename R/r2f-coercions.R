@@ -6,6 +6,12 @@
 r2f_handlers[["as.double"]] <- function(args, scope = NULL, ...) {
   stopifnot(length(args) == 1L)
   x <- r2f(args[[1L]], scope, ...)
+  if (identical(x@value@mode, "complex")) {
+    stop(
+      "as.double() does not support complex input; imaginary parts would be discarded",
+      call. = FALSE
+    )
+  }
   x <- maybe_cast_double(x)
 
   # R drops dimensions for as.double(<array>): the result is a vector.

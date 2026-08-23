@@ -14,6 +14,15 @@ test_that("as.double casts integer and logical values", {
   expect_quick_identical(fn_lgl, list(c(TRUE, FALSE, TRUE)))
 })
 
+test_that("as.double refuses unsupported complex coercion", {
+  fn <- function(x) {
+    declare(type(x = complex(n)))
+    as.double(x)
+  }
+
+  expect_error(quick(fn), "does not support complex")
+})
+
 test_that("as.double drops dimensions for matrices and allows slice assignment", {
   as_vec <- function(a) {
     declare(type(a = integer(2L, 3L)))
