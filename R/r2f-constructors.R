@@ -382,6 +382,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   }
 
   out <- r2f(args$data, scope, ..., hoist = hoist)
+  data_scalar <- passes_as_scalar(out@value)
   target_dims <- dim_to_dims(args$dim)
   if (!length(target_dims)) {
     stop("array(dim=) must not be empty", call. = FALSE)
@@ -500,5 +501,12 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
     mode = out@value@mode,
     dims = target_dims
   )
+  if (
+    data_scalar &&
+      !passes_as_scalar(out@value) &&
+      !parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")
+  ) {
+    return(materialize_via_hoist(out, out@value@mode, target_dims, hoist))
+  }
   out
 }
