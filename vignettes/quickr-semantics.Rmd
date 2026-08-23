@@ -261,9 +261,9 @@ regardless of the other operand's length: `numeric(0) + 1:3` is
 operand *known* at compile time to be zero-length combines only with a
 scalar (`double(0) + 1` is `numeric(0)`, matching R); combining it with
 any other vector — even another known-zero-length one — is a compile
-error. When lengths are only known at run time, a zero-length operand
-errors unless the other operand's length is also zero (two zero-length
-operands produce a zero-length result, as in R).
+error. When lengths are only known at run time, the generated guard
+rejects any zero-length non-scalar operand, including a pair of
+zero-length vectors. Scalar broadcast remains allowed.
 
 ### A variable's type cannot change
 
