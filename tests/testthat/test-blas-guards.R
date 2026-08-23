@@ -426,3 +426,49 @@ test_that("NA dims are never treated as equal", {
     fixed = TRUE
   )
 })
+
+test_that("crossprod with unverifiable dims compiles and guards at runtime", {
+  fn <- function(x, y, n, p, m, k) {
+    declare(
+      type(n = integer(1)),
+      type(p = integer(1)),
+      type(m = integer(1)),
+      type(k = integer(1)),
+      type(x = double(n, m)),
+      type(y = double(p, k))
+    )
+    crossprod(x, y)
+  }
+
+  qfn <- quick(fn)
+  x <- matrix(as.double(1:6), 2, 3)
+  y <- matrix(as.double(6:1), 2, 3)
+  expect_equal(qfn(x, y, 2L, 2L, 3L, 3L), crossprod(x, y))
+  expect_error(
+    qfn(x, matrix(as.double(1:6), 3, 2), 2L, 3L, 3L, 2L),
+    "non-conformable arguments in crossprod"
+  )
+})
+
+test_that("unverifiable %*% dims compile and guard at runtime", {
+  fn <- function(A, B, n, m, k) {
+    declare(
+      type(n = integer(1)),
+      type(m = integer(1)),
+      type(k = integer(1)),
+      type(A = double(n, m)),
+      type(B = double(k, n))
+    )
+    A %*% B
+  }
+
+  qfn <- expect_no_warning(quick(fn))
+  A <- matrix(as.double(1:6), 2, 3)
+  B <- matrix(as.double(6:1), 3, 2)
+  expect_equal(qfn(A, B, 2L, 3L, 3L), A %*% B)
+  expect_error(
+    qfn(A, matrix(as.double(1:4), 2, 2), 2L, 3L, 2L),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+})
