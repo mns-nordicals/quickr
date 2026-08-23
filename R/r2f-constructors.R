@@ -38,7 +38,15 @@ parent_call_name <- function(calls) {
 # before dispatching, and the constructor handlers forward what they got.
 materialize_via_hoist <- function(code, mode, dims, hoist) {
   stopifnot(is.environment(hoist))
-  tmp <- hoist$declare_tmp(mode = mode, dims = dims)
+  logical_storage <- inherits(code, Fortran) &&
+    inherits(code@value, Variable) &&
+    logical_as_int(code@value) &&
+    !isTRUE(code@logical_booleanized)
+  tmp <- hoist$declare_tmp(
+    mode = mode,
+    dims = dims,
+    logical_as_int = logical_storage
+  )
   hoist$emit(glue("{tmp@name} = {code}"))
   Fortran(tmp@name, tmp)
 }
