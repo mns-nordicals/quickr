@@ -30,7 +30,7 @@
       
       
         block
-          integer(c_int), allocatable :: btmp1_(:) ! logical
+          logical, allocatable :: btmp1_(:) ! logical
       
           allocate(btmp1_(c__len_))
           btmp1_ = (c/=0)
@@ -39,7 +39,7 @@
       & supported")
             return
           end if
-          out_ = merge(real(1_c_int, kind=c_double), a, (btmp1_ /= 0))
+          out_ = merge(real(1_c_int, kind=c_double), a, btmp1_)
         end block
       
         contains
@@ -149,7 +149,7 @@
       
       
         block
-          integer(c_int), allocatable :: btmp1_(:) ! logical
+          logical, allocatable :: btmp1_(:) ! logical
       
           allocate(btmp1_(c__len_))
           btmp1_ = (c/=0)
@@ -163,7 +163,7 @@
       & supported")
             return
           end if
-          out_ = merge(a, b, (btmp1_ /= 0))
+          out_ = merge(a, b, btmp1_)
         end block
       
         contains
@@ -248,4 +248,3 @@
         UNPROTECT(1);
         return out_;
       }
-
