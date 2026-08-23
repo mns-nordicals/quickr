@@ -1312,7 +1312,7 @@ diag_matrix <- function(
     if (!diag_empty && !(is_wholenumber(x_len) && as.integer(x_len) > 0L)) {
       emit_quickr_error_if(
         glue(
-          "({blas_int(x_len, scope)} == 0_c_int) .and. ({blas_int(diag_len, scope)} > 0_c_int)"
+          "({blas_int(x_len)} == 0_c_int) .and. ({blas_int(diag_len)} > 0_c_int)"
         ),
         "diag() cannot recycle an empty vector into a nonempty matrix",
         hoist,
