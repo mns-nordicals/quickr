@@ -42,7 +42,12 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
 # --- Handlers ---
 
 r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
-  .[mask, tsource, fsource] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[mask, tsource, fsource] <- lower_operands_in_order(
+    args,
+    scope,
+    ...,
+    hoist = hoist
+  )
 
   # SIZE() guards below are inquiries and do not evaluate expressions. Name
   # array-valued operands first, in R argument order, so their effects happen
