@@ -54,6 +54,7 @@ equality comparisons; order comparisons (`<`, `<=`, `>`, `>=`) and `%%`
 are errors, exactly as they are in R. Outside elementwise operations,
 complex support is narrower than the lattice suggests — see
 [complex values](#complex) under the differences below.
+Raw values cannot be used as arithmetic operands.
 
 An operation's result type is the "join" of its operands' types — the
 highest type among them — except where the table says otherwise:
@@ -254,6 +255,12 @@ R detects overflow in integer `+`, `-`, and `*`, warns, and returns `NA`.
 quickr does not support `NA` and uses Fortran integer arithmetic directly,
 so an overflowing result can differ. Convert an operand to double when the
 calculation can exceed the integer range.
+
+### Zero divisors in `%%` and `%/%`
+
+R returns `NA` or `NaN` with a warning for a zero divisor. Fortran's
+remainder and division operations do not define it, so quickr refuses a
+literal zero divisor at compile time and checks computed divisors at run time.
 
 ### Empty `min()` and `max()` use Fortran identities
 
