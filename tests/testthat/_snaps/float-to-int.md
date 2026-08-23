@@ -219,13 +219,21 @@
         ! manifest end
       
       
-      if (size(real(a, kind=c_double), kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(real(a, kind=c_double), kind=c_ptrdiff_t) /=&
-      & size(real(b, kind=c_double), kind=c_ptrdiff_t)) then
+        block
+          real(c_double), allocatable :: btmp1_(:)
+          real(c_double), allocatable :: btmp2_(:)
+      
+          allocate(btmp1_(a__len_))
+          allocate(btmp2_(a__len_))
+          btmp1_ = real(a, kind=c_double)
+          btmp2_ = real(b, kind=c_double)
+          if (size(btmp1_, kind=c_ptrdiff_t) == 0 .or. size(btmp1_, kind=c_ptrdiff_t) /= size(btmp2_, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        out = int((real(a, kind=c_double) / real(b, kind=c_double)), kind=c_int)
+            return
+          end if
+          out = int((btmp1_ / btmp2_), kind=c_int)
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
