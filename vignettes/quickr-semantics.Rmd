@@ -292,6 +292,13 @@ dimension remains supported when every output extent is nonzero, such as
 a `2x0` matrix multiplied by a `0x3` matrix; that result is a `2x3`
 matrix of zeros, as in R.
 
+### `drop()` requires a fixed result rank
+
+The rank of a compiled result cannot depend on a runtime extent. When a
+matrix axis is not known at compile time, `drop()` accepts inputs whose
+runtime extent is not 1 and raises an error when it is 1. Declare singleton
+axes explicitly when `drop()` should remove them.
+
 ### A variable's type cannot change
 
 `x <- x + 0.5` on an integer `x` is a compile-time error, as described
