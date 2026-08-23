@@ -64,6 +64,25 @@ test_that("%*% evaluates effectful operands before a runtime shape error", {
   )
 })
 
+test_that("qr.solve evaluates tol before a runtime shape error", {
+  fn <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(m)))
+    qr.solve(a, b, tol = runif(1))
+  }
+  qfn <- quick(fn)
+
+  set.seed(125)
+  expect_error(
+    qfn(diag(2), as.double(1:3)),
+    "non-conformable arguments in qr.solve"
+  )
+  actual_seed <- .Random.seed
+
+  set.seed(125)
+  runif(1)
+  expect_identical(actual_seed, .Random.seed)
+})
+
 test_that("nested %*% operands preserve left-to-right evaluation", {
   fn <- function() {
     runif(2) %*% matrix(runif(4), 2, 2)

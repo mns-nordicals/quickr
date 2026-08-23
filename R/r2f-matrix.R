@@ -619,10 +619,10 @@ register_r2f_handler(
       r2f(1e-7, scope, ..., hoist = hoist)
     } else {
       tol <- cast_linalg_double(
-        r2f(tol_arg, scope, ..., hoist = hoist),
+        lower_r2f_operand_in_order(tol_arg, scope, ..., hoist = hoist),
         "qr.solve"
       )
-      if (tol@value@rank != 0L) {
+      if (!passes_as_scalar(tol@value)) {
         stop("qr.solve() expects a scalar `tol`", call. = FALSE)
       }
       tol
