@@ -38,12 +38,7 @@
       
         tmp1_ = (c/=0)
         if (any(tmp1_)) then
-          block
-            integer(c_int) :: btmp1_
-      
-            btmp1_ = 1_c_int
-            where (tmp1_) tmp2_ = real(btmp1_, kind=c_double)
-          end block
+          where (tmp1_) tmp2_ = real(1_c_int, kind=c_double)
         end if
         if (any(.not. tmp1_)) then
           if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
