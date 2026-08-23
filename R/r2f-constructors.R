@@ -127,8 +127,8 @@ known_dims_product <- function(dims) {
   prod(vals)
 }
 
-validate_constructor_dims <- function(dims, context, scope, hoist) {
-  stopifnot(is.list(dims), is_string(context), !is.null(hoist))
+validate_static_constructor_dims <- function(dims, context) {
+  stopifnot(is.list(dims), is_string(context))
   message <- paste0(context, " dimensions must be non-negative")
   for (dim in dims) {
     if (
@@ -139,6 +139,18 @@ validate_constructor_dims <- function(dims, context, scope, hoist) {
         dim < 0
     ) {
       stop(message, call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+
+validate_constructor_dims <- function(dims, context, scope, hoist) {
+  stopifnot(is.list(dims), is_string(context), !is.null(hoist))
+  validate_static_constructor_dims(dims, context)
+  message <- paste0(context, " dimensions must be non-negative")
+  for (dim in dims) {
+    if (is_size_name(dim)) {
+      next
     }
     if (is_wholenumber(dim)) {
       next
@@ -423,7 +435,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   src <- r2f(margs$data, scope, ..., hoist = hoist)
   dims <- r2dims(list(margs$nrow, margs$ncol), scope)
-  validate_constructor_dims(dims, "matrix()", scope, hoist)
+  validate_static_constructor_dims(dims, "matrix()")
   out_val <- Variable(mode = src@value@mode, dims = dims)
 
   # A scalar broadcasts natively on direct whole-array assignment, so keep
@@ -434,11 +446,13 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       src@value <- out_val
       return(src)
     }
+    validate_constructor_dims(dims, "matrix()", scope, hoist)
     return(materialize_via_hoist(src, src@value@mode, dims, hoist))
   }
 
   # reshape_vector_for_matrix() splices its source into both the `source`
   # and `pad` args; hoist non-trivial expressions so they evaluate once.
+  validate_constructor_dims(dims, "matrix()", scope, hoist)
   reshape_vector_for_matrix(
     hoist_unless_name(src, hoist),
     dims[[1L]],
@@ -461,8 +475,9 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   if (!length(target_dims)) {
     stop("array(dim=) must not be empty", call. = FALSE)
   }
-  validate_constructor_dims(target_dims, "array()", scope, hoist)
+  validate_static_constructor_dims(target_dims, "array()")
   if (!passes_as_scalar(out@value)) {
+    validate_constructor_dims(target_dims, "array()", scope, hoist)
     # R semantics: `array()` flattens its input (dropping dim) then reshapes.
     # We implement this as Fortran `reshape()`. Recycling (i.e. expanding a
     # shorter SOURCE to a larger target shape) is not supported.
@@ -557,6 +572,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       !passes_as_scalar(out@value) &&
       !parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")
   ) {
+    validate_constructor_dims(target_dims, "array()", scope, hoist)
     return(materialize_via_hoist(out, out@value@mode, target_dims, hoist))
   }
   out
