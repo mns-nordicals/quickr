@@ -150,6 +150,7 @@ test_that("&& and || guard unknown operand lengths at runtime", {
   }
   qor <- quick(or_fn)
   expect_identical(qor(FALSE, TRUE), TRUE)
+  expect_identical(qor(TRUE, c(FALSE, TRUE)), TRUE)
   expect_error(qor(FALSE, c(FALSE, TRUE)), "requires length-1 operands")
 })
 
