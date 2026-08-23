@@ -363,6 +363,21 @@ test_that("diag size folding rejects shadowed local closures", {
   )
 })
 
+test_that("diag refuses to cycle an empty vector into a nonempty matrix", {
+  static_fn <- function() {
+    diag(double(0), 2L, 2L)
+  }
+  dynamic <- function(x) {
+    declare(type(x = double(n)))
+    diag(x, 2L, 2L)
+  }
+
+  expect_error(quick(static_fn), "cannot recycle an empty vector")
+  qdynamic <- quick(dynamic)
+  expect_quick_equal(dynamic, list(as.double(1:2)))
+  expect_error(qdynamic(double(0)), "cannot recycle an empty vector")
+})
+
 test_that("diag handles missing x with nrow/ncol and 1x1 matrices", {
   diag_nrow <- function(n) {
     declare(type(n = integer(1)))
