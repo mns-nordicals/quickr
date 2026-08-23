@@ -186,18 +186,41 @@ match_scalar_matrix_fill <- function(e, scope) {
 # array to size()). Everything else compiles as written.
 # Used by: r2f-arithmetic.R, r2f-logical.R
 lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
+  stopifnot(length(args) == 2L, !is.null(hoist))
+  lower_one <- function(arg) {
+    if (is.symbol(arg) || is_scalar_atomic(arg)) {
+      return(r2f(arg, scope, ..., hoist = hoist))
+    }
+    operand_hoist <- hoist$capture()
+    operand <- r2f(arg, scope, ..., hoist = operand_hoist)
+    if (grepl("unif_rand()", as.character(operand), fixed = TRUE)) {
+      tmp <- hoist$declare_tmp(
+        mode = operand@value@mode,
+        dims = operand@value@dims,
+        logical_as_int = logical_as_int(operand@value) &&
+          !isTRUE(operand@logical_booleanized)
+      )
+      hoist$emit(operand_hoist$render(glue("{tmp@name} = {operand}")))
+      return(Fortran(tmp@name, tmp))
+    }
+    if (operand_hoist$has_code()) {
+      hoist$emit(operand_hoist$render(character()))
+    }
+    operand
+  }
+
   fills <- lapply(args, match_scalar_matrix_fill, scope = scope)
   fill_idx <- which(!map_lgl(fills, is.null))
 
   if (length(fill_idx) == 1L && !is.null(hoist)) {
     j <- fill_idx
     fill_dims <- r2dims(list(fills[[j]]$nrow, fills[[j]]$ncol), scope)
-    fill_dims_f <- map_chr(fill_dims, \(d) dims2f(list(d), scope))
+    fill_dims_f <- map_chr(fill_dims, bind_dim_int)
     fill <- NULL
 
     if (j == 1L) {
       capture <- function(arg) {
-        value <- r2f(arg, scope, ..., hoist = hoist)
+        value <- lower_one(arg)
         materialize_via_hoist(
           value,
           value@value@mode,
@@ -208,11 +231,11 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       fill <- capture(fills[[j]]$data)
       fill_dims_f <- map_chr(
         list(fills[[j]]$nrow, fills[[j]]$ncol),
-        \(arg) as.character(capture(arg))
+        \(arg) paste0("int(", as.character(capture(arg)), ")")
       )
     }
 
-    other <- r2f(args[[3L - j]], scope, ..., hoist = hoist)
+    other <- lower_one(args[[3L - j]])
     broadcastable <- inherits(other, Fortran) &&
       !is.null(other@value) &&
       other@value@rank == 2L &&
@@ -237,7 +260,7 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
           left_f = glue("({fill_dims_f[[axis]]})")
         )
       }
-      fill <- fill %||% r2f(fills[[j]]$data, scope, ..., hoist = hoist)
+      fill <- fill %||% lower_one(fills[[j]]$data)
       out <- list(fill, other)
       return(if (j == 1L) out else rev(out))
     }
@@ -249,13 +272,13 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
         hoist
       )
     } else {
-      r2f(args[[j]], scope, ..., hoist = hoist)
+      lower_one(args[[j]])
     }
     out <- list(fallback, other)
     return(if (j == 1L) out else rev(out))
   }
 
-  lapply(args, r2f, scope, ..., hoist = hoist)
+  lapply(args, lower_one)
 }
 
 # Check if a dimension expression equals 1.
@@ -606,14 +629,17 @@ conform_elementwise_operands <- function(
     )
   }
 
-  if (left_rank == 2L && right_rank == 2L) {
-    left_dims <- matrix_dims(left)
-    right_dims <- matrix_dims(right)
-    for (axis in 1:2) {
+  if (left_rank >= 2L && left_rank == right_rank) {
+    array_msg <- if (left_rank == 2L) {
+      elementwise_matrix_msg
+    } else {
+      "elementwise array operations require matching dimensions"
+    }
+    for (axis in seq_len(left_rank)) {
       guard_conformable_dims(
-        if (axis == 1L) left_dims$rows else left_dims$cols,
-        if (axis == 1L) right_dims$rows else right_dims$cols,
-        elementwise_matrix_msg,
+        dim_or_one(left, axis),
+        dim_or_one(right, axis),
+        array_msg,
         hoist,
         scope,
         left = left,
@@ -622,6 +648,16 @@ conform_elementwise_operands <- function(
         right_axis = axis
       )
     }
+  } else if (
+    left_rank > 0L &&
+      right_rank > 0L &&
+      left_rank != right_rank &&
+      !setequal(c(left_rank, right_rank), c(1L, 2L))
+  ) {
+    stop(
+      "elementwise array operations require matching dimensions",
+      call. = FALSE
+    )
   }
 
   vec_mat_msg <- paste0(
@@ -630,6 +666,7 @@ conform_elementwise_operands <- function(
   )
   if (left_rank == 1L && right_rank == 2L) {
     right_dims <- matrix_dims(right)
+    check_nonempty(right, vec_mat_msg)
     guard_conformable_dims(
       dim_or_one(left, 1L),
       right_dims$rows,
@@ -643,6 +680,7 @@ conform_elementwise_operands <- function(
     left <- reshape_vector_for_matrix(left, right_dims$rows, right_dims$cols)
   } else if (left_rank == 2L && right_rank == 1L) {
     left_dims <- matrix_dims(left)
+    check_nonempty(left, vec_mat_msg)
     guard_conformable_dims(
       dim_or_one(right, 1L),
       left_dims$rows,

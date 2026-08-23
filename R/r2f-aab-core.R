@@ -44,6 +44,30 @@ new_hoist <- function(scope) {
     )
   }
 
+  capture <- function() {
+    captured <- character()
+    capture_emit <- function(...) {
+      captured <<- c(
+        captured,
+        as.character(unlist(c(character(), ...), use.names = FALSE))
+      )
+    }
+    capture_render <- function(code) {
+      str_flatten_lines(str_split_lines(captured, code))
+    }
+    capture_has_code <- function() length(captured) > 0L
+    list2env(
+      list(
+        emit = capture_emit,
+        declare_tmp = declare_tmp,
+        render = capture_render,
+        has_code = capture_has_code,
+        capture = capture
+      ),
+      parent = emptyenv()
+    )
+  }
+
   render <- function(code) {
     code <- str_split_lines(code)
     if (is_empty()) {
@@ -70,7 +94,8 @@ new_hoist <- function(scope) {
       emit = emit,
       declare_tmp = declare_tmp,
       is_empty = is_empty,
-      render = render
+      render = render,
+      capture = capture
     ),
     parent = emptyenv()
   )
@@ -121,7 +146,8 @@ hoist_unless_name <- function(x, hoist) {
     mode = x@value@mode,
     dims = x@value@dims,
     hoist = hoist,
-    logical_as_int = logical_as_int(x@value)
+    logical_as_int = logical_as_int(x@value) &&
+      !isTRUE(x@logical_booleanized)
   )
 }
 
