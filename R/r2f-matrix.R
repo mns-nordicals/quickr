@@ -350,7 +350,7 @@ register_r2f_handler(
       stop("cbind() requires at least one argument", call. = FALSE)
     }
 
-    values <- lapply(args, r2f, scope, ..., hoist = hoist)
+    values <- lower_operands_in_order(args, scope, ..., hoist = hoist)
     for (val in values) {
       if (is.null(val@value) || is.null(val@value@mode)) {
         stop(context, " inputs must have a value", call. = FALSE)
@@ -406,7 +406,7 @@ register_r2f_handler(
       stop("rbind() requires at least one argument", call. = FALSE)
     }
 
-    values <- lapply(args, r2f, scope, ..., hoist = hoist)
+    values <- lower_operands_in_order(args, scope, ..., hoist = hoist)
     for (val in values) {
       if (is.null(val@value) || is.null(val@value@mode)) {
         stop(context, " inputs must have a value", call. = FALSE)
@@ -911,7 +911,17 @@ crossprod_like <- function(
 
   y <- maybe_cast_double(r2f(y_arg, scope, ..., hoist = hoist))
 
-  x_dims <- matrix_dims(x)
+  x_is_row_vector <- identical(context, "tcrossprod") &&
+    x@value@rank == 1L &&
+    y@value@rank == 2L
+  x_dims <- matrix_dims(
+    x,
+    orientation = if (x_is_row_vector) {
+      "rowvec"
+    } else {
+      "matrix"
+    }
+  )
   y_dims <- matrix_dims(y)
   x_eff <- effective_dims(x_dims, opA)
   y_eff <- effective_dims(y_dims, opB)
