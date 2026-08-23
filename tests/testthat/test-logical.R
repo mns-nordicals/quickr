@@ -221,6 +221,18 @@ test_that("short-circuited division is not evaluated eagerly", {
   expect_quick_identical(skipped_or, list(0))
 })
 
+test_that("short-circuited calls defer arity errors", {
+  skipped_abs <- function() {
+    FALSE && abs()
+  }
+  reached_abs <- function() {
+    TRUE && abs()
+  }
+
+  expect_quick_identical(skipped_abs, list())
+  expect_error(quick(reached_abs)(), "abs")
+})
+
 test_that("&& and || accept one-element matrices", {
   matrix_and <- function(x, y) {
     declare(type(x = logical(1, 1)), type(y = logical(1, 1)))

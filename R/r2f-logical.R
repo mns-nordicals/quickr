@@ -311,6 +311,29 @@ is_pure_scalar_condition <- function(e, scope) {
   ))
 }
 
+short_circuit_arity_error <- function(e, scope) {
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(NULL)
+  }
+
+  op <- as.character(e[[1L]])
+  if (
+    identical(op, "abs") &&
+      !inherits(scope[[op]], LocalClosure) &&
+      length(e) != 2L
+  ) {
+    return("abs() requires exactly one argument")
+  }
+
+  for (arg in as.list(e)[-1L]) {
+    error <- short_circuit_arity_error(arg, scope)
+    if (!is.null(error)) {
+      return(error)
+    }
+  }
+  NULL
+}
+
 compile_andor <- function(
   args,
   scope,
@@ -338,8 +361,12 @@ compile_andor <- function(
   )
 
   f <- if (op == "&&") ".and." else ".or."
+  rhs_arity_error <- short_circuit_arity_error(args[[2L]], scope)
 
-  if (is_pure_scalar_condition(args[[2L]], scope)) {
+  if (
+    is.null(rhs_arity_error) &&
+      is_pure_scalar_condition(args[[2L]], scope)
+  ) {
     # Fortran may evaluate both operands of .and./.or.; for a pure right
     # operand that is indistinguishable from short-circuiting, so keep
     # the compact infix form.
@@ -372,20 +399,25 @@ compile_andor <- function(
   tmp <- scope_unique_var(scope, mode = "logical", dims = NULL)
   register_openmp_private(scope, tmp@name)
   sub <- new_hoist(scope)
-  right <- r2f(
-    args[[2L]],
-    scope,
-    ...,
-    hoist = sub,
-    defer_andor_length_error = TRUE
-  )
-  right <- scalarize_andor_operand(
-    right,
-    op,
-    sub,
-    scope,
-    defer_length_error = TRUE
-  )
+  if (is.null(rhs_arity_error)) {
+    right <- r2f(
+      args[[2L]],
+      scope,
+      ...,
+      hoist = sub,
+      defer_andor_length_error = TRUE
+    )
+    right <- scalarize_andor_operand(
+      right,
+      op,
+      sub,
+      scope,
+      defer_length_error = TRUE
+    )
+  } else {
+    emit_quickr_error_if(".true.", rhs_arity_error, sub, scope)
+    right <- Fortran(".false.", Variable("logical"))
+  }
 
   hoist$emit(glue("{tmp@name} = {left}"))
   cond <- if (op == "&&") tmp@name else glue(".not. {tmp@name}")
