@@ -9,10 +9,17 @@
 # array dims, so splicing contexts must spread them explicitly.
 # Used by: c(), array()
 is_fill_constructor_call <- function(e, scope) {
-  if (!is.call(e) || !is.symbol(e[[1L]])) {
+  if (!is.call(e)) {
     return(FALSE)
   }
-  name <- as.character(e[[1L]])
+  callable <- e[[1L]]
+  while (is_call(callable, quote(`(`)) && length(callable) == 2L) {
+    callable <- callable[[2L]]
+  }
+  if (!is.symbol(callable)) {
+    return(FALSE)
+  }
+  name <- as.character(callable)
   name %in%
     c("logical", "integer", "double", "numeric") &&
     (is.null(scope) || !inherits(scope[[name]], LocalClosure))
