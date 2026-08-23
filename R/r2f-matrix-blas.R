@@ -639,6 +639,12 @@ triangular_solve <- function(
 
   assert_rank2_matrix(A, "triangular solve expects a matrix")
 
+  # Runtime shape checks use SIZE(), which does not evaluate expressions.
+  # Name operands in call order before any guard so error paths preserve R's
+  # argument evaluation and each operand is evaluated once.
+  A <- hoist_unless_name(A, hoist)
+  B <- hoist_unless_name(B, hoist)
+
   a_dims <- matrix_dims(A)
   assert_square_matrix(a_dims, A, "triangular solve", hoist, scope)
   n <- a_dims$rows
@@ -720,6 +726,9 @@ lapack_solve <- function(
   B <- maybe_cast_double(B)
 
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
+
+  A <- hoist_unless_name(A, hoist)
+  B <- hoist_unless_name(B, hoist)
 
   a_dims <- matrix_dims(A)
   m <- a_dims$rows
@@ -1047,6 +1056,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
 
   A <- maybe_cast_double(A)
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
+  A <- hoist_unless_name(A, hoist)
 
   a_dims <- matrix_dims(A)
   assert_square_matrix(a_dims, A, context, hoist, scope)
@@ -1121,6 +1131,7 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
 
   A <- maybe_cast_double(A)
   assert_rank2_matrix(A, paste0(context, " expects a matrix"))
+  A <- hoist_unless_name(A, hoist)
 
   a_dims <- matrix_dims(A)
   assert_square_matrix(a_dims, A, context, hoist, scope)
@@ -1184,6 +1195,7 @@ lapack_chol2inv <- function(
 
   R <- maybe_cast_double(R)
   assert_rank2_matrix(R, paste0(context, " expects a matrix"))
+  R <- hoist_unless_name(R, hoist)
 
   r_dims <- matrix_dims(R)
   assert_square_matrix(r_dims, R, context, hoist, scope)
