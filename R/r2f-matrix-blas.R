@@ -67,17 +67,18 @@ check_blas_dims <- function(left, right) {
   if (is_wholenumber(left) && is_wholenumber(right)) {
     return(list(
       ok = identical(as.integer(left), as.integer(right)),
-      unknown = FALSE
+      unknown = FALSE,
+      reject_zero = FALSE
     ))
   }
   if (!is_scalar_na(left) && !is_scalar_na(right)) {
     left_norm <- fortranize_expr_symbols(left)
     right_norm <- fortranize_expr_symbols(right)
     if (identical(left_norm, right_norm)) {
-      return(list(ok = TRUE, unknown = FALSE))
+      return(list(ok = TRUE, unknown = FALSE, reject_zero = FALSE))
     }
   }
-  list(ok = TRUE, unknown = TRUE)
+  list(ok = TRUE, unknown = TRUE, reject_zero = FALSE)
 }
 
 # Return the R symbol name if operand is a bare symbol; otherwise NULL.
