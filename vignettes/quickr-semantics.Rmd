@@ -57,8 +57,7 @@ complex support is narrower than the lattice suggests — see
 Raw values cannot be used as arithmetic operands.
 
 An operation's result type is the "join" of its operands' types — the
-highest type among them — except where R fixes the result type, which
-quickr then matches:
+highest type among them — except where the table says otherwise:
 
 | Operation | Result type |
 |---|---|
