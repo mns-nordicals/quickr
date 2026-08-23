@@ -212,7 +212,10 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
       glue("do {idx@name} = 1_c_int, {end}")
     }
 
-    directives <- openmp_directives(parallel, private = var_name)
+    directives <- openmp_directives(
+      parallel,
+      private = c(var_name, openmp_private_vars(scope))
+    )
     if (!is.null(parallel)) {
       mark_openmp_used(scope)
     }
@@ -252,7 +255,10 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   body <- r2f(body, scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
 
-  directives <- openmp_directives(parallel)
+  directives <- openmp_directives(
+    parallel,
+    private = openmp_private_vars(scope)
+  )
   if (!is.null(parallel)) {
     mark_openmp_used(scope)
   }
