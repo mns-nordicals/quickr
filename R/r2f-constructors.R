@@ -129,8 +129,8 @@ known_dims_product <- function(dims) {
 
 # --- Handlers ---
 
-r2f_handlers[["c"]] <- function(args, scope = NULL, ...) {
-  ff <- lapply(args, r2f, scope, ...)
+r2f_handlers[["c"]] <- function(args, scope = NULL, ..., hoist = NULL) {
+  ff <- lower_operands_in_order(args, scope, ..., hoist = hoist)
   # R's c() flattens matrix/array arguments column-major; drop their dims
   # to a rank-1 view before joining (fill constructors are already
   # rank-1, so they pass through untouched for the spread below).
@@ -277,6 +277,20 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
 # claim two -- so materialize the fill into a hoisted temporary there.
 fill_constructor_value <- function(literal, mode, args, scope, ..., hoist) {
   var <- Variable(mode = mode, dims = r2dims(args, scope))
+  length_dim <- var@dims[[1L]]
+  if (is_wholenumber(length_dim)) {
+    if (as.integer(length_dim) < 0L) {
+      stop("invalid 'length' argument", call. = FALSE)
+    }
+  } else if (!is_scalar_na(length_dim)) {
+    length_f <- dims2f(list(length_dim), scope)
+    emit_quickr_error_if(
+      glue("{length_f} < 0_c_ptrdiff_t"),
+      "invalid 'length' argument",
+      hoist,
+      scope
+    )
+  }
   out <- Fortran(literal, var)
   if (passes_as_scalar(var)) {
     return(out)

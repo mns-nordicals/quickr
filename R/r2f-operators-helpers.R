@@ -149,6 +149,14 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
   list(left = left, right = right)
 }
 
+# Lower arbitrary argument lists in R's left-to-right order. Used by
+# conditionals and constructors; elementwise lowering has additional matrix
+# fill handling below.
+lower_operands_in_order <- function(args, scope, ..., hoist) {
+  stopifnot(!is.null(hoist))
+  lapply(args, lower_r2f_operand_in_order, scope, ..., hoist = hoist)
+}
+
 # Match `matrix(<scalar>, nrow, ncol)`: a matrix() call
 # matrix_call_args() accepts (data/nrow/ncol present, no
 # byrow/dimnames) whose data is a length-1 literal or a declared
