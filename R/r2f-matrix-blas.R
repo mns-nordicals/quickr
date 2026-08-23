@@ -769,6 +769,7 @@ triangular_solve <- function(
   )
 
   A_name <- ensure_blas_operand_name(A, hoist, scope, context)
+  assert_blas_dimensions_stable(B, scope, context)
   B_input_name <- symbol_name_or_null(B)
 
   # The solve routines overwrite their right-hand side, so the output

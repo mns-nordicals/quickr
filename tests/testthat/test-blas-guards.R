@@ -229,6 +229,17 @@ test_that("BLAS refuses reassigned scalar dimension variables", {
   }
   expect_error(quick(changed), "dimension variable `k` has been reassigned")
 
+  triangular <- function(a, b, n) {
+    declare(
+      type(a = double(n, n)),
+      type(b = double(n)),
+      type(n = integer(1))
+    )
+    n <- 1L
+    forwardsolve(a, b)
+  }
+  expect_error(quick(triangular), "dimension variable `n` has been reassigned")
+
   unchanged <- function(a, b, k) {
     declare(
       type(a = double(2, k)),
