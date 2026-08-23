@@ -1,7 +1,5 @@
 # Unit tests for logical operations
 
-skip_on_cran()
-
 test_that("between", {
   between <- function(x, left, right) {
     declare({
