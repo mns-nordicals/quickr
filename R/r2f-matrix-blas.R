@@ -764,6 +764,13 @@ lapack_solve <- function(
     call_high = FALSE
   )
 
+  # R's solve() rejects a rectangular coefficient matrix before checking
+  # whether the right-hand side is conformable. Least squares remains
+  # qr.solve()'s path.
+  if (!identical(context, "qr.solve")) {
+    assert_square_matrix(a_dims, A, context, hoist, scope)
+  }
+
   guard_conformable_dims(
     m,
     dim_or_one(B, 1L),
@@ -797,12 +804,7 @@ lapack_solve <- function(
     )
   }
 
-  # R's solve() requires a square `a`; least squares is qr.solve()'s job.
-  # Statically rectangular `a` is a compile error, symbolic dims get a
-  # runtime guard before the dgesv call. (A rectangular `a` used to fall
-  # through to a dgels least-squares solve -- an answer where R errors.)
   if (!identical(context, "qr.solve")) {
-    assert_square_matrix(a_dims, A, context, hoist, scope)
     A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
     hoist$emit(glue("{A_work@name} = {A_name}"))
 
