@@ -26,21 +26,34 @@
         integer(c_int), intent(in) :: c(c__len_) ! logical
         real(c_double), intent(in) :: a(c__len_)
         real(c_double), intent(out) :: out_(c__len_)
+      
+        ! locals
+        logical, allocatable :: tmp1_(:) ! logical
+        real(c_double), allocatable :: tmp2_(:)
         ! manifest end
       
+        allocate(tmp1_(c__len_))
+        allocate(tmp2_(c__len_))
       
-        block
-          logical, allocatable :: btmp1_(:) ! logical
       
-          allocate(btmp1_(c__len_))
-          btmp1_ = (c/=0)
-          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+        tmp1_ = (c/=0)
+        if (any(tmp1_)) then
+          block
+            integer(c_int) :: btmp1_
+      
+            btmp1_ = 1_c_int
+            where (tmp1_) tmp2_ = real(btmp1_, kind=c_double)
+          end block
+        end if
+        if (any(.not. tmp1_)) then
+          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
             return
           end if
-          out_ = merge(real(1_c_int, kind=c_double), a, btmp1_)
-        end block
+          where (.not. tmp1_) tmp2_ = a
+        end if
+        out_ = tmp2_
       
         contains
           subroutine quickr_set_error_msg(msg)
@@ -145,26 +158,34 @@
         real(c_double), intent(in) :: a(a__len_)
         real(c_double), intent(in) :: b(b__len_)
         real(c_double), intent(out) :: out_(c__len_)
+      
+        ! locals
+        logical, allocatable :: tmp1_(:) ! logical
+        real(c_double), allocatable :: tmp2_(:)
         ! manifest end
       
+        allocate(tmp1_(c__len_))
+        allocate(tmp2_(c__len_))
       
-        block
-          logical, allocatable :: btmp1_(:) ! logical
       
-          allocate(btmp1_(c__len_))
-          btmp1_ = (c/=0)
-          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+        tmp1_ = (c/=0)
+        if (any(tmp1_)) then
+          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
             return
           end if
-          if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+          where (tmp1_) tmp2_ = a
+        end if
+        if (any(.not. tmp1_)) then
+          if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
             return
           end if
-          out_ = merge(a, b, btmp1_)
-        end block
+          where (.not. tmp1_) tmp2_ = b
+        end if
+        out_ = tmp2_
       
         contains
           subroutine quickr_set_error_msg(msg)
