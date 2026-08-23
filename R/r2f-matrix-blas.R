@@ -37,6 +37,18 @@ assert_rank_leq2 <- function(x, message) {
   invisible(TRUE)
 }
 
+# The routines emitted in this file are the double-precision BLAS/LAPACK
+# entry points. Logical and integer operands are converted explicitly; raw
+# and complex storage must never be passed to a `d*` routine.
+blas_double_operand <- function(x, context) {
+  stopifnot(inherits(x, Fortran), is_string(context))
+  x <- maybe_cast_double(x)
+  if (!identical(x@value@mode, "double")) {
+    stop(context, " does not support ", x@value@mode, " inputs", call. = FALSE)
+  }
+  x
+}
+
 # Assert right-hand side rank is vector or matrix.
 assert_rhs_rank <- function(
   rank,
@@ -364,6 +376,8 @@ gemm <- function(
   context = "gemm"
 ) {
   assert_hoist_env(hoist)
+  left <- blas_double_operand(left, context)
+  right <- blas_double_operand(right, context)
   assert_nonempty_blas_output(
     m,
     left,
@@ -426,6 +440,8 @@ gemv <- function(
   context = "gemv"
 ) {
   assert_hoist_env(hoist)
+  A <- blas_double_operand(A, context)
+  x <- blas_double_operand(x, context)
   output_dim <- if (transA == "N") m else n
   assert_nonempty_blas_output(
     output_dim,
@@ -526,6 +542,7 @@ syrk <- function(
   context = "syrk"
 ) {
   assert_hoist_env(hoist)
+  X <- blas_double_operand(X, context)
   x_dims <- matrix_dims(X)
 
   # For trans = "T": C = t(X) %*% X, so C is k x k where k = ncol(X)
@@ -593,8 +610,8 @@ outer_mul <- function(
 ) {
   assert_hoist_env(hoist)
 
-  x <- maybe_cast_double(x)
-  y <- maybe_cast_double(y)
+  x <- blas_double_operand(x, context)
+  y <- blas_double_operand(y, context)
 
   if (x@value@rank > 1L || y@value@rank > 1L) {
     stop("outer() only supports vectors or scalars")
@@ -645,8 +662,8 @@ triangular_solve <- function(
 ) {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
-  B <- maybe_cast_double(B)
+  A <- blas_double_operand(A, context)
+  B <- blas_double_operand(B, context)
 
   assert_rank2_matrix(A, "triangular solve expects a matrix")
 
@@ -734,8 +751,8 @@ lapack_solve <- function(
 ) {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
-  B <- maybe_cast_double(B)
+  A <- blas_double_operand(A, context)
+  B <- blas_double_operand(B, context)
 
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
 
@@ -1066,7 +1083,7 @@ end do"
 lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
+  A <- blas_double_operand(A, context)
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
   A <- hoist_unless_name(A, hoist)
 
@@ -1141,7 +1158,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
 lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
+  A <- blas_double_operand(A, context)
   assert_rank2_matrix(A, paste0(context, " expects a matrix"))
   A <- hoist_unless_name(A, hoist)
 
@@ -1205,7 +1222,7 @@ lapack_chol2inv <- function(
 ) {
   assert_hoist_env(hoist)
 
-  R <- maybe_cast_double(R)
+  R <- blas_double_operand(R, context)
   assert_rank2_matrix(R, paste0(context, " expects a matrix"))
   R <- hoist_unless_name(R, hoist)
 
@@ -1418,7 +1435,7 @@ lapack_svd <- function(
   assert_hoist_env(hoist)
   stopifnot(inherits(d, Variable), inherits(u, Variable), inherits(v, Variable))
 
-  A <- maybe_cast_double(A)
+  A <- blas_double_operand(A, context)
   dims <- svd_dims(A, context = context)
   m <- dims$m
   n <- dims$n

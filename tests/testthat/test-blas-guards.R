@@ -64,6 +64,24 @@ test_that("%*% evaluates effectful operands before a runtime shape error", {
   )
 })
 
+test_that("nested %*% operands preserve left-to-right evaluation", {
+  fn <- function() {
+    runif(2) %*% matrix(runif(4), 2, 2)
+  }
+  set.seed(124)
+  expected <- fn()
+  set.seed(124)
+  expect_identical(quick(fn)(), expected)
+})
+
+test_that("double BLAS entry points reject raw storage", {
+  fn <- function(a, b) {
+    declare(type(a = raw(2)), type(b = raw(2)))
+    a %*% b
+  }
+  expect_error(quick(fn), "does not support raw")
+})
+
 test_that("vector-matrix %*% guards an unknown vector length", {
   fn <- function(x, m) {
     declare(type(x = double(NA)), type(m = double(3, 3)))
