@@ -35,31 +35,22 @@
         ! manifest end
       
       
-        block
-          logical, allocatable :: btmp1_(:) ! logical
-          logical, allocatable :: btmp2_(:) ! logical
-      
-          allocate(btmp1_(x__len_))
-          allocate(btmp2_(x__len_))
-          if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+        if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+          return
+        end if
+        if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          btmp1_ = (x >= left)
-          btmp2_ = (x <= right)
-          if (size(btmp1_, kind=c_ptrdiff_t) == 0 .or. size(btmp1_, kind=c_ptrdiff_t) /= size(btmp2_, kind=c_ptrdiff_t)) then
+          return
+        end if
+      if (size((x >= left), kind=c_ptrdiff_t) == 0 .or. size((x >= left), kind=c_ptrdiff_t) /= size((x <= right), kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          out = btmp1_ .and. btmp2_
-        end block
+          return
+        end if
+        out = (x >= left) .and. (x <= right)
       
         contains
           subroutine quickr_set_error_msg(msg)
@@ -441,39 +432,28 @@
         ! manifest end
       
       
-        block
-          real(c_double), allocatable :: btmp1_(:)
-          logical, allocatable :: btmp2_(:) ! logical
-          logical, allocatable :: btmp3_(:) ! logical
-      
-          allocate(btmp1_(a__len_))
-          allocate(btmp2_(a__len_))
-          allocate(btmp3_(a__len_))
-          if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+        if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+          return
+        end if
+        if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          btmp1_ = abs((a - b))
-          if (size(btmp1_, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+          return
+        end if
+        if (size(abs((a - b)), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          btmp2_ = ((a /= b))
-          btmp3_ = (btmp1_ <= 3.0_c_double)
-          if (size(btmp2_, kind=c_ptrdiff_t) == 0 .or. size(btmp2_, kind=c_ptrdiff_t) /= size(btmp3_, kind=c_ptrdiff_t)) then
+          return
+        end if
+      if (size(((a /= b)), kind=c_ptrdiff_t) == 0 .or. size(((a /= b)), kind=c_ptrdiff_t) /= size((abs((a - b)) <= 3.0_c_double),&
+      & kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-            return
-          end if
-          out = btmp2_ .and. btmp3_
-        end block
+          return
+        end if
+        out = ((a /= b)) .and. (abs((a - b)) <= 3.0_c_double)
       
         contains
           subroutine quickr_set_error_msg(msg)
@@ -706,6 +686,72 @@
         return out_;
       }
 
+# short-circuited division is not evaluated eagerly
+
+    Code
+      fn
+    Output
+      function(x) {
+          declare(type(x = double(1)))
+          FALSE && (1 / x > 0)
+        }
+      <environment: 0x0>
+    Code
+      cat(fsub)
+    Output
+      subroutine fn(x, out_) bind(c)
+        use iso_c_binding, only: c_double, c_int
+        implicit none
+      
+        ! manifest start
+        ! args
+        real(c_double), intent(in) :: x
+        integer(c_int), intent(out) :: out_ ! logical
+      
+        ! locals
+        logical :: tmp1_ ! logical
+        ! manifest end
+      
+      
+        tmp1_ = .false.
+        if (tmp1_) then
+          tmp1_ = (((1.0_c_double / x) > 0.0_c_double))
+        end if
+        out_ = tmp1_
+      end subroutine
+    Code
+      cat(cwrapper)
+    Output
+      #define R_NO_REMAP
+      #include <R.h>
+      #include <Rinternals.h>
+      
+      
+      extern void fn(const double* const x__, int* const out___);
+      
+      SEXP fn_(SEXP _args) {
+        // x
+        _args = CDR(_args);
+        SEXP x = CAR(_args);
+        if (TYPEOF(x) != REALSXP) {
+          Rf_error("typeof(x) must be 'double', not '%s'", Rf_type2char(TYPEOF(x)));
+        }
+        const double* const x__ = REAL(x);
+        const R_xlen_t x__len_ = Rf_xlength(x);
+        
+        if (x__len_ != 1)
+          Rf_error("length(x) must be 1, not %0.f",
+                    (double)x__len_);
+        const R_xlen_t out___len_ = (1);
+        SEXP out_ = PROTECT(Rf_allocVector(LGLSXP, out___len_));
+        int* out___ = LOGICAL(out_);
+        
+        fn(x__, out___);
+        
+        UNPROTECT(1);
+        return out_;
+      }
+
 # && and || short-circuit like R's scalar operators
 
     Code
@@ -732,21 +778,20 @@
         integer(c_int), intent(in) :: i
         real(c_double), intent(in) :: x(3)
         real(c_double), intent(out) :: out
+      
+        ! locals
+        logical :: tmp1_ ! logical
         ! manifest end
       
       
         out = 0.0_c_double
-        block
-          logical :: btmp1_ ! logical
-      
-          btmp1_ = (i <= 3_c_int)
-          if (btmp1_) then
-            btmp1_ = (x(i) > 0.0_c_double)
-          end if
-          if (btmp1_) then
-            out = 1.0_c_double
-          end if
-        end block
+        tmp1_ = (i <= 3_c_int)
+        if (tmp1_) then
+          tmp1_ = (x(i) > 0.0_c_double)
+        end if
+        if (tmp1_) then
+          out = 1.0_c_double
+        end if
       end subroutine
     Code
       cat(cwrapper)
@@ -796,6 +841,139 @@
         return out;
       }
 
+# short-circuit results are private to parallel iterations
+
+    Code
+      fn
+    Output
+      function(x, y) {
+          declare(type(x = double(NA)), type(y = double(NA)))
+          n <- length(x)
+          out <- logical(n)
+          declare(parallel())
+          for (i in seq_along(x)) {
+            out[i] <- x[i] > 0 && y[i] > 0
+          }
+          out
+        }
+      <environment: 0x0>
+    Code
+      cat(fsub)
+    Output
+      subroutine fn(x, y, out, x__len_, y__len_, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
+        implicit none
+      
+        ! manifest start
+        ! sizes
+        integer(c_ptrdiff_t), intent(in), value :: x__len_
+        integer(c_ptrdiff_t), intent(in), value :: y__len_
+      
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
+      
+        ! args
+        real(c_double), intent(in) :: x(x__len_)
+        real(c_double), intent(in) :: y(y__len_)
+        integer(c_int), intent(out) :: out(x__len_) ! logical
+      
+        ! locals
+        integer(c_int) :: n
+        integer(c_int) :: i
+        logical :: tmp1_ ! logical
+        ! manifest end
+      
+      
+        n = size(x)
+        if (x__len_ < 0) then
+          call quickr_set_error_msg("invalid 'length' argument")
+          return
+        end if
+        out = .false.
+      
+        !$omp parallel do private(tmp1_)
+        do i = 1, size(x)
+          tmp1_ = (x(i) > 0.0_c_double)
+          if (tmp1_) then
+            tmp1_ = (y(i) > 0.0_c_double)
+          end if
+          out(i) = tmp1_
+        end do
+        !$omp end parallel do
+        if (quickr_err_msg(1) /= c_null_char) return
+      
+        contains
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            !$omp critical (quickr_error)
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+            !$omp end critical (quickr_error)
+          end subroutine quickr_set_error_msg
+      end subroutine
+    Code
+      cat(cwrapper)
+    Output
+      #define R_NO_REMAP
+      #include <R.h>
+      #include <Rinternals.h>
+      
+      
+      extern void fn(
+        const double* const x__, 
+        const double* const y__, 
+        int* const out__, 
+        const R_xlen_t x__len_, 
+        const R_xlen_t y__len_, 
+        char* quickr_err_msg);
+      
+      SEXP fn_(SEXP _args) {
+        // x
+        _args = CDR(_args);
+        SEXP x = CAR(_args);
+        if (TYPEOF(x) != REALSXP) {
+          Rf_error("typeof(x) must be 'double', not '%s'", Rf_type2char(TYPEOF(x)));
+        }
+        const double* const x__ = REAL(x);
+        const R_xlen_t x__len_ = Rf_xlength(x);
+        
+        // y
+        _args = CDR(_args);
+        SEXP y = CAR(_args);
+        if (TYPEOF(y) != REALSXP) {
+          Rf_error("typeof(y) must be 'double', not '%s'", Rf_type2char(TYPEOF(y)));
+        }
+        const double* const y__ = REAL(y);
+        const R_xlen_t y__len_ = Rf_xlength(y);
+        
+        const R_xlen_t out__len_ = x__len_;
+        SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
+        int* out__ = LOGICAL(out);
+        
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
+        fn(
+          x__,
+          y__,
+          out__,
+          x__len_,
+          y__len_,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
+        
+        UNPROTECT(1);
+        return out;
+      }
+
 # while re-evaluates hoisted condition code every iteration
 
     Code
@@ -828,21 +1006,18 @@
       
         ! locals
         integer(c_int) :: n
+        logical :: tmp1_ ! logical
         ! manifest end
       
       
         i = 1_c_int
         n = size(x)
         do
-          block
-            logical :: btmp1_ ! logical
-      
-            btmp1_ = (i <= n)
-            if (btmp1_) then
-              btmp1_ = (x(i) > 0.0_c_double)
-            end if
-            if (.not. (btmp1_)) exit
-          end block
+          tmp1_ = (i <= n)
+          if (tmp1_) then
+            tmp1_ = (x(i) > 0.0_c_double)
+          end if
+          if (.not. (tmp1_)) exit
           i = (i + 1_c_int)
         end do
       end subroutine
