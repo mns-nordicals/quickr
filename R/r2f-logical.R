@@ -158,8 +158,8 @@ register_r2f_handler(
 register_r2f_handler(
   c("&", "|"),
   function(args, scope, ..., hoist = NULL) {
-    args <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
     op <- last(list(...)$calls)
+    args <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
     args <- lapply(args, function(a) {
       if (a@value@mode != "logical") {
         stop("`", op, "` requires logical operands", call. = FALSE)
