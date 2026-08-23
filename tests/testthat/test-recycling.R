@@ -722,3 +722,18 @@ test_that("matrix and array reject negative dimensions before use", {
   expect_error(qmatrix(-1L), "dimensions must be non-negative")
   expect_error(qarray(-1L), "dimensions must be non-negative")
 })
+
+test_that("integer-backed logical matrix fills materialize portably", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    !matrix(rev(flag), 2, 2)
+  }
+
+  code <- as.character(r2f(fn))
+  expect_match(
+    code,
+    "integer(c_int) :: btmp1_(2, 2) ! logical",
+    fixed = TRUE
+  )
+  expect_quick_identical(fn, list(TRUE))
+})

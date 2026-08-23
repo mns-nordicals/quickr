@@ -111,13 +111,19 @@ materialize_via_hoist <- function(
   mode,
   dims,
   hoist,
-  logical_as_int = FALSE
+  logical_storage = NULL
 ) {
   stopifnot(is.environment(hoist))
+  if (is.null(logical_storage)) {
+    logical_storage <- inherits(code, Fortran) &&
+      inherits(code@value, Variable) &&
+      logical_as_int(code@value) &&
+      !isTRUE(code@logical_booleanized)
+  }
   tmp <- hoist$declare_tmp(
     mode = mode,
     dims = dims,
-    logical_as_int = logical_as_int
+    logical_as_int = logical_storage
   )
   hoist$emit(glue("{tmp@name} = {code}"))
   Fortran(tmp@name, tmp)
@@ -146,7 +152,7 @@ hoist_unless_name <- function(x, hoist) {
     mode = x@value@mode,
     dims = x@value@dims,
     hoist = hoist,
-    logical_as_int = logical_as_int(x@value) &&
+    logical_storage = logical_as_int(x@value) &&
       !isTRUE(x@logical_booleanized)
   )
 }
