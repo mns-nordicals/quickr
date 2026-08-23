@@ -2083,20 +2083,10 @@
       
         y = (.not. (x/=0))
         if (any(y)) then
-          block
-            integer(c_int) :: btmp1_
-      
-            btmp1_ = 1_c_int
-            where (y) tmp1_ = btmp1_
-          end block
+          where (y) tmp1_ = 1_c_int
         end if
         if (any(.not. y)) then
-          block
-            integer(c_int) :: btmp1_
-      
-            btmp1_ = 0_c_int
-            where (.not. y) tmp1_ = btmp1_
-          end block
+          where (.not. y) tmp1_ = 0_c_int
         end if
         out = tmp1_
       end subroutine
