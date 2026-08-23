@@ -361,6 +361,26 @@ check_elementwise_lengths <- function(left, right) {
   list(ok = TRUE, unknown = TRUE, reject_zero = TRUE)
 }
 
+# Equality-only shape checks allow zero extents. Used where operands must have
+# the same physical shape but no elementwise recycling policy applies.
+check_equal_dims <- function(left, right) {
+  if (is_wholenumber(left) && is_wholenumber(right)) {
+    return(list(
+      ok = identical(as.integer(left), as.integer(right)),
+      unknown = FALSE,
+      reject_zero = FALSE
+    ))
+  }
+  if (!is_scalar_na(left) && !is_scalar_na(right)) {
+    left_norm <- fortranize_expr_symbols(left)
+    right_norm <- fortranize_expr_symbols(right)
+    if (identical(left_norm, right_norm)) {
+      return(list(ok = TRUE, unknown = FALSE, reject_zero = FALSE))
+    }
+  }
+  list(ok = TRUE, unknown = TRUE, reject_zero = FALSE)
+}
+
 # The message shared by every enforcement point of the elementwise matrix
 # shape contract: the runtime-guard text must match the compile-error text.
 elementwise_matrix_msg <-

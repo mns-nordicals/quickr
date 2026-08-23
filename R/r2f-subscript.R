@@ -101,6 +101,21 @@ r2f_handlers[["["]] <- function(
   ) {
     mask <- idxs[[1]]
     mask <- booleanize_logical_as_int(mask)
+    message <- "logical subscript dimensions must match source dimensions"
+    for (axis in seq_len(var@value@rank)) {
+      guard_conformable_dims(
+        dim_or_one(var, axis),
+        dim_or_one(mask, axis),
+        message,
+        hoist,
+        scope,
+        left = var,
+        right = mask,
+        left_axis = axis,
+        right_axis = axis,
+        checker = check_equal_dims
+      )
+    }
     if (hoist_mask(mask)) {
       return(var)
     }
