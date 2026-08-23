@@ -788,7 +788,7 @@ lapack_solve <- function(
   # through to a dgels least-squares solve -- an answer where R errors.)
   if (!identical(context, "qr.solve")) {
     assert_square_matrix(a_dims, A, context, hoist, scope)
-    A_work <- hoist$declare_tmp(mode = "double", dims = list(m, m))
+    A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
     hoist$emit(glue("{A_work@name} = {A_name}"))
 
     use_dest <- dest_usable()

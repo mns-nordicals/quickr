@@ -238,6 +238,10 @@ test_that("solve always uses dgesv, guarding squareness when symbolic", {
   expect_true(has_call(sym_fortran, "dgesv"))
   expect_false(has_call(sym_fortran, "dgels"))
   expect_match(sym_fortran, "solve requires a square matrix", fixed = TRUE)
+  expect_match(
+    sym_fortran,
+    "allocate\\([^\\n]+\\(A__dim_1_, A__dim_2_\\)\\)"
+  )
 })
 
 test_that("chol and chol2inv match R", {
