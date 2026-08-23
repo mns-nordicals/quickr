@@ -431,10 +431,18 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
         },
         character(1L)
       )
-      n_expr <- if (length(axis_terms) == 1L) {
-        axis_terms[[1L]]
+      # R array extents are integers, but their product may be a long-vector
+      # length. Promote each axis before multiplying so the product cannot
+      # overflow c_int.
+      axis_terms_ptrdiff <- paste0(
+        "int(",
+        axis_terms,
+        ", kind=c_ptrdiff_t)"
+      )
+      n_expr_ptrdiff <- if (length(axis_terms_ptrdiff) == 1L) {
+        axis_terms_ptrdiff[[1L]]
       } else {
-        paste0("(", paste0("(", axis_terms, ")", collapse = " * "), ")")
+        paste0("(", paste0(axis_terms_ptrdiff, collapse = " * "), ")")
       }
 
       known_prod <- function(dims) {
@@ -464,8 +472,12 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       }
 
       source <- if (is_fill_constructor) {
-        i <- scope_unique_var(scope, "integer")
-        glue("[({out}, {i}=1, int({n_expr}))]")
+        i <- scope_unique_var(
+          scope,
+          "integer",
+          integer_kind = "c_ptrdiff_t"
+        )
+        glue("[({out}, {i}=1_c_ptrdiff_t, {n_expr_ptrdiff})]")
       } else {
         n_target <- known_prod(target_dims)
         n_source <- known_prod(out@value@dims)
@@ -484,7 +496,11 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
             "array() reshape does not support recycling (data shorter than prod(dim))",
             scope = scope
           )
-          hoist$emit(glue("if (int({n_expr}) > size({out})) then"))
+          hoist$emit(
+            glue(
+              "if ({n_expr_ptrdiff} > size({out}, kind=c_ptrdiff_t)) then"
+            )
+          )
           hoist$emit(paste0("  ", err))
           hoist$emit("end if")
         }
