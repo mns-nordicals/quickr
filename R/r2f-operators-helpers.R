@@ -318,6 +318,18 @@ maybe_reshape_vector_matrix <- function(
     return(list(left = left, right = right))
   }
 
+  # Runtime guards use SIZE(), an inquiry that does not evaluate its
+  # argument. Name array expressions first, in operand order, so side effects
+  # occur before an error and vector reshaping does not splice an expression
+  # twice. This also turns scalar-backed array()/fill expressions into actual
+  # arrays before SIZE() is emitted.
+  if (!passes_as_scalar(left@value)) {
+    left <- hoist_unless_name(left, hoist)
+  }
+  if (!passes_as_scalar(right@value)) {
+    right <- hoist_unless_name(right, hoist)
+  }
+
   left_scalar <- passes_as_scalar(left@value)
   right_scalar <- passes_as_scalar(right@value)
   left_rank <- if (left_scalar) 0L else left@value@rank
@@ -339,7 +351,7 @@ maybe_reshape_vector_matrix <- function(
       right_rank == 1L &&
       is_one_by_one(left)
   ) {
-    right_len <- dim_or_one(right, 1L)
+    right_len <- r2size(dim_or_one(right, 1L), scope)
     if (dim_known_greater_than_one(right_len)) {
       left <- scalarize_via_hoist(left)
       left_rank <- 0L
@@ -350,11 +362,42 @@ maybe_reshape_vector_matrix <- function(
       right_rank == 2L &&
       is_one_by_one(right)
   ) {
-    left_len <- dim_or_one(left, 1L)
+    left_len <- r2size(dim_or_one(left, 1L), scope)
     if (dim_known_greater_than_one(left_len)) {
       right <- scalarize_via_hoist(right)
       right_rank <- 0L
     }
+  }
+
+  check_nonempty <- function(x, message) {
+    for (axis in seq_len(x@value@rank)) {
+      dim <- r2size(dim_or_one(x, axis), scope)
+      if (is_wholenumber(dim)) {
+        if (as.integer(dim) == 0L) {
+          stop(message, call. = FALSE)
+        }
+      } else {
+        emit_quickr_error_if(
+          glue("size({x}, {axis}, kind=c_ptrdiff_t) == 0_c_ptrdiff_t"),
+          message,
+          hoist,
+          scope
+        )
+      }
+    }
+  }
+
+  if (xor(left_scalar, right_scalar)) {
+    array_operand <- if (left_scalar) right else left
+    message <- if (array_operand@value@rank == 1L) {
+      paste0(
+        "elementwise vector operations require equal lengths or ",
+        "a scalar operand; R-style recycling is not supported"
+      )
+    } else {
+      "elementwise matrix operations require matching dimensions"
+    }
+    check_nonempty(array_operand, message)
   }
 
   if (left_rank == 1L && right_rank == 1L) {
