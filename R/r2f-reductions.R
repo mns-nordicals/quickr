@@ -28,7 +28,8 @@ register_r2f_handler(
   function(
     args,
     scope,
-    ...
+    ...,
+    hoist = NULL
   ) {
     # Named arguments like `na.rm` would otherwise be treated as data
     # arguments (e.g. `sum(x, na.rm = TRUE)` -> `(sum(x) + .true.)`).
@@ -50,8 +51,12 @@ register_r2f_handler(
     )
 
     reduce_arg <- function(arg) {
+      captured_hoist <- hoist$capture()
       mask_hoist <- create_mask_hoist()
-      x <- lower_masked_reduction_arg(arg, scope, mask_hoist, list(...))
+      dots <- list(...)
+      dots$hoist <- captured_hoist
+      x <- lower_masked_reduction_arg(arg, scope, mask_hoist, dots)
+      x <- finish_captured_operand(x, captured_hoist, hoist)
       # R's numeric reductions treat logicals as integers (sum(TRUE) is 1L),
       # and Fortran's sum/product/minval/maxval reject logical arrays.
       x <- cast_to_mode(x, arith_join_mode(x), sprintf("%s()", call_name))
