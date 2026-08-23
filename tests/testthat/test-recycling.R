@@ -103,14 +103,62 @@ test_that("identical symbolic lengths guard runtime emptiness", {
   expect_error(qfn(double(), double()), "equal lengths")
 })
 
-test_that("scalar broadcast is unaffected", {
+test_that("scalar broadcast preserves nonempty values", {
   fn <- function(a, b) {
     declare(type(a = double(n)), type(b = double(1)))
     a + b
   }
-  fsub <- r2f(fn)
-  expect_no_match(fsub, "quickr_set_error_msg", fixed = TRUE)
+  fsub <- as.character(r2f(fn))
+  expect_match(fsub, "size(a, 1, kind=c_ptrdiff_t) == 0", fixed = TRUE)
   expect_quick_identical(fn, list(c(1, 2, 3), 10))
+})
+
+test_that("scalar broadcast rejects empty array operands", {
+  known_left <- function() {
+    numeric(0) + 1
+  }
+  known_right <- function() {
+    1 < numeric(0)
+  }
+  expect_error(quick(known_left), "equal lengths")
+  expect_error(quick(known_right), "equal lengths")
+
+  symbolic <- function(x) {
+    declare(type(x = double(NA)))
+    x + 1
+  }
+  qsymbolic <- quick(symbolic)
+  expect_identical(qsymbolic(c(1, 2)), c(2, 3))
+  expect_error(qsymbolic(double()), "equal lengths")
+})
+
+test_that("elementwise guards evaluate operands before reporting errors", {
+  fn <- function(mat) {
+    declare(type(mat = double(NA, NA)))
+    mat + runif(3)
+  }
+  qfn <- quick(fn)
+  mat <- matrix(as.double(1:4), 2, 2)
+
+  set.seed(101)
+  suppressWarnings(fn(mat))
+  expected_next <- runif(1)
+  set.seed(101)
+  expect_error(qfn(mat), "matrix first dimension")
+  expect_identical(runif(1), expected_next)
+
+  conditional <- function(mask) {
+    declare(type(mask = logical(NA)))
+    ifelse(mask, runif(3), 0)
+  }
+  qconditional <- quick(conditional)
+  mask <- c(TRUE, FALSE)
+  set.seed(102)
+  conditional(mask)
+  expected_next <- runif(1)
+  set.seed(102)
+  expect_error(qconditional(mask), "shape of `test`")
+  expect_identical(runif(1), expected_next)
 })
 
 test_that("matrix-matrix elementwise ops guard unknown dims per axis", {
@@ -135,6 +183,18 @@ test_that("vector-matrix ops with unknown dims guard instead of rejecting", {
   vec <- c(10, 20)
   expect_identical(qfn(vec, mat), vec + mat)
   expect_error(qfn(c(10, 20, 30), mat), "matrix first dimension")
+})
+
+test_that("expression vectors are evaluated once before matrix reshaping", {
+  fn <- function(mat, n) {
+    declare(type(mat = double(n, 2)), type(n = integer(1)))
+    runif(n) + mat
+  }
+  mat <- matrix(as.double(1:6), 3, 2)
+  set.seed(103)
+  expected <- fn(mat, 3L)
+  set.seed(103)
+  expect_identical(quick(fn)(mat, 3L), expected)
 })
 
 test_that("1x1 matrix operands follow R: arithmetic scalarizes, strict ops reject", {
@@ -200,6 +260,16 @@ test_that("1x1 matrix arithmetic rejects known empty vectors", {
   expect_error(quick(matrix_right), "matrix first dimension")
 })
 
+test_that("constant vector dimensions participate in 1x1 scalarization", {
+  fn <- function(x, m) {
+    declare(type(x = double(1L + 2L)), type(m = double(1, 1)))
+    x + m
+  }
+  x <- c(1, 2, 3)
+  m <- matrix(4)
+  expect_identical(quick(fn)(x, m), suppressWarnings(fn(x, m)))
+})
+
 test_that("1x1 matrix with a symbolic-length vector keeps R's shape", {
   # The result's shape depends on the runtime length: R keeps the 1x1
   # dims for a length-1 vector and drops them for any other length, so no
@@ -250,6 +320,12 @@ test_that("fill constructors spread inside c()", {
     c(logical(3), x)
   }
   expect_quick_identical(logical_fill, list(c(TRUE, FALSE)))
+
+  parenthesized <- function(x) {
+    declare(type(x = double(2)))
+    c((numeric)(2), x)
+  }
+  expect_quick_identical(parenthesized, list(c(1, 2)))
 })
 
 test_that("symbolic fill spreading preserves pointer-sized lengths", {
@@ -489,4 +565,17 @@ test_that("a left matrix fill is evaluated before its right operand", {
   }
 
   expect_quick_identical(fn, list(matrix(as.double(1:4), 2, 2), 1, 2L))
+})
+
+test_that("scalar-backed array expressions materialize before shape guards", {
+  fn <- function(mat, n, k) {
+    declare(
+      type(mat = double(n, k)),
+      type(n = integer(1)),
+      type(k = integer(1))
+    )
+    array(0, dim = c(n, k)) + mat
+  }
+  mat <- matrix(as.double(1:6), 2, 3)
+  expect_quick_identical(fn, list(mat, 2L, 3L))
 })

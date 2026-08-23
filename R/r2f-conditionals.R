@@ -44,6 +44,19 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
 r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   .[mask, tsource, fsource] <- lapply(args, r2f, scope, ..., hoist = hoist)
 
+  # SIZE() guards below are inquiries and do not evaluate expressions. Name
+  # array-valued operands first, in R argument order, so their effects happen
+  # before an error and each expression is evaluated only once.
+  if (!passes_as_scalar(mask@value)) {
+    mask <- hoist_unless_name(mask, hoist)
+  }
+  if (!passes_as_scalar(tsource@value)) {
+    tsource <- hoist_unless_name(tsource, hoist)
+  }
+  if (!passes_as_scalar(fsource@value)) {
+    fsource <- hoist_unless_name(fsource, hoist)
+  }
+
   # R: the result is shaped like `test` (branches only contribute values).
   # A scalar test with array branches is not representable with merge().
   if (
