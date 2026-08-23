@@ -6,7 +6,7 @@
 # ---- comparison operators ----
 
 r2f_handlers[[">="]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -22,7 +22,7 @@ r2f_handlers[[">="]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[[">"]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -38,7 +38,7 @@ r2f_handlers[[">"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["<"]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -54,7 +54,7 @@ r2f_handlers[["<"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["<="]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -70,7 +70,7 @@ r2f_handlers[["<="]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["=="]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -86,7 +86,7 @@ r2f_handlers[["=="]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["!="]] <- function(args, scope, ..., hoist = NULL) {
-  .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+  .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -147,7 +147,7 @@ register_r2f_handler(
     # `&&` and `||` deliberately retain the pre-existing eager lowering in
     # this stack step. Their scalar, short-circuit lowering is isolated in
     # PR #147 rather than mixed into the elementwise conformability changes.
-    args <- lapply(args, r2f, scope, ..., hoist = hoist)
+    args <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
     args <- lapply(args, function(a) {
       if (a@value@mode != "logical") {
         stop("must be logical")
