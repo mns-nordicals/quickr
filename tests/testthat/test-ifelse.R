@@ -41,6 +41,30 @@ test_that("ifelse promotes branches and shapes like test", {
   expect_quick_equal(fn2, list(c(TRUE, FALSE, TRUE), c(TRUE, TRUE, FALSE)))
 })
 
+test_that("ifelse keeps pure known-shape branches inline", {
+  fn <- function(test, a, b, no) {
+    declare(
+      type(test = logical(3)),
+      type(a = double(3)),
+      type(b = double(3)),
+      type(no = double(3))
+    )
+    ifelse(test, a + b, no)
+  }
+
+  fsub <- r2f(fn)
+  expect_false(grepl("block", as.character(fsub), fixed = TRUE))
+  expect_quick_identical(
+    fn,
+    list(
+      test = c(TRUE, FALSE, TRUE),
+      a = c(1, 2, 3),
+      b = c(4, 5, 6),
+      no = c(10, 20, 30)
+    )
+  )
+})
+
 test_that("ifelse with scalar test and array branch errors cleanly", {
   fn <- function(c, a) {
     declare(type(c = logical(1)), type(a = double(n)))
