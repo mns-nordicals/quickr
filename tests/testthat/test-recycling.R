@@ -161,6 +161,28 @@ test_that("elementwise guards evaluate operands before reporting errors", {
   expect_identical(runif(1), expected_next)
 })
 
+test_that("nested elementwise operands preserve left-to-right evaluation", {
+  mismatch <- function(a, b) {
+    declare(type(a = double(n)), type(b = double(m)))
+    runif(2) + (a + b)
+  }
+  qmismatch <- quick(mismatch)
+  set.seed(104)
+  runif(2)
+  expected_next <- runif(1)
+  set.seed(104)
+  expect_error(qmismatch(c(1, 2), c(1, 2, 3)), "equal lengths")
+  expect_identical(runif(1), expected_next)
+
+  conformable <- function() {
+    runif(3) - (runif(3) * 10)
+  }
+  set.seed(105)
+  expected <- conformable()
+  set.seed(105)
+  expect_identical(quick(conformable)(), expected)
+})
+
 test_that("matrix-matrix elementwise ops guard unknown dims per axis", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, j)))
@@ -173,6 +195,21 @@ test_that("matrix-matrix elementwise ops guard unknown dims per axis", {
   expect_error(qfn(m1, t(m2)), "matching dimensions")
 })
 
+test_that("higher-rank elementwise arrays guard every axis", {
+  fn <- function(a, b) {
+    declare(type(a = double(NA, NA, NA)), type(b = double(NA, NA, NA)))
+    a + b
+  }
+  qfn <- quick(fn)
+  a <- array(as.double(1:8), c(2, 2, 2))
+  b <- array(as.double(8:1), c(2, 2, 2))
+  expect_identical(qfn(a, b), a + b)
+  expect_error(
+    qfn(a, array(as.double(1:12), c(2, 2, 3))),
+    "matching dimensions"
+  )
+})
+
 test_that("vector-matrix ops with unknown dims guard instead of rejecting", {
   fn <- function(vec, mat) {
     declare(type(vec = double(n)), type(mat = double(m, k)))
@@ -183,6 +220,24 @@ test_that("vector-matrix ops with unknown dims guard instead of rejecting", {
   vec <- c(10, 20)
   expect_identical(qfn(vec, mat), vec + mat)
   expect_error(qfn(c(10, 20, 30), mat), "matrix first dimension")
+})
+
+test_that("vector-matrix ops reject zero-column results", {
+  known <- function(vec, mat) {
+    declare(type(vec = double(2)), type(mat = double(2, 0)))
+    vec + mat
+  }
+  expect_error(quick(known), "matrix first dimension")
+
+  symbolic <- function(vec, mat) {
+    declare(type(vec = double(n)), type(mat = double(n, k)))
+    vec + mat
+  }
+  qsymbolic <- quick(symbolic)
+  expect_error(
+    qsymbolic(c(1, 2), matrix(double(), 2, 0)),
+    "matrix first dimension"
+  )
 })
 
 test_that("expression vectors are evaluated once before matrix reshaping", {
