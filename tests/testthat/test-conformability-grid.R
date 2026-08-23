@@ -207,7 +207,8 @@ make_grid_pair_fn <- function(sa, sb, family) {
         )
       },
       ""
-    )
+    ),
+    "type(grid_cell = integer(1))"
   )
   ids <- character()
   stmts <- character()
@@ -226,12 +227,23 @@ make_grid_pair_fn <- function(sa, sb, family) {
           paste0("b", p[2L], " ", ops[[opname]], " a", p[1L])
         }
         ids <- c(ids, id)
-        stmts <- c(stmts, paste0("  ", id, " <- ", expr))
+        cell <- length(ids)
+        stmts <- c(
+          stmts,
+          paste0(
+            "  if (grid_cell == 0L | grid_cell == ",
+            cell,
+            "L) ",
+            id,
+            " <- ",
+            expr
+          )
+        )
       }
     }
   }
   src <- paste0(
-    "function(al, ai, ad, bl, bi, bd) {\n",
+    "function(al, ai, ad, bl, bi, bd, grid_cell) {\n",
     "  declare(\n    ",
     paste(decls, collapse = ",\n    "),
     "\n  )\n",
@@ -240,7 +252,9 @@ make_grid_pair_fn <- function(sa, sb, family) {
     paste(paste0(ids, " = ", ids), collapse = ",\n    "),
     "\n  )\n}"
   )
-  eval(parse(text = src)[[1L]])
+  fn <- eval(parse(text = src)[[1L]])
+  attr(fn, "grid_cell_count") <- length(ids)
+  fn
 }
 
 # A one-cell function, for cells whose expected outcome is a compile error.
@@ -391,6 +405,7 @@ for (i in seq_along(grid_pair_names)) {
           sym_b <- if (identical(sb, "sym")) grid_sym_ok_len(sa) else 3L
           for (set in c("primary", "edge")) {
             args <- grid_pair_args(sa, sb, family, set, sym_a, sym_b)
+            args$grid_cell <- 0L
             expect_grid_cells_match(
               qfn,
               fn,
@@ -406,11 +421,15 @@ for (i in seq_along(grid_pair_names)) {
             bad_b <- if (identical(sb, "sym")) sym_b + 1L else sym_b
             bad_a <- if (identical(sb, "sym")) sym_a else sym_a + 1L
             args_bad <- grid_pair_args(sa, sb, family, "primary", bad_a, bad_b)
-            expect_error(
-              do.call(qfn, args_bad),
-              verdict$guard_msg,
-              fixed = TRUE
-            )
+            for (grid_cell in seq_len(attr(fn, "grid_cell_count"))) {
+              args_bad$grid_cell <- grid_cell
+              expect_error(
+                do.call(qfn, args_bad),
+                verdict$guard_msg,
+                fixed = TRUE,
+                info = paste("guarded grid cell", grid_cell)
+              )
+            }
           }
         })
       }
