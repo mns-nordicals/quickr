@@ -118,12 +118,6 @@ test_that("&& and || require length-1 operands, like R", {
   }
   expect_error(quick(vec_and), "length-1 operands")
 
-  vec_or <- function(x, y) {
-    declare(type(x = logical(n)), type(y = logical(n)))
-    x || y
-  }
-  expect_error(quick(vec_or), "length-1 operands")
-
   numeric_and <- function(a, b) {
     declare(type(a = double(1)), type(b = double(1)))
     a && b
@@ -141,6 +135,24 @@ test_that("&& and || require length-1 operands, like R", {
     x || y
   }
   expect_error(quick(matrix_vector_or), "requires length-1 operands")
+})
+
+test_that("&& and || guard unknown operand lengths at runtime", {
+  and_fn <- function(x, y) {
+    declare(type(x = logical(NA)), type(y = logical(1)))
+    x && y
+  }
+  qand <- quick(and_fn)
+  expect_identical(qand(TRUE, FALSE), FALSE)
+  expect_error(qand(c(TRUE, FALSE), TRUE), "requires length-1 operands")
+
+  or_fn <- function(x, y) {
+    declare(type(x = logical(1)), type(y = logical(NA)))
+    x || y
+  }
+  qor <- quick(or_fn)
+  expect_identical(qor(FALSE, TRUE), TRUE)
+  expect_error(qor(FALSE, c(FALSE, TRUE)), "requires length-1 operands")
 })
 
 test_that("&& and || accept one-element matrices", {
