@@ -217,6 +217,29 @@ test_that("%*% returns zeros for a symbolic empty contracted dimension", {
   )
 })
 
+test_that("BLAS refuses reassigned scalar dimension variables", {
+  changed <- function(a, b, k) {
+    declare(
+      type(a = double(2, k)),
+      type(b = double(k, 2)),
+      type(k = integer(1))
+    )
+    k <- 1L
+    a %*% b
+  }
+  expect_error(quick(changed), "dimension variable `k` has been reassigned")
+
+  unchanged <- function(a, b, k) {
+    declare(
+      type(a = double(2, k)),
+      type(b = double(k, 2)),
+      type(k = integer(1))
+    )
+    a %*% b
+  }
+  expect_quick_identical(unchanged, list(diag(2), diag(2), 2L))
+})
+
 test_that("symmetric products return zeros for known empty contractions", {
   cross_vec <- function(x) {
     declare(type(x = double(0)))

@@ -390,8 +390,42 @@ emit_lapack_info_guards <- function(
   invisible(TRUE)
 }
 
+# BLAS/LAPACK dimensions must continue to describe the operand extents at the
+# call site. Reassigning a scalar used by an argument's declared dimensions
+# breaks that invariant because the argument shape was fixed on entry.
+assert_blas_dimensions_stable <- function(x, scope, context) {
+  dim_names <- unique(unlist(lapply(x@value@dims, function(dim) {
+    if (is.symbol(dim)) {
+      return(as.character(dim))
+    }
+    if (is.call(dim)) {
+      return(all.names(dim, functions = FALSE))
+    }
+    character()
+  })))
+
+  for (name in dim_names) {
+    var <- get0(name, scope, inherits = TRUE)
+    if (
+      inherits(var, Variable) &&
+        passes_as_scalar(var) &&
+        isTRUE(var@modified)
+    ) {
+      stop(
+        context,
+        ": dimension variable `",
+        name,
+        "` has been reassigned and no longer describes operand extents",
+        call. = FALSE
+      )
+    }
+  }
+  invisible(TRUE)
+}
+
 # Ensure a BLAS operand is named, hoisting into a temp if needed.
-ensure_blas_operand_name <- function(x, hoist) {
+ensure_blas_operand_name <- function(x, hoist, scope, context) {
+  assert_blas_dimensions_stable(x, scope, context)
   name <- symbol_name_or_null(x)
   if (!is.null(name)) {
     return(name)
@@ -481,8 +515,8 @@ gemm <- function(
     hoist,
     scope
   )
-  A_name <- ensure_blas_operand_name(left, hoist)
-  B_name <- ensure_blas_operand_name(right, hoist)
+  A_name <- ensure_blas_operand_name(left, hoist, scope, context)
+  B_name <- ensure_blas_operand_name(right, hoist, scope, context)
 
   out <- resolve_blas_output(
     dest,
@@ -526,8 +560,8 @@ gemv <- function(
     hoist,
     scope
   )
-  A_name <- ensure_blas_operand_name(A, hoist)
-  x_name <- ensure_blas_operand_name(x, hoist)
+  A_name <- ensure_blas_operand_name(A, hoist, scope, context)
+  x_name <- ensure_blas_operand_name(x, hoist, scope, context)
 
   out <- resolve_blas_output(
     dest,
@@ -625,7 +659,7 @@ syrk <- function(
     hoist,
     scope
   )
-  X_name <- ensure_blas_operand_name(X, hoist)
+  X_name <- ensure_blas_operand_name(X, hoist, scope, context)
 
   # Output is symmetric n x n matrix
   out <- resolve_blas_output(
@@ -669,8 +703,8 @@ outer_mul <- function(
   assert_nonempty_blas_output(m, x, 1L, context, hoist, scope)
   assert_nonempty_blas_output(n, y, 1L, context, hoist, scope)
 
-  x_name <- ensure_blas_operand_name(x, hoist)
-  y_name <- ensure_blas_operand_name(y, hoist)
+  x_name <- ensure_blas_operand_name(x, hoist, scope, context)
+  y_name <- ensure_blas_operand_name(y, hoist, scope, context)
 
   out <- resolve_blas_output(
     dest,
@@ -734,7 +768,7 @@ triangular_solve <- function(
     checker = check_blas_dims
   )
 
-  A_name <- ensure_blas_operand_name(A, hoist)
+  A_name <- ensure_blas_operand_name(A, hoist, scope, context)
   B_input_name <- symbol_name_or_null(B)
 
   # The solve routines overwrite their right-hand side, so the output
@@ -811,8 +845,8 @@ lapack_solve <- function(
     checker = check_blas_dims
   )
 
-  A_name <- ensure_blas_operand_name(A, hoist)
-  B_input_name <- ensure_blas_operand_name(B, hoist)
+  A_name <- ensure_blas_operand_name(A, hoist, scope, context)
+  B_input_name <- ensure_blas_operand_name(B, hoist, scope, context)
 
   nrhs <- if (b_rank == 1L) 1L else dim_or_one(B, 2L)
 
@@ -1095,7 +1129,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   assert_square_matrix(a_dims, A, context, hoist, scope)
   n <- a_dims$rows
 
-  A_name <- ensure_blas_operand_name(A, hoist)
+  A_name <- ensure_blas_operand_name(A, hoist, scope, context)
 
   out <- resolve_blas_output(
     dest,
@@ -1147,7 +1181,7 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   assert_square_matrix(a_dims, A, context, hoist, scope)
   n <- a_dims$rows
 
-  A_name <- ensure_blas_operand_name(A, hoist)
+  A_name <- ensure_blas_operand_name(A, hoist, scope, context)
 
   out <- resolve_blas_output(
     dest,
@@ -1193,7 +1227,7 @@ lapack_chol2inv <- function(
   assert_square_matrix(r_dims, R, context, hoist, scope)
   n <- r_dims$rows
 
-  R_name <- ensure_blas_operand_name(R, hoist)
+  R_name <- ensure_blas_operand_name(R, hoist, scope, context)
 
   out <- resolve_blas_output(
     dest,
@@ -1232,7 +1266,7 @@ diag_extract <- function(x, scope, hoist, dest = NULL, context = "diag") {
   x_dims <- matrix_dims(x)
   diag_len <- diag_length_expr(x_dims$rows, x_dims$cols, context)
 
-  x_name <- ensure_blas_operand_name(x, hoist)
+  x_name <- ensure_blas_operand_name(x, hoist, scope, context)
   logical_is_c_int <- logical_as_int(x@value)
 
   out <- resolve_blas_output(
@@ -1278,7 +1312,7 @@ diag_matrix <- function(
   x_scalar <- passes_as_scalar(x@value)
   x_len <- if (x_scalar) 1L else dim_or_one(x, 1L)
 
-  x_name <- ensure_blas_operand_name(x, hoist)
+  x_name <- ensure_blas_operand_name(x, hoist, scope, context)
 
   out <- resolve_blas_output(
     dest,
@@ -1352,7 +1386,7 @@ lapack_svd <- function(
   n <- dims$n
   mn <- dims$mn
 
-  A_name <- ensure_blas_operand_name(A, hoist)
+  A_name <- ensure_blas_operand_name(A, hoist, scope, context)
   A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
   hoist$emit(glue("{A_work@name} = {A_name}"))
 
