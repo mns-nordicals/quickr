@@ -139,3 +139,46 @@ test_that("complex operands are refused in linear algebra", {
     list(matrix(c(1 + 1i, 2 + 0i, 3 - 1i, 4 + 2i), 2, 2))
   )
 })
+
+test_that("as.integer refuses values outside R's integer range", {
+  fn <- function(x) {
+    declare(type(x = double(1)))
+    as.integer(x)
+  }
+
+  qfn <- quick(fn)
+  expect_identical(qfn(42.9), 42L)
+  expect_error(qfn(Inf), "representable as an R integer")
+  expect_error(qfn(1e100), "representable as an R integer")
+})
+
+test_that("runif refuses negative runtime sample counts", {
+  static <- function() {
+    sum(runif(-1L))
+  }
+  fn <- function(n) {
+    declare(type(n = integer(1)))
+    sum(runif(n))
+  }
+
+  expect_error(quick(static), "sample count must be non-negative")
+  qfn <- quick(fn)
+  expect_type(qfn(2L), "double")
+  expect_error(qfn(-1L), "sample count must be non-negative")
+})
+
+test_that("rep.int refuses negative repetition counts in subscripts", {
+  static <- function(x) {
+    declare(type(x = double(2)))
+    x[rep.int(1L, -1L)]
+  }
+  dynamic <- function(x, n) {
+    declare(type(x = double(2)), type(n = integer(1)))
+    sum(x[rep.int(1L, n)])
+  }
+
+  expect_error(quick(static), "invalid 'times' value", fixed = TRUE)
+  qdynamic <- quick(dynamic)
+  expect_identical(qdynamic(c(1, 2), 2L), 2)
+  expect_error(qdynamic(c(1, 2), -1L), "invalid 'times' value", fixed = TRUE)
+})
