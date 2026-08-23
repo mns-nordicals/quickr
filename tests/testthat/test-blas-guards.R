@@ -19,6 +19,35 @@ test_that("matrix-vector %*% guards an unknown vector length", {
   )
 })
 
+test_that("%*% evaluates effectful operands before a runtime shape error", {
+  matmul <- function(m) {
+    declare(type(m = double(n, n)))
+    m %*% runif(3)
+  }
+  cross <- function(m) {
+    declare(type(m = double(n, 2)), type(out = double(2, 1)))
+    out <- crossprod(m, runif(3))
+    out
+  }
+
+  expect_rng_advance <- function(qfn, input, message) {
+    set.seed(123)
+    expect_error(qfn(input), message)
+    actual_seed <- .Random.seed
+
+    set.seed(123)
+    runif(3)
+    expect_identical(actual_seed, .Random.seed)
+  }
+
+  expect_rng_advance(quick(matmul), diag(2), "non-conformable arguments in %*%")
+  expect_rng_advance(
+    quick(cross),
+    matrix(as.double(1:4), 2, 2),
+    "non-conformable arguments in crossprod"
+  )
+})
+
 test_that("vector-matrix %*% guards an unknown vector length", {
   fn <- function(x, m) {
     declare(type(x = double(NA)), type(m = double(3, 3)))
