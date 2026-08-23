@@ -187,7 +187,12 @@
         end interface
       
       
-        out = x((int((unif_rand() * 3_c_int), kind=c_int) + 1_c_int))
+        block
+          real(c_double) :: btmp1_
+      
+          btmp1_ = unif_rand()
+          out = x((int((btmp1_ * 3_c_int), kind=c_int) + 1_c_int))
+        end block
       end subroutine
     Code
       cat(cwrapper)
