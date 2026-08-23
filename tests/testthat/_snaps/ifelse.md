@@ -31,15 +31,23 @@
       
         block
           logical, allocatable :: btmp1_(:) ! logical
+          real(c_double), allocatable :: btmp2_(:)
       
           allocate(btmp1_(c__len_))
+          allocate(btmp2_(c__len_))
           btmp1_ = (c/=0)
-          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+          if (any(btmp1_)) then
+            where (btmp1_) btmp2_ = real(1_c_int, kind=c_double)
+          end if
+          if (any(.not. btmp1_)) then
+            if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-            return
+              return
+            end if
+            where (.not. btmp1_) btmp2_ = a
           end if
-          out_ = merge(real(1_c_int, kind=c_double), a, btmp1_)
+          out_ = btmp2_
         end block
       
         contains
@@ -150,20 +158,28 @@
       
         block
           logical, allocatable :: btmp1_(:) ! logical
+          real(c_double), allocatable :: btmp2_(:)
       
           allocate(btmp1_(c__len_))
+          allocate(btmp2_(c__len_))
           btmp1_ = (c/=0)
-          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+          if (any(btmp1_)) then
+            if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-            return
+              return
+            end if
+            where (btmp1_) btmp2_ = a
           end if
-          if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+          if (any(.not. btmp1_)) then
+            if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-            return
+              return
+            end if
+            where (.not. btmp1_) btmp2_ = b
           end if
-          out_ = merge(a, b, btmp1_)
+          out_ = btmp2_
         end block
       
         contains
