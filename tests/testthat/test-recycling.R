@@ -685,3 +685,18 @@ test_that("scalar-backed array expressions materialize before shape guards", {
   mat <- matrix(as.double(1:6), 2, 3)
   expect_quick_identical(fn, list(mat, 2L, 3L))
 })
+
+test_that("integer-backed logical matrix fills materialize portably", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    !matrix(rev(flag), 2, 2)
+  }
+
+  code <- as.character(r2f(fn))
+  expect_match(
+    code,
+    "integer(c_int) :: btmp1_(2, 2) ! logical",
+    fixed = TRUE
+  )
+  expect_quick_identical(fn, list(TRUE))
+})
