@@ -30,6 +30,57 @@ test_that("unsupported complex operations are refused with R's messages", {
   expect_error(quick(complex_mod), "unimplemented complex operation")
 })
 
+test_that("as.double refuses unsupported complex coercion", {
+  fn <- function(x) {
+    declare(type(x = complex(n)))
+    as.double(x)
+  }
+
+  expect_error(quick(fn), "does not support complex")
+})
+
+test_that("arithmetic refuses raw operands", {
+  for (op in c("+", "-", "*", "/", "^", "%%", "%/%")) {
+    fn <- eval(bquote(function(x, y) {
+      declare(type(x = raw(1)), type(y = raw(1)))
+      .(as.call(list(as.name(op), quote(x), quote(y))))
+    }))
+    expect_error(quick(fn), "does not support raw operands", fixed = TRUE)
+  }
+
+  unary <- function(x) {
+    declare(type(x = raw(1)))
+    -x
+  }
+  expect_error(quick(unary), "does not support raw operands", fixed = TRUE)
+})
+
+test_that("division operators refuse zero divisors", {
+  for (op in c("%%", "%/%")) {
+    literal <- eval(bquote(function(x) {
+      declare(type(x = integer(1)))
+      .(as.call(list(as.name(op), quote(x), 0L)))
+    }))
+    expect_error(
+      quick(literal),
+      "does not support zero divisors",
+      fixed = TRUE
+    )
+
+    dynamic <- eval(bquote(function(x, y) {
+      declare(type(x = integer(1)), type(y = integer(1)))
+      .(as.call(list(as.name(op), quote(x), quote(y))))
+    }))
+    q_dynamic <- quick(dynamic)
+    expect_identical(q_dynamic(5L, 2L), do.call(op, list(5L, 2L)))
+    expect_error(
+      q_dynamic(1L, 0L),
+      "does not support zero divisors",
+      fixed = TRUE
+    )
+  }
+})
+
 test_that("complex operands are refused in linear algebra", {
   complex_matmul <- function(x, y) {
     declare(type(x = complex(2)), type(y = complex(2)))
