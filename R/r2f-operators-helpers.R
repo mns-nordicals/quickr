@@ -127,10 +127,16 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
 # guards that return from the generated procedure, so sharing one hoist and
 # materializing only after every operand has been lowered can reverse R's
 # left-to-right evaluation order.
+# Used by: r2f-conditionals.R, r2f-constructors.R, lower_elementwise_operands()
+lower_operands_in_order <- function(args, scope, ..., hoist) {
+  stopifnot(!is.null(hoist))
+  lapply(args, lower_r2f_operand_in_order, scope, ..., hoist = hoist)
+}
+
 # Used by: r2f-arithmetic.R, r2f-logical.R
 lower_elementwise_operands <- function(args, scope, ..., hoist) {
-  stopifnot(length(args) == 2L, !is.null(hoist))
-  lapply(args, lower_r2f_operand_in_order, scope, ..., hoist = hoist)
+  stopifnot(length(args) == 2L)
+  lower_operands_in_order(args, scope, ..., hoist = hoist)
 }
 
 # Check if a dimension expression equals 1.

@@ -363,6 +363,11 @@ test_that("fill constructors spread inside c()", {
   }
   expect_quick_identical(symbolic, list(as.double(1:3), 2L))
   expect_quick_identical(symbolic, list(as.double(1:3), 0L))
+  expect_error(
+    quick(symbolic)(as.double(1:3), -1L),
+    "invalid 'length' argument",
+    fixed = TRUE
+  )
 
   promoted <- function(x) {
     declare(type(x = double(1)))
@@ -381,6 +386,17 @@ test_that("fill constructors spread inside c()", {
     c((numeric)(2), x)
   }
   expect_quick_identical(parenthesized, list(c(1, 2)))
+})
+
+test_that("c() evaluates effectful arguments from left to right", {
+  fn <- function() {
+    c(runif(2), runif(2) + 1)
+  }
+
+  set.seed(913)
+  expected <- fn()
+  set.seed(913)
+  expect_identical(quick(fn)(), expected)
 })
 
 test_that("symbolic fill spreading preserves pointer-sized lengths", {

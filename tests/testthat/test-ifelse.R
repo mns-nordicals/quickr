@@ -95,3 +95,20 @@ test_that("ifelse guards unknown branch lengths at runtime", {
   expect_error(qfn(cc, c(10, 20), b), "match the shape of `test`")
   expect_error(qfn(cc, a, c(1, 2, 3, 4)), "match the shape of `test`")
 })
+
+test_that("ifelse evaluates earlier branches before later shape errors", {
+  fn <- function(x) {
+    declare(type(x = double(n)))
+    ifelse(c(TRUE, FALSE, TRUE), runif(3), runif(3) + x)
+  }
+  qfn <- quick(fn)
+
+  set.seed(914)
+  expect_error(qfn(c(1, 2)), "elementwise vector operations")
+  actual_seed <- .Random.seed
+
+  set.seed(914)
+  runif(3)
+  runif(3)
+  expect_identical(actual_seed, .Random.seed)
+})
