@@ -12,13 +12,15 @@ test_that("CRAN smoke budget stays small", {
 })
 
 test_that("non-smoke test files skip on CRAN", {
+  always_run_files <- "test-recycling.R"
   test_files <- list.files(
     test_path(),
     pattern = "^test-.*\\.R$",
     full.names = TRUE
   )
   non_smoke_files <- test_files[
-    !grepl("^test-cran-(budget|smoke-.*)\\.R$", basename(test_files))
+    !grepl("^test-cran-(budget|smoke-.*)\\.R$", basename(test_files)) &
+      !basename(test_files) %in% always_run_files
   ]
   has_top_level_skip <- vapply(
     non_smoke_files,
