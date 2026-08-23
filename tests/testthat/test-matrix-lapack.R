@@ -328,6 +328,12 @@ test_that("diag treats declared numeric scalars as identity sizes", {
   }
   expect_quick_identical(double_size, list(3))
   expect_quick_identical(double_size, list(3.5))
+
+  local_double_size <- function() {
+    n <- 3.5
+    diag(n)
+  }
+  expect_quick_identical(local_double_size, list())
 })
 
 test_that("diag refuses to cycle an empty vector into a nonempty matrix", {

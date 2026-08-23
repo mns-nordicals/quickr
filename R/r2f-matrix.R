@@ -817,7 +817,27 @@ register_r2f_handler(
       passes_as_scalar(x@value) &&
       x@value@mode %in% c("integer", "double")
     if (numeric_size) {
-      nrow <- call("quickr_size_int", x_arg)
+      x_var <- if (is.symbol(x_arg)) {
+        get0(as.character(x_arg), scope, inherits = TRUE)
+      }
+      local_numeric_value <-
+        inherits(x_var, Variable) &&
+        !x_var@is_arg &&
+        !x_var@modified &&
+        is_number(x_var@r) &&
+        is.finite(x_var@r)
+      nrow <- if (local_numeric_value) {
+        as.integer(x_var@r)
+      } else if (identical(x@value@mode, "integer")) {
+        r2size(x_arg, scope)
+      } else if (inherits(x_var, Variable) && !x_var@is_arg) {
+        stop(
+          "diag() identity size cannot depend on a computed local double",
+          call. = FALSE
+        )
+      } else {
+        call("quickr_size_int", x_arg)
+      }
       ncol <- nrow
       x_val <- Fortran("1.0_c_double", Variable("double"))
       return(diag_matrix(

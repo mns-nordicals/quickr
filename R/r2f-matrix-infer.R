@@ -342,7 +342,9 @@ infer_dest_diag <- function(args, scope) {
     }
   }
 
-  # Case: x is a scalar symbol without nrow/ncol (identity matrix)
+  # Case: x is a scalar symbol without nrow/ncol (identity matrix). The
+  # result size depends on the symbol's value, so assignment destination
+  # inference must leave allocation to the diag() handler.
   if (
     !is.null(x) &&
       passes_as_scalar(x) &&
@@ -350,8 +352,7 @@ infer_dest_diag <- function(args, scope) {
       !has_nrow &&
       !has_ncol
   ) {
-    n <- call("quickr_size_int", x_arg)
-    return(Variable("double", list(n, n)))
+    return(NULL)
   }
 
   # Case: x is a vector or scalar, construct diagonal matrix
