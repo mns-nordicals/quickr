@@ -227,7 +227,16 @@ f(matrix(1, 2, 3), matrix(1, 2, 2))
 `solve(a, b)` requires a square `a`, as in R: a statically rectangular
 system is a compile error, and when squareness depends on runtime sizes
 it is checked before the solve. Use `qr.solve()` for least-squares
-solutions of rectangular systems.
+solutions of rectangular systems. The right-hand side must be a vector or
+matrix. R also accepts a scalar right-hand side for a `1x1` system; quickr
+refuses that rank-0 form. Declare a length-one vector when that case is
+required.
+
+`cbind()` and `rbind()` support scalar recycling and otherwise require the
+common nonscalar extent to be provably equal at compile time. Arguments
+declared with the same symbolic extent satisfy that requirement. Distinct or
+otherwise unresolved extents are a compile error, even if their runtime values
+would be equal.
 
 ## Differences from R
 
@@ -330,12 +339,6 @@ axes explicitly when `drop()` should remove them.
 under [Types](#reassignment-cannot-narrow-a-type). R instead promotes
 the variable to double.
 
-### `prod()` keeps integer products
-
-quickr preserves the joined input type for `prod()`. A product whose
-inputs are all integer or logical therefore has integer type. R instead
-returns double from `prod()` even when every input is integer or logical.
-
 ### Complex values are elementwise-only {#complex}
 
 Elementwise arithmetic and equality comparisons handle complex values
@@ -359,12 +362,16 @@ natively, including mixed integer, double, and complex operands:
 values; order comparisons and `%%` on complex values are errors in R
 itself, so refusing them is not a divergence.)
 
-### Reversed `runif()` bounds
+### `runif()` bound differences
 
 R returns `NaN` values with a warning when `runif()` is called with
 `min > max`. quickr applies its uniform scaling formula without checking
 the bound order and returns values between the two bounds. Check the bounds
 before calling `runif()` when their order is not known statically.
+
+When `min` and `max` are equal, R returns the bound without consuming an RNG
+value. quickr still draws and scales a uniform value, so the result is equal
+but the subsequent RNG state differs.
 
 ### Scalar transpose {#scalar-transpose}
 
@@ -395,6 +402,8 @@ If you need R's bounds behavior, validate indices before the loop.
 
 Four differences:
 
+- **Test type.** R coerces numeric `test` values to logical. quickr requires
+  `test` to already be logical and refuses other types.
 - **Result type.** In R, `ifelse()`'s result type can depend on which
   branches are actually reached at run time:
   `ifelse(c(TRUE, TRUE), 1:2, c(0.5, 0.5))` is integer, because the `no`
@@ -407,9 +416,6 @@ Four differences:
   quickr requires each branch to be a scalar or match `test`'s length
   (checked at run time when lengths are unknown). A branch known to be
   zero-length is a compile error.
-- **Branch evaluation.** R evaluates only the branches needed by `test`.
-  quickr evaluates both branches before selecting values, so effects or
-  errors in an unused branch still occur.
 
 ```{r}
 quick(function(t, a, b) {
