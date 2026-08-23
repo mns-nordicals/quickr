@@ -143,13 +143,31 @@
         ! manifest end
       
       
-      if (size(((x + 1.0_c_double)), kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(((x + 1.0_c_double)), kind=c_ptrdiff_t) /= size(((y -&
-      & 1.0_c_double)), kind=c_ptrdiff_t)) then
+        block
+          real(c_double), allocatable :: btmp1_(:)
+          real(c_double), allocatable :: btmp2_(:)
+      
+          allocate(btmp1_(x__len_))
+          allocate(btmp2_(x__len_))
+          if (size(x, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        out_ = (((x + 1.0_c_double)) * ((y - 1.0_c_double)))
+            return
+          end if
+          if (size(y, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+            return
+          end if
+          btmp1_ = ((x + 1.0_c_double))
+          btmp2_ = ((y - 1.0_c_double))
+          if (size(btmp1_, kind=c_ptrdiff_t) == 0 .or. size(btmp1_, kind=c_ptrdiff_t) /= size(btmp2_, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
+      & supported")
+            return
+          end if
+          out_ = (btmp1_ * btmp2_)
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
