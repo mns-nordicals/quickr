@@ -352,7 +352,7 @@ guard_conformable_dims <- function(
     condition <- glue("{left_guard} /= {right_guard}")
     if (isTRUE(conform$reject_zero)) {
       condition <- glue(
-        "{left_guard} == 0_c_ptrdiff_t .or. {condition}"
+        "{left_guard} == 0 .or. {condition}"
       )
     }
     emit_quickr_error_if(
