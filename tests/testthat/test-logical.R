@@ -174,6 +174,22 @@ test_that("short-circuited right operands defer length errors", {
   expect_error(quick(reached_or)(), "requires length-1 operands")
 })
 
+test_that("short-circuiting does not read absent optional arguments", {
+  fn <- function(fallback) {
+    declare(type(fallback = double(1)))
+    f <- function(x = NULL) {
+      out <- is.null(x) || x > 0
+      if (is.null(x)) {
+        x <- fallback
+      }
+      out
+    }
+    c(f(0), f(), f(1))
+  }
+
+  expect_quick_identical(fn, list(0))
+})
+
 test_that("&& and || accept one-element matrices", {
   matrix_and <- function(x, y) {
     declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
