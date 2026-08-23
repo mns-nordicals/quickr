@@ -173,28 +173,34 @@ register_r2f_handler(
   }
 )
 
-andor_operand_is_length_one <- function(x) {
-  passes_as_scalar(x@value) ||
-    x@value@rank > 0L &&
-      all(vapply(x@value@dims, dim_is_one, logical(1L)))
-}
-
-scalarize_andor_operand <- function(x, op, hoist) {
+scalarize_andor_operand <- function(x, op, hoist, scope) {
   if (is.null(x@value) || !identical(x@value@mode, "logical")) {
     stop("`", op, "` requires logical operands", call. = FALSE)
   }
-  if (!andor_operand_is_length_one(x)) {
-    stop(
-      "`",
-      op,
-      "` requires length-1 operands; use `",
-      if (op == "&&") "&" else "|",
-      "` for elementwise operations",
-      call. = FALSE
-    )
-  }
+
+  message <- paste0(
+    "`",
+    op,
+    "` requires length-1 operands; use `",
+    if (op == "&&") "&" else "|",
+    "` for elementwise operations"
+  )
   if (passes_as_scalar(x@value)) {
     return(booleanize_logical_as_int(x))
+  }
+
+  dims <- lapply(x@value@dims, r2size, scope = scope)
+  if (
+    any(vapply(
+      dims,
+      \(dim) is_wholenumber(dim) && !dim_is_one(dim),
+      logical(1L)
+    ))
+  ) {
+    stop(
+      message,
+      call. = FALSE
+    )
   }
   if (is.null(hoist)) {
     stop("internal error: `", op, "` requires hoist context", call. = FALSE)
@@ -206,6 +212,15 @@ scalarize_andor_operand <- function(x, op, hoist) {
     x <- Fortran(tmp@name, tmp)
   } else {
     x <- hoist_unless_name(x, hoist)
+  }
+
+  if (!all(vapply(dims, dim_is_one, logical(1L)))) {
+    emit_quickr_error_if(
+      glue("size({x}, kind=c_ptrdiff_t) /= 1_c_ptrdiff_t"),
+      message,
+      hoist,
+      scope
+    )
   }
   idxs <- rep("1", x@value@rank)
   Fortran(
@@ -220,8 +235,8 @@ register_r2f_handler(
     op <- last(list(...)$calls)
     stopifnot(length(args) == 2L, op %in% c("&&", "||"))
     .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
-    left <- scalarize_andor_operand(left, op, hoist)
-    right <- scalarize_andor_operand(right, op, hoist)
+    left <- scalarize_andor_operand(left, op, hoist, scope)
+    right <- scalarize_andor_operand(right, op, hoist, scope)
     operator <- if (op == "&&") ".and." else ".or."
     Fortran(glue("{left} {operator} {right}"), Variable("logical"))
   }
