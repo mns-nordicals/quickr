@@ -249,6 +249,11 @@ register_r2f_handler(
         scope = scope
       )
       var@modified <- TRUE
+      # Subsequent size expressions must not reuse the expression that
+      # initialized this binding. Preserve a new expression when it does not
+      # refer back to the binding itself; self-referential updates cannot be
+      # folded safely into a result shape.
+      var@r <- if (name %in% all.vars(rhs)) NA_integer_ else rhs
       # could probably drop this @modified property, and instead track
       # if the var populated by declare is identical at the end (e.g., perhaps by
       # address, or by attaching a unique id to each var, or ???)

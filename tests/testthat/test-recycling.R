@@ -685,3 +685,40 @@ test_that("scalar-backed array expressions materialize before shape guards", {
   mat <- matrix(as.double(1:6), 2, 3)
   expect_quick_identical(fn, list(mat, 2L, 3L))
 })
+
+test_that("constructor lengths follow current local bindings", {
+  fn <- function() {
+    n <- 2L
+    n <- 3L
+    double(n)
+  }
+
+  expect_identical(quick(fn)(), double(3))
+})
+
+test_that("matrix and array reject negative dimensions before use", {
+  matrix_static <- function() {
+    sum(matrix(1, -1L, 2L))
+  }
+  array_static <- function() {
+    sum(array(1, dim = c(-1L, 2L)))
+  }
+  matrix_dynamic <- function(n) {
+    declare(type(n = integer(1)))
+    sum(matrix(1, n, 2L))
+  }
+  array_dynamic <- function(n) {
+    declare(type(n = integer(1)))
+    sum(array(1, dim = c(n, 2L)))
+  }
+
+  expect_error(quick(matrix_static), "dimensions must be non-negative")
+  expect_error(quick(array_static), "dimensions must be non-negative")
+
+  qmatrix <- quick(matrix_dynamic)
+  qarray <- quick(array_dynamic)
+  expect_identical(qmatrix(2L), 4.0)
+  expect_identical(qarray(2L), 4.0)
+  expect_error(qmatrix(-1L), "dimensions must be non-negative")
+  expect_error(qarray(-1L), "dimensions must be non-negative")
+})

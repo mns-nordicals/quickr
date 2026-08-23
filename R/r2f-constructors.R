@@ -127,6 +127,39 @@ known_dims_product <- function(dims) {
   prod(vals)
 }
 
+validate_constructor_dims <- function(dims, context, scope, hoist) {
+  stopifnot(is.list(dims), is_string(context), !is.null(hoist))
+  message <- paste0(context, " dimensions must be non-negative")
+  for (dim in dims) {
+    if (
+      is.numeric(dim) &&
+        length(dim) == 1L &&
+        !is.na(dim) &&
+        is.finite(dim) &&
+        dim < 0
+    ) {
+      stop(message, call. = FALSE)
+    }
+    if (is_wholenumber(dim)) {
+      next
+    }
+    if (is_scalar_na(dim)) {
+      next
+    }
+    dim_f <- dims2f(list(dim), scope)
+    if (!nzchar(dim_f) || grepl(":", dim_f, fixed = TRUE)) {
+      next
+    }
+    emit_quickr_error_if(
+      glue("{dim_f} < 0"),
+      message,
+      hoist,
+      scope
+    )
+  }
+  invisible(TRUE)
+}
+
 # --- Handlers ---
 
 r2f_handlers[["c"]] <- function(args, scope = NULL, ..., hoist = NULL) {
@@ -390,6 +423,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   src <- r2f(margs$data, scope, ..., hoist = hoist)
   dims <- r2dims(list(margs$nrow, margs$ncol), scope)
+  validate_constructor_dims(dims, "matrix()", scope, hoist)
   out_val <- Variable(mode = src@value@mode, dims = dims)
 
   # A scalar broadcasts natively on direct whole-array assignment, so keep
@@ -427,6 +461,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   if (!length(target_dims)) {
     stop("array(dim=) must not be empty", call. = FALSE)
   }
+  validate_constructor_dims(target_dims, "array()", scope, hoist)
   if (!passes_as_scalar(out@value)) {
     # R semantics: `array()` flattens its input (dropping dim) then reshapes.
     # We implement this as Fortran `reshape()`. Recycling (i.e. expanding a

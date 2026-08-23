@@ -222,6 +222,7 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
         dim
       }
     })
+    validate_constructor_dims(fill_dims, "matrix()", scope, hoist)
     fill_dims_f <- map_chr(fill_dims, bind_dim_int)
     lower_fill <- function(materialize = FALSE) {
       lower_arg <- function(arg) {
