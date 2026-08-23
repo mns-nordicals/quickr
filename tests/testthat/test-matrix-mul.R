@@ -457,6 +457,23 @@ test_that("crossprod and tcrossprod handle vector inputs", {
   expect_quick_equal(tcross_vec_vec, list(x = x, y = y_vec_long))
 })
 
+test_that("tcrossprod uses vector length against matrix columns", {
+  fn <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA, NA)))
+    tcrossprod(x, y)
+  }
+
+  qfn <- quick(fn)
+  x <- as.double(1:3)
+  y <- matrix(as.double(1:6), nrow = 2L)
+  expect_equal(qfn(x, y), fn(x, y))
+  expect_error(
+    qfn(x, matrix(as.double(1:4), nrow = 2L)),
+    "non-conformable arguments in tcrossprod",
+    fixed = TRUE
+  )
+})
+
 test_that("crossprod rejects incompatible destination dimensions", {
   crossprod_bad_dest <- function(x) {
     declare(type(x = double(4, 3)), type(out = double(2, 2)))
