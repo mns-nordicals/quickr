@@ -130,35 +130,7 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
 # Used by: r2f-arithmetic.R, r2f-logical.R
 lower_elementwise_operands <- function(args, scope, ..., hoist) {
   stopifnot(length(args) == 2L, !is.null(hoist))
-
-  lapply(args, function(arg) {
-    if (is.symbol(arg) || is_scalar_atomic(arg)) {
-      return(r2f(arg, scope, ..., hoist = hoist))
-    }
-
-    operand_hoist <- hoist$capture()
-    operand <- r2f(arg, scope, ..., hoist = operand_hoist)
-    stopifnot(inherits(operand@value, Variable))
-
-    # runif() is the only expression-valued effect currently emitted by a
-    # handler. Other effectful constructs emit statements into the captured
-    # hoist, which are replayed before the next operand without forcing an
-    # otherwise-pure expression through a temporary.
-    if (grepl("unif_rand()", as.character(operand), fixed = TRUE)) {
-      tmp <- hoist$declare_tmp(
-        mode = operand@value@mode,
-        dims = operand@value@dims,
-        logical_as_int = logical_as_int(operand@value) &&
-          !isTRUE(operand@logical_booleanized)
-      )
-      hoist$emit(operand_hoist$render(glue("{tmp@name} = {operand}")))
-      return(Fortran(tmp@name, tmp))
-    }
-    if (operand_hoist$has_code()) {
-      hoist$emit(operand_hoist$render(character()))
-    }
-    operand
-  })
+  lapply(args, lower_r2f_operand_in_order, scope, ..., hoist = hoist)
 }
 
 # Check if a dimension expression equals 1.
