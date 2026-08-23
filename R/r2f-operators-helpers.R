@@ -264,29 +264,27 @@ dims_match <- function(left, right) {
 # ok+known (no guard needed), not-ok+known (compile error at the caller),
 # or unknown (caller emits a runtime guard). Known lengths must be equal
 # and nonzero -- R-style recycling is never implemented, and quickr cannot
-# represent length-0 results. NA dims are always unknown: two unknown
-# lengths are not the same quantity.
+# represent length-0 results. Symbolic dims are always unknown because their
+# positivity must be checked at runtime, even when both operands use the same
+# expression.
 # Used by: guard_conformable_dims()
 check_elementwise_lengths <- function(left, right) {
   if (is_wholenumber(left) && is_wholenumber(right)) {
     left <- as.integer(left)
     right <- as.integer(right)
-    return(list(ok = left == right && left > 0L, unknown = FALSE))
+    return(list(
+      ok = left == right && left > 0L,
+      unknown = FALSE,
+      reject_zero = TRUE
+    ))
   }
   if (
     (is_wholenumber(left) && as.integer(left) == 0L) ||
       (is_wholenumber(right) && as.integer(right) == 0L)
   ) {
-    return(list(ok = FALSE, unknown = FALSE))
+    return(list(ok = FALSE, unknown = FALSE, reject_zero = TRUE))
   }
-  if (!is_scalar_na(left) && !is_scalar_na(right)) {
-    left_norm <- fortranize_expr_symbols(left)
-    right_norm <- fortranize_expr_symbols(right)
-    if (identical(left_norm, right_norm)) {
-      return(list(ok = TRUE, unknown = FALSE))
-    }
-  }
-  list(ok = TRUE, unknown = TRUE)
+  list(ok = TRUE, unknown = TRUE, reject_zero = TRUE)
 }
 
 # The message shared by every enforcement point of the elementwise matrix
@@ -316,8 +314,8 @@ guard_dim_f <- function(dim, operand, axis = NULL, f = NULL) {
 }
 
 # Shared conformability guard emitter. `checker` supplies the caller's
-# static policy: elementwise operations require equal nonzero dimensions,
-# while BLAS/LAPACK callers use equality semantics that permit zero.
+# static and runtime policy: elementwise operations require equal nonzero
+# dimensions, while BLAS/LAPACK callers use equality semantics that permit zero.
 # A statically known mismatch is a compile error; unknown dimensions get a
 # statement-level runtime guard; provably equal dimensions need nothing.
 # `axis` NULL compares the operand's whole size (rank-1 operands).
@@ -349,10 +347,16 @@ guard_conformable_dims <- function(
     stop(message, call. = FALSE)
   }
   if (conform$unknown) {
+    left_guard <- guard_dim_f(left_dim, left, left_axis, left_f)
+    right_guard <- guard_dim_f(right_dim, right, right_axis, right_f)
+    condition <- glue("{left_guard} /= {right_guard}")
+    if (isTRUE(conform$reject_zero)) {
+      condition <- glue(
+        "{left_guard} == 0_c_ptrdiff_t .or. {condition}"
+      )
+    }
     emit_quickr_error_if(
-      glue(
-        "{guard_dim_f(left_dim, left, left_axis, left_f)} /= {guard_dim_f(right_dim, right, right_axis, right_f)}"
-      ),
+      condition,
       message,
       hoist,
       scope

@@ -90,16 +90,19 @@ test_that("symbolic differing lengths get a runtime guard", {
   # Runtime length one does not change an assumed-shape vector into a scalar.
   expect_error(qfn(c(1, 2, 3), 10), "equal lengths")
   expect_error(qfn(10, c(1, 2, 3)), "equal lengths")
+  expect_error(qfn(double(), double()), "equal lengths")
 })
 
-test_that("identical symbolic lengths stay guard-free and work", {
+test_that("identical symbolic lengths guard runtime emptiness", {
   fn <- function(a, b) {
     declare(type(a = double(n)), type(b = double(n)))
     a - b
   }
-  fsub <- r2f(fn)
-  expect_no_match(fsub, "quickr_set_error_msg", fixed = TRUE)
-  expect_quick_identical(fn, list(c(1, 2, 3), c(10, 20, 30)))
+  fsub <- as.character(r2f(fn))
+  expect_match(fsub, "quickr_set_error_msg", fixed = TRUE)
+  qfn <- quick(fn)
+  expect_identical(qfn(c(1, 2, 3), c(10, 20, 30)), c(-9, -18, -27))
+  expect_error(qfn(double(), double()), "equal lengths")
 })
 
 test_that("scalar broadcast is unaffected", {
