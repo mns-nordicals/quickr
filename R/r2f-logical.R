@@ -143,6 +143,9 @@ register_r2f_handler(
 register_r2f_handler(
   c("&", "|"),
   function(args, scope, ..., hoist = NULL) {
+    # `&&` and `||` deliberately retain the pre-existing eager lowering in
+    # this stack step. Their scalar, short-circuit lowering is isolated in
+    # PR #147 rather than mixed into the elementwise conformability changes.
     args <- lapply(args, r2f, scope, ..., hoist = hoist)
     args <- lapply(args, function(a) {
       if (a@value@mode != "logical") {
