@@ -2,8 +2,6 @@
 # be verified at compile time get a size() check before the BLAS call
 # (never a compile-time warning, never an unchecked call).
 
-skip_on_cran()
-
 test_that("matrix-vector %*% guards an unknown vector length", {
   fn <- function(m, x) {
     declare(type(m = double(3, 3)), type(x = double(NA)))
