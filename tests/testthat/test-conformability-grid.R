@@ -2,8 +2,6 @@
 #   mode(left) x mode(right) x shape(left) x shape(right) x op
 # is checked against plain R as the oracle.
 
-skip_on_cran()
-
 # Valid cells must match R exactly
 # (values, typeof(), shape); statically invalid cells must fail to compile
 # with the documented message; statically undecidable cells must compile a
