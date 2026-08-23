@@ -139,3 +139,14 @@ test_that("single-statement while/repeat bodies re-run their hoisted statements"
 
   expect_quick_identical(bounded_squarings_repeat, list(diag(2) * 2))
 })
+
+test_that("value iteration refuses to retype an existing loop variable", {
+  fn <- function(x) {
+    declare(type(x = double(2)))
+    i <- 1L
+    for (i in x) {}
+    i
+  }
+
+  expect_error(quick(fn), "loop variable `i` has mode integer")
+})

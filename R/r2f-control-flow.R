@@ -185,6 +185,21 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
         call. = FALSE
       )
     }
+    if (
+      inherits(existing, Variable) &&
+        !identical(existing@mode, iterable_var@mode)
+    ) {
+      stop(
+        "for-loop variable `",
+        var,
+        "` has mode ",
+        existing@mode,
+        ", but the iterable has mode ",
+        iterable_var@mode,
+        "; retyping loop variables is not supported",
+        call. = FALSE
+      )
+    }
 
     loop_var <- existing %||% Variable(mode = iterable_var@mode)
     loop_var@name <- var_name
