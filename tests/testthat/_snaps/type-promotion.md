@@ -395,6 +395,10 @@
       & supported")
             return
           end if
+          if (any(b == 0)) then
+            call quickr_set_error_msg("%% does not support zero divisors")
+            return
+          end if
           out_ = modulo(btmp1_, b)
         end block
       
