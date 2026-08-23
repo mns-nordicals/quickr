@@ -8,6 +8,65 @@ ifelse_branch_shape_msg <- paste0(
   "R-style recycling is not supported"
 )
 
+# A pure, non-trapping branch can stay inline in a WHERE assignment: evaluating
+# only selected elements is observably equivalent to evaluating the full R
+# branch, and avoids a full-size temporary. Keep the whitelist conservative;
+# calls that can consume RNG state, fail, or trap must still be materialized.
+ifelse_branch_is_pure <- function(e, scope) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(!inherits(var, Variable) || is.null(var@optional_dummy))
+  }
+  if (is.atomic(e)) {
+    return(TRUE)
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  if (
+    !op %in%
+      c(
+        "(",
+        "!",
+        "&",
+        "|",
+        "<",
+        "<=",
+        ">",
+        ">=",
+        "==",
+        "!=",
+        "+",
+        "-",
+        "*",
+        "abs"
+      )
+  ) {
+    return(FALSE)
+  }
+  all(vapply(as.list(e)[-1L], ifelse_branch_is_pure, logical(1L), scope))
+}
+
+ifelse_branch_shape_is_known <- function(branch, mask) {
+  if (
+    passes_as_scalar(branch@value) ||
+      branch@value@rank != mask@value@rank
+  ) {
+    return(TRUE)
+  }
+  all(vapply(
+    seq_len(mask@value@rank),
+    function(axis) {
+      !check_elementwise_lengths(
+        dim_or_one(mask, axis),
+        dim_or_one(branch, axis)
+      )$unknown
+    },
+    logical(1L)
+  ))
+}
+
 # Enforce the shape contract for one ifelse() branch: scalars broadcast
 # natively; a non-scalar branch must match `test`'s shape, because
 # merge() requires conformable arguments and a runtime mismatch would
@@ -62,7 +121,11 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   lower_branch <- function(arg) {
     sub <- new_hoist(scope)
     branch <- r2f(arg, scope, ..., hoist = sub)
-    if (!passes_as_scalar(mask@value)) {
+    if (
+      !passes_as_scalar(mask@value) &&
+        (!ifelse_branch_is_pure(arg, scope) ||
+          !ifelse_branch_shape_is_known(branch, mask))
+    ) {
       # WHERE may evaluate only selected RHS elements. Materialize the complete
       # branch first to match R, which evaluates the whole branch once selected.
       branch <- hoist_unless_name(branch, sub)
