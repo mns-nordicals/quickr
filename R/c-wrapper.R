@@ -410,7 +410,6 @@ c_bridge_hoist <- function() {
   hoist <- new.env(parent = emptyenv())
   hoist$as_int <- new.env(parent = emptyenv())
   hoist$as_int_tmp <- new.env(parent = emptyenv())
-  hoist$size_int <- new.env(parent = emptyenv())
   hoist$used_tmp <- new.env(parent = emptyenv())
   hoist$pending <- character()
   hoist
@@ -458,31 +457,6 @@ c_bridge_hoist_take_pending <- function(hoist) {
   pending <- hoist$pending %||% character()
   hoist$pending <- character()
   pending
-}
-
-c_bridge_hoist_size_int <- function(hoist, var) {
-  stopifnot(is.environment(hoist), inherits(var, Variable))
-
-  existing <- get0(var@name, envir = hoist$size_int, inherits = FALSE)
-  if (is_string(existing)) {
-    return(existing)
-  }
-
-  tmp <- paste0("_size_int_", gsub("[^A-Za-z0-9_]", "_", var@name))
-  assign(var@name, tmp, envir = hoist$size_int)
-  hoist$pending <- c(
-    hoist$pending,
-    glue(
-      '
-      if (!R_FINITE({var@name}__[0]) ||
-          {var@name}__[0] < 0 ||
-          {var@name}__[0] > R_XLEN_T_MAX ||
-          {var@name}__[0] != (double)((R_xlen_t){var@name}__[0]))
-        Rf_error("diag() size must be a non-negative whole number");
-      const R_xlen_t {tmp} = (R_xlen_t){var@name}__[0];'
-    )
-  )
-  tmp
 }
 
 c_bridge_hoist_seq_checks <- function(hoist, from, to, by) {
@@ -648,15 +622,6 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
   if (identical(op, "quickr_size_int")) {
     if (length(args) != 1L) {
       stop("quickr_size_int() requires one argument")
-    }
-    if (is.symbol(args[[1L]])) {
-      var <- get0(as.character(args[[1L]]), scope)
-      if (inherits(var, Variable) && identical(var@mode, "double")) {
-        if (is.null(c_hoist)) {
-          stop("quickr_size_int() requires a C bridge hoist")
-        }
-        return(c_bridge_hoist_size_int(c_hoist, var))
-      }
     }
     size <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
     return(glue("((R_xlen_t)({size}))"))
