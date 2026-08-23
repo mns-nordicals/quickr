@@ -252,6 +252,24 @@ test_that("expression vectors are evaluated once before matrix reshaping", {
   expect_identical(quick(fn)(mat, 3L), expected)
 })
 
+test_that("known-shape expression operands stay fused", {
+  fn <- function(a, b, c) {
+    declare(
+      type(a = double(3)),
+      type(b = double(3)),
+      type(c = double(3))
+    )
+    (a + b) + c
+  }
+
+  fsub <- r2f(fn)
+  expect_false(grepl("btmp", as.character(fsub), fixed = TRUE))
+  expect_quick_identical(
+    fn,
+    list(as.double(1:3), as.double(4:6), as.double(7:9))
+  )
+})
+
 test_that("1x1 matrix operands follow R: arithmetic scalarizes, strict ops reject", {
   # Arithmetic: R recycles a length-1 array against a longer vector
   # (deprecated, hence suppressWarnings, but still R's answer). A 1x1

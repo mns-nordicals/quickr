@@ -335,18 +335,6 @@ maybe_reshape_vector_matrix <- function(
     return(list(left = left, right = right))
   }
 
-  # Runtime guards use SIZE(), an inquiry that does not evaluate its
-  # argument. Name array expressions first, in operand order, so side effects
-  # occur before an error and vector reshaping does not splice an expression
-  # twice. This also turns scalar-backed array()/fill expressions into actual
-  # arrays before SIZE() is emitted.
-  if (!passes_as_scalar(left@value)) {
-    left <- hoist_unless_name(left, hoist)
-  }
-  if (!passes_as_scalar(right@value)) {
-    right <- hoist_unless_name(right, hoist)
-  }
-
   left_scalar <- passes_as_scalar(left@value)
   right_scalar <- passes_as_scalar(right@value)
   left_rank <- if (left_scalar) 0L else left@value@rank
@@ -481,6 +469,7 @@ maybe_reshape_vector_matrix <- function(
       right = right,
       right_axis = 1L
     )
+    left <- hoist_unless_name(left, hoist)
     left <- reshape_vector_for_matrix(left, right_dims$rows, right_dims$cols)
   } else if (left_rank == 2L && right_rank == 1L) {
     left_dims <- matrix_dims(left)
@@ -495,6 +484,7 @@ maybe_reshape_vector_matrix <- function(
       right = left,
       right_axis = 1L
     )
+    right <- hoist_unless_name(right, hoist)
     right <- reshape_vector_for_matrix(right, left_dims$rows, left_dims$cols)
   }
 
