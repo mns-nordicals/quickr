@@ -2,8 +2,6 @@
 # for known mismatches, runtime guard for unknown), fill constructors spread
 # inside c(), and matrix(scalar, m, n) materializes a real array.
 
-skip_on_cran()
-
 test_that("known unequal vector lengths are a compile error", {
   # divisible lengths were previously blessed and silently mis-lowered
   divisible <- function(a, b) {
