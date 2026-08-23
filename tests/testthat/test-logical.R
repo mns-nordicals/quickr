@@ -174,6 +174,17 @@ test_that("short-circuited right operands defer length errors", {
   expect_error(quick(reached_or)(), "requires length-1 operands")
 })
 
+test_that("short-circuit right operands still receive static validation", {
+  skipped <- function() {
+    TRUE || (logical(2) & logical(3))
+  }
+
+  expect_error(
+    quick(skipped),
+    "elementwise vector operations require equal lengths"
+  )
+})
+
 test_that("short-circuiting does not read absent optional arguments", {
   fn <- function(fallback) {
     declare(type(fallback = double(1)))

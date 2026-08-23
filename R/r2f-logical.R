@@ -325,6 +325,9 @@ lower_short_circuit_operator <- function(args, scope, op, ..., hoist = NULL) {
   # shadow it.
   tmp <- scope_unique_var(scope, mode = "logical", dims = NULL)
   sub <- new_hoist(scope)
+  # Intentional boundary: translation still validates the complete RHS.
+  # Only runtime work and runtime diagnostics are placed behind this branch;
+  # a statically unsupported nested RHS remains a compile-time error.
   right <- r2f(args[[2L]], scope, ..., hoist = sub)
   right <- scalarize_andor_operand(
     right,

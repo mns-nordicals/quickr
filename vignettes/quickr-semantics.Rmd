@@ -269,6 +269,10 @@ quickr uses the Fortran reduction intrinsics, whose empty-array results are
 the largest and smallest representable values of the input type instead.
 Do not pass empty inputs to these reductions when that distinction matters.
 
+Empty `which.min()` and `which.max()` inputs also differ. R returns
+`integer(0)`; quickr returns the scalar index produced by Fortran's
+`minloc()` or `maxloc()`. Do not pass empty inputs to these reductions.
+
 ### Whole-valued real exponents can differ for negative bases {#real-exponents}
 
 R recognizes a whole-valued double exponent such as `3.0` when raising a
@@ -427,6 +431,12 @@ when it is not), and they short-circuit — the right operand is evaluated only
 when the left side does not decide the answer, so a guarded access like
 `i <= n && x[i] > 0` never evaluates `x[i]` out of range. For
 elementwise logic over vectors, use `&` and `|`.
+
+quickr still translates and statically validates the complete right operand.
+A nested operation that is unsupported from its declared types or shapes is a
+compile-time error even when a constant left operand would skip it. Only work
+and errors that depend on runtime values are deferred behind the short-circuit
+branch.
 
 ### Closure arguments are evaluated eagerly
 
