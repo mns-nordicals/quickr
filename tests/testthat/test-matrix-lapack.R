@@ -327,6 +327,7 @@ test_that("diag treats declared numeric scalars as identity sizes", {
     diag(n)
   }
   expect_quick_identical(double_size, list(3))
+  expect_error(quick(double_size)(3.5), "whole number")
 })
 
 test_that("diag handles missing x with nrow/ncol and 1x1 matrices", {
