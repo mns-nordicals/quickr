@@ -5,8 +5,7 @@
 
 refuse_raw_arithmetic <- function(..., context) {
   operands <- list(...)
-  modes <- map_chr(operands, \(x) x@value@mode)
-  if ("raw" %in% modes) {
+  if (any(map_lgl(operands, \(x) identical(x@value@mode, "raw")))) {
     stop(context, " does not support raw operands", call. = FALSE)
   }
   invisible(TRUE)
