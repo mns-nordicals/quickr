@@ -490,6 +490,14 @@ test_that("fill constructors materialize where an array is required", {
   expect_quick_identical(symbolic, list(c(5, 6), 3L))
 })
 
+test_that("omitted fill lengths default to zero", {
+  fn <- function() {
+    c(numeric(), double(), integer(), logical(), 1, 2)
+  }
+
+  expect_quick_identical(fn, list())
+})
+
 test_that("matrix(scalar, m, n) materializes where an array is required", {
   reduced <- function() {
     sum(matrix(2, 2, 3))
