@@ -651,6 +651,8 @@ syrk <- function(
     k <- x_dims$cols
   }
   lda <- x_dims$rows
+  X_name <- ensure_blas_operand_name(X, hoist, scope, context)
+  X <- Fortran(X_name, X@value)
   assert_nonempty_blas_output(
     n,
     X,
@@ -659,8 +661,6 @@ syrk <- function(
     hoist,
     scope
   )
-  X_name <- ensure_blas_operand_name(X, hoist, scope, context)
-
   # Output is symmetric n x n matrix
   out <- resolve_blas_output(
     dest,
