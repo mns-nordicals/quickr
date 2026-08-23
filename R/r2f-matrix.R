@@ -794,8 +794,13 @@ register_r2f_handler(
       "diag() only supports scalar, vector, or matrix inputs"
     )
 
-    if (!has_nrow && !has_ncol && x_rank == 0L) {
-      nrow <- r2size(x_arg, scope)
+    numeric_size <-
+      !has_nrow &&
+      !has_ncol &&
+      passes_as_scalar(x@value) &&
+      x@value@mode %in% c("integer", "double")
+    if (numeric_size) {
+      nrow <- call("quickr_size_int", x_arg)
       ncol <- nrow
       x_val <- Fortran("1.0_c_double", Variable("double"))
       return(diag_matrix(

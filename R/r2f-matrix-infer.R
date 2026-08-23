@@ -334,8 +334,15 @@ infer_dest_diag <- function(args, scope) {
   }
 
   # Case: x is a scalar symbol without nrow/ncol (identity matrix)
-  if (!is.null(x) && x@rank == 0L && !has_nrow && !has_ncol) {
-    return(NULL)
+  if (
+    !is.null(x) &&
+      passes_as_scalar(x) &&
+      x@mode %in% c("integer", "double") &&
+      !has_nrow &&
+      !has_ncol
+  ) {
+    n <- call("quickr_size_int", x_arg)
+    return(Variable("double", list(n, n)))
   }
 
   # Case: x is a vector or scalar, construct diagonal matrix

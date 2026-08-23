@@ -306,7 +306,14 @@ ensure_blas_operand_name <- function(x, hoist) {
 }
 
 # Wrap an expression as a BLAS int literal.
-blas_int <- function(x) {
+blas_int <- function(x, scope = NULL) {
+  if (!is.null(scope)) {
+    x_str <- dims2f(list(x), scope)
+    if (!nzchar(x_str)) {
+      x_str <- "1"
+    }
+    return(glue("int({x_str}, kind=c_int)"))
+  }
   x_str <- if (is.language(x)) {
     gsub("([0-9]+)L\\b", "\\1", deparse1(x))
   } else if (is_wholenumber(x)) {
@@ -1252,14 +1259,14 @@ diag_matrix <- function(
     x_name
   } else {
     idx_expr <- glue(
-      "1_c_int + mod({idx_i@name} - 1_c_int, {blas_int(x_len)})"
+      "1_c_int + mod({idx_i@name} - 1_c_int, {blas_int(x_len, scope)})"
     )
     glue("{x_name}({idx_expr})")
   }
 
   hoist$emit(glue(
     "
-do {idx_i@name} = 1_c_int, {blas_int(diag_len)}
+do {idx_i@name} = 1_c_int, {blas_int(diag_len, scope)}
   {out_name}({idx_i@name}, {idx_i@name}) = {value_expr}
 end do"
   ))

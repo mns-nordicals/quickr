@@ -317,6 +317,20 @@ test_that("diag matches R for vectors, matrices, and sizes", {
   expect_quick_equal(diag_named_order, list(x = c(1, 2)))
 })
 
+test_that("diag treats declared numeric scalars as identity sizes", {
+  integer_size <- function(n) {
+    declare(type(n = integer(1)))
+    diag(n)
+  }
+  expect_quick_identical(integer_size, list(3L))
+
+  double_size <- function(n) {
+    declare(type(n = double(1)))
+    diag(n)
+  }
+  expect_quick_identical(double_size, list(3))
+})
+
 test_that("diag handles missing x with nrow/ncol and 1x1 matrices", {
   diag_nrow <- function(n) {
     declare(type(n = integer(1)))

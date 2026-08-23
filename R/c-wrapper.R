@@ -619,6 +619,14 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     ))
   }
 
+  if (identical(op, "quickr_size_int")) {
+    if (length(args) != 1L) {
+      stop("quickr_size_int() requires one argument")
+    }
+    size <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+    return(glue("((R_xlen_t)({size}))"))
+  }
+
   if (identical(op, "abs")) {
     if (length(args) != 1L) {
       stop("abs() expects one argument")
