@@ -771,6 +771,25 @@ register_r2f_handler(
         )
       }
       nrow <- r2size(size_arg, scope)
+      if (is_scalar_na(nrow)) {
+        size_names <- unique(all.names(size_arg, functions = FALSE))
+        modified_names <- size_names[vapply(
+          size_names,
+          \(name) {
+            var <- get0(name, scope, inherits = TRUE)
+            inherits(var, Variable) && isTRUE(var@modified)
+          },
+          logical(1L)
+        )]
+        if (length(modified_names)) {
+          stop(
+            "diag() identity size cannot depend on reassigned variable `",
+            modified_names[[1L]],
+            "`",
+            call. = FALSE
+          )
+        }
+      }
       ncol <- nrow
       x_val <- Fortran("1.0_c_double", Variable("double"))
       return(diag_matrix(

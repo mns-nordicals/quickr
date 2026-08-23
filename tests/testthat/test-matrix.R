@@ -438,6 +438,17 @@ test_that("diag() takes R's identity form for any length-1 x", {
     diag(as.integer(x))
   }
   expect_quick_equal(dcoerce, list(3))
+
+  dmodified <- function(x) {
+    declare(type(x = double(1)))
+    x <- x + 1
+    diag(x)
+  }
+  expect_error(
+    quick(dmodified),
+    "diag() identity size cannot depend on reassigned variable `x`",
+    fixed = TRUE
+  )
 })
 
 test_that("t() and diag() preserve logical mode", {
