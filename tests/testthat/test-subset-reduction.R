@@ -273,11 +273,13 @@ test_that("1x1 subsetting keeps dims and C bridge builds", {
 })
 
 test_that("per-axis logical subscripts must match the indexed extent", {
-  read <- function(x, mask) {
+  # Eager compilation exposes the R binding as an unnamespaced native symbol,
+  # so avoid fixture names that collide with POSIX read() and write().
+  read_masked_rows <- function(x, mask) {
     declare(type(x = double(4, 2)), type(mask = logical(NA)))
     sum(x[mask, ])
   }
-  write <- function(x, mask) {
+  write_masked_rows <- function(x, mask) {
     declare(type(x = double(4, 2)), type(mask = logical(NA)))
     x[mask, ] <- 0
     x
@@ -285,11 +287,11 @@ test_that("per-axis logical subscripts must match the indexed extent", {
 
   x <- matrix(as.double(1:8), 4, 2)
   mask <- c(TRUE, FALSE, TRUE, FALSE)
-  expect_quick_identical(read, list(x, mask))
-  expect_quick_identical(write, list(x, mask))
+  expect_quick_identical(read_masked_rows, list(x, mask))
+  expect_quick_identical(write_masked_rows, list(x, mask))
 
-  qread <- quick(read)
-  qwrite <- quick(write)
+  qread <- quick(read_masked_rows)
+  qwrite <- quick(write_masked_rows)
   for (bad_mask in list(c(TRUE, FALSE), rep(TRUE, 5))) {
     expect_error(qread(x, bad_mask), "logical subscript length")
     expect_error(qwrite(x, bad_mask), "logical subscript length")
