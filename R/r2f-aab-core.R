@@ -110,7 +110,10 @@ hoist_unless_name <- function(x, hoist) {
   if (!is.null(x@value@name) && identical(code, x@value@name)) {
     return(x)
   }
-  if (grepl("^-?[0-9]+(\\.[0-9]+)?(_c_(int|double))?$", code)) {
+  if (
+    passes_as_scalar(x@value) &&
+      grepl("^-?[0-9]+(\\.[0-9]+)?(_c_(int|double))?$", code)
+  ) {
     return(x)
   }
   materialize_via_hoist(
