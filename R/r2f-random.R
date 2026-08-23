@@ -7,6 +7,21 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   scope_mark_uses_rng(scope)
 
   dims <- r2dims(args$n, scope)
+  n <- dims[[1L]]
+  if (is_scalar_integerish(n) && as.integer(n) < 0L) {
+    stop("runif() sample count must be non-negative", call. = FALSE)
+  }
+  if (!is_wholenumber(n) && !is_scalar_na(n) && !is_size_name(n)) {
+    n_f <- dims2f(list(n), scope)
+    if (nzchar(n_f) && !grepl(":", n_f, fixed = TRUE)) {
+      emit_quickr_error_if(
+        glue("{n_f} < 0"),
+        "runif() sample count must be non-negative",
+        hoist,
+        scope
+      )
+    }
+  }
   var <- Variable("double", dims)
 
   min <- args$min %||% 0

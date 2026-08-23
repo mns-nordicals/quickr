@@ -176,9 +176,21 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
     stop("rep.int() expects an integer scalar `times`", call. = FALSE)
   }
 
+  times <- hoist_unless_name(times, hoist)
   len_expr <- r2size(times_arg, scope)
   if (is.null(len_expr) || is_scalar_na(len_expr)) {
     len_expr <- NA_integer_
+  }
+  if (is_scalar_integerish(len_expr) && as.integer(len_expr) < 0L) {
+    stop("invalid 'times' value", call. = FALSE)
+  }
+  if (!is_wholenumber(len_expr)) {
+    emit_quickr_error_if(
+      glue("{times} < 0"),
+      "invalid 'times' value",
+      hoist,
+      scope
+    )
   }
 
   i <- scope_unique_var(scope, "integer")
