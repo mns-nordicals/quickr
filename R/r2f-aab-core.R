@@ -172,10 +172,16 @@ parent_call_name <- function(calls) {
 finish_captured_operand <- function(operand, captured_hoist, hoist) {
   stopifnot(
     inherits(operand, Fortran),
-    inherits(operand@value, Variable),
     inherits(captured_hoist, "environment"),
     inherits(hoist, "environment")
   )
+
+  if (!inherits(operand@value, Variable)) {
+    if (captured_hoist$has_code()) {
+      hoist$emit(captured_hoist$render(character()))
+    }
+    return(operand)
+  }
 
   if (grepl("unif_rand()", as.character(operand), fixed = TRUE)) {
     tmp <- hoist$declare_tmp(
