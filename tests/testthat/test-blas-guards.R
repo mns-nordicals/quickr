@@ -188,6 +188,16 @@ test_that("solve() rejects a zero-width matrix right-hand side", {
 
 
 test_that("solve(a) and chol() guard squareness", {
+  solve_rhs <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(NA)))
+    solve(a, b)
+  }
+  qsolve_rhs <- expect_no_warning(quick(solve_rhs))
+  expect_error(
+    qsolve_rhs(matrix(as.double(1:6), 2, 3), as.double(1:4)),
+    "solve requires a square matrix"
+  )
+
   inv <- function(a) {
     declare(type(a = double(n, k)))
     solve(a)

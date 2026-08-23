@@ -817,6 +817,13 @@ lapack_solve <- function(
     )
   )
 
+  # R's solve() rejects a rectangular coefficient matrix before checking
+  # whether the right-hand side is conformable. Least squares remains
+  # qr.solve()'s path.
+  if (!identical(context, "qr.solve")) {
+    assert_square_matrix(a_dims, A, context, hoist, scope)
+  }
+
   guard_conformable_dims(
     m,
     dim_or_one(B, 1L),
@@ -858,8 +865,6 @@ lapack_solve <- function(
     )
   } else {
     lapack_solve_gesv(
-      A = A,
-      a_dims = a_dims,
       A_name = A_name,
       B = B,
       B_input_name = B_input_name,
@@ -882,8 +887,6 @@ lapack_solve <- function(
 # rectangular `a` used to fall through to a dgels least-squares solve --
 # an answer where R errors.)
 lapack_solve_gesv <- function(
-  A,
-  a_dims,
   A_name,
   B,
   B_input_name,
@@ -897,7 +900,6 @@ lapack_solve_gesv <- function(
   hoist,
   scope
 ) {
-  assert_square_matrix(a_dims, A, context, hoist, scope)
   if (b_rank == 2L) {
     message <- "no right-hand side in 'b'"
     if (is_wholenumber(nrhs)) {
