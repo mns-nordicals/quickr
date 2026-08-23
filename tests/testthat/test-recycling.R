@@ -461,3 +461,32 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
   }
   expect_quick_identical(vec_operand, list(c(1, 2)))
 })
+
+test_that("elementwise matrix fills respect a local matrix closure", {
+  fn <- function(x) {
+    declare(type(x = double(2, 2)))
+    matrix <- function(data, nrow, ncol) data + 1
+    matrix(1, 2, 2) + x
+  }
+
+  expect_quick_identical(fn, list(matrix(as.double(1:4), 2, 2)))
+})
+
+test_that("a left matrix fill is evaluated before its right operand", {
+  fn <- function(x, s, n) {
+    declare(
+      type(x = double(2, 2)),
+      type(s = double(1)),
+      type(n = integer(1))
+    )
+    bump <- function() {
+      s <<- s + 1
+      n <<- n + 1L
+      x
+    }
+    out <- matrix(s, n, n) + bump()
+    out
+  }
+
+  expect_quick_identical(fn, list(matrix(as.double(1:4), 2, 2), 1, 2L))
+})

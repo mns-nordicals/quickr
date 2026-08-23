@@ -149,6 +149,9 @@ match_scalar_matrix_fill <- function(e, scope) {
   if (!is.call(e) || !identical(e[[1L]], quote(matrix))) {
     return(NULL)
   }
+  if (!is.null(scope) && inherits(scope[["matrix"]], LocalClosure)) {
+    return(NULL)
+  }
   mc <- tryCatch(match.call(matrix, e), error = function(...) NULL)
   if (is.null(mc)) {
     return(NULL)
@@ -186,9 +189,28 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
 
   if (length(fill_idx) == 1L && !is.null(hoist)) {
     j <- fill_idx
-    other <- r2f(args[[3L - j]], scope, ..., hoist = hoist)
     fill_dims <- r2dims(list(fills[[j]]$nrow, fills[[j]]$ncol), scope)
     fill_dims_f <- map_chr(fill_dims, \(d) dims2f(list(d), scope))
+    fill <- NULL
+
+    if (j == 1L) {
+      capture <- function(arg) {
+        value <- r2f(arg, scope, ..., hoist = hoist)
+        materialize_via_hoist(
+          value,
+          value@value@mode,
+          value@value@dims,
+          hoist
+        )
+      }
+      fill <- capture(fills[[j]]$data)
+      fill_dims_f <- map_chr(
+        list(fills[[j]]$nrow, fills[[j]]$ncol),
+        \(arg) as.character(capture(arg))
+      )
+    }
+
+    other <- r2f(args[[3L - j]], scope, ..., hoist = hoist)
     broadcastable <- inherits(other, Fortran) &&
       !is.null(other@value) &&
       other@value@rank == 2L &&
@@ -213,11 +235,20 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
           left_f = glue("({fill_dims_f[[axis]]})")
         )
       }
-      fill <- r2f(fills[[j]]$data, scope, ..., hoist = hoist)
+      fill <- fill %||% r2f(fills[[j]]$data, scope, ..., hoist = hoist)
       out <- list(fill, other)
       return(if (j == 1L) out else rev(out))
     }
-    fallback <- r2f(args[[j]], scope, ..., hoist = hoist)
+    fallback <- if (j == 1L) {
+      materialize_via_hoist(
+        fill,
+        fill@value@mode,
+        fill_dims,
+        hoist
+      )
+    } else {
+      r2f(args[[j]], scope, ..., hoist = hoist)
+    }
     out <- list(fallback, other)
     return(if (j == 1L) out else rev(out))
   }
