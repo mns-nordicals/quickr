@@ -1,5 +1,3 @@
-skip_on_cran()
-
 test_that("matrix multiplication matches R for common shapes", {
   mat_mat <- function(mat_A, mat_B) {
     declare(
