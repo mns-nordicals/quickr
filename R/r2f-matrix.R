@@ -1,12 +1,29 @@
 # Matrix-specific r2f handlers and wiring
 
+lower_transposed_operand_in_order <- function(arg, scope, ..., hoist) {
+  captured_hoist <- hoist$capture()
+  info <- unwrap_transpose_arg(arg, scope, ..., hoist = captured_hoist)
+  info$value <- finish_captured_operand(info$value, captured_hoist, hoist)
+  info
+}
+
 # %*% handler with optional destination hint
 register_r2f_handler(
   "%*%",
   function(args, scope, ..., hoist = NULL, dest = NULL) {
     stopifnot(length(args) == 2L)
-    left_info <- unwrap_transpose_arg(args[[1L]], scope, ..., hoist = hoist)
-    right_info <- unwrap_transpose_arg(args[[2L]], scope, ..., hoist = hoist)
+    left_info <- lower_transposed_operand_in_order(
+      args[[1L]],
+      scope,
+      ...,
+      hoist = hoist
+    )
+    right_info <- lower_transposed_operand_in_order(
+      args[[2L]],
+      scope,
+      ...,
+      hoist = hoist
+    )
     left <- left_info$value
     right <- right_info$value
     left_trans <- left_info$trans
@@ -502,8 +519,8 @@ register_r2f_handler(
     if (!identical(fun, "*")) {
       stop("outer() only supports FUN = \"*\"")
     }
-    x <- r2f(x_arg, scope, ..., hoist = hoist)
-    y <- r2f(y_arg, scope, ..., hoist = hoist)
+    x <- lower_r2f_operand_in_order(x_arg, scope, ..., hoist = hoist)
+    y <- lower_r2f_operand_in_order(y_arg, scope, ..., hoist = hoist)
     outer_mul(
       x,
       y,
@@ -522,8 +539,8 @@ register_r2f_handler(
   "%o%",
   function(args, scope, ..., hoist = NULL, dest = NULL) {
     stopifnot(length(args) == 2L)
-    x <- r2f(args[[1L]], scope, ..., hoist = hoist)
-    y <- r2f(args[[2L]], scope, ..., hoist = hoist)
+    x <- lower_r2f_operand_in_order(args[[1L]], scope, ..., hoist = hoist)
+    y <- lower_r2f_operand_in_order(args[[2L]], scope, ..., hoist = hoist)
     outer_mul(
       x,
       y,
@@ -556,7 +573,7 @@ register_r2f_handler(
       b_arg <- NULL
     }
 
-    A <- r2f(a_arg, scope, ..., hoist = hoist)
+    A <- lower_r2f_operand_in_order(a_arg, scope, ..., hoist = hoist)
     if (is.null(b_arg)) {
       return(lapack_inverse(
         A,
@@ -567,7 +584,7 @@ register_r2f_handler(
       ))
     }
 
-    B <- r2f(b_arg, scope, ..., hoist = hoist)
+    B <- lower_r2f_operand_in_order(b_arg, scope, ..., hoist = hoist)
     lapack_solve(
       A = A,
       B = B,
@@ -594,8 +611,8 @@ register_r2f_handler(
       stop("qr.solve() expects `b`", call. = FALSE)
     }
 
-    A <- r2f(a_arg, scope, ..., hoist = hoist)
-    B <- r2f(b_arg, scope, ..., hoist = hoist)
+    A <- lower_r2f_operand_in_order(a_arg, scope, ..., hoist = hoist)
+    B <- lower_r2f_operand_in_order(b_arg, scope, ..., hoist = hoist)
 
     tol_arg <- args$tol %||% if (length(args) >= 3L) args[[3L]] else NULL
     tol <- if (is.null(tol_arg) || is_missing(tol_arg)) {
@@ -832,8 +849,8 @@ register_r2f_handler(
 
     l_arg <- args$l %||% args[[1L]]
     x_arg <- args$x %||% args[[2L]]
-    A <- r2f(l_arg, scope, ..., hoist = hoist)
-    B <- r2f(x_arg, scope, ..., hoist = hoist)
+    A <- lower_r2f_operand_in_order(l_arg, scope, ..., hoist = hoist)
+    B <- lower_r2f_operand_in_order(x_arg, scope, ..., hoist = hoist)
 
     triangular_solve(
       A = A,
@@ -865,8 +882,8 @@ register_r2f_handler(
 
     r_arg <- args$r %||% args[[1L]]
     x_arg <- args$x %||% args[[2L]]
-    A <- r2f(r_arg, scope, ..., hoist = hoist)
-    B <- r2f(x_arg, scope, ..., hoist = hoist)
+    A <- lower_r2f_operand_in_order(r_arg, scope, ..., hoist = hoist)
+    B <- lower_r2f_operand_in_order(x_arg, scope, ..., hoist = hoist)
 
     triangular_solve(
       A = A,
@@ -901,7 +918,7 @@ crossprod_like <- function(
   opA <- trans
   opB <- if (identical(trans, "T")) "N" else "T"
 
-  x <- r2f(x_arg, scope, ..., hoist = hoist)
+  x <- lower_r2f_operand_in_order(x_arg, scope, ..., hoist = hoist)
   x <- cast_linalg_double(x, context)
 
   if (is.null(y_arg)) {
@@ -915,7 +932,10 @@ crossprod_like <- function(
     ))
   }
 
-  y <- cast_linalg_double(r2f(y_arg, scope, ..., hoist = hoist), context)
+  y <- cast_linalg_double(
+    lower_r2f_operand_in_order(y_arg, scope, ..., hoist = hoist),
+    context
+  )
 
   x <- hoist_unless_name(x, hoist)
   y <- hoist_unless_name(y, hoist)

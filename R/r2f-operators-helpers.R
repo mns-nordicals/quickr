@@ -99,7 +99,17 @@ cast_linalg_double <- function(x, context) {
       call. = FALSE
     )
   }
-  maybe_cast_double(x)
+  x <- maybe_cast_double(x)
+  if (!identical(x@value@mode, "double")) {
+    stop(
+      context,
+      " does not support ",
+      x@value@mode,
+      " operands; linear algebra in quickr is double-only",
+      call. = FALSE
+    )
+  }
+  x
 }
 
 # Promote a list of operands to their common (lattice-join) mode, casting
@@ -188,25 +198,7 @@ match_scalar_matrix_fill <- function(e, scope) {
 lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
   stopifnot(length(args) == 2L, !is.null(hoist))
   lower_one <- function(arg) {
-    if (is.symbol(arg) || is_scalar_atomic(arg)) {
-      return(r2f(arg, scope, ..., hoist = hoist))
-    }
-    operand_hoist <- hoist$capture()
-    operand <- r2f(arg, scope, ..., hoist = operand_hoist)
-    if (grepl("unif_rand()", as.character(operand), fixed = TRUE)) {
-      tmp <- hoist$declare_tmp(
-        mode = operand@value@mode,
-        dims = operand@value@dims,
-        logical_as_int = logical_as_int(operand@value) &&
-          !isTRUE(operand@logical_booleanized)
-      )
-      hoist$emit(operand_hoist$render(glue("{tmp@name} = {operand}")))
-      return(Fortran(tmp@name, tmp))
-    }
-    if (operand_hoist$has_code()) {
-      hoist$emit(operand_hoist$render(character()))
-    }
-    operand
+    lower_r2f_operand_in_order(arg, scope, ..., hoist = hoist)
   }
 
   fills <- lapply(args, match_scalar_matrix_fill, scope = scope)
