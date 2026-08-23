@@ -1,7 +1,5 @@
 # Unit tests for loop constructs
 
-skip_on_cran()
-
 test_that("repeat/break", {
   inc_to_5 <- function(x) {
     declare(type(x = integer(1)))
