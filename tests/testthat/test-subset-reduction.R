@@ -1,5 +1,3 @@
-skip_on_cran()
-
 test_that("[ handles scalar, missing, and logical subscripts", {
   m <- matrix(1:6, nrow = 2L, ncol = 3L, byrow = TRUE)
 
@@ -272,4 +270,28 @@ test_that("1x1 subsetting keeps dims and C bridge builds", {
 
   fsub <- r2f(fn)
   expect_no_error(make_c_bridge(fsub))
+})
+
+test_that("per-axis logical subscripts must match the indexed extent", {
+  read <- function(x, mask) {
+    declare(type(x = double(4, 2)), type(mask = logical(NA)))
+    sum(x[mask, ])
+  }
+  write <- function(x, mask) {
+    declare(type(x = double(4, 2)), type(mask = logical(NA)))
+    x[mask, ] <- 0
+    x
+  }
+
+  x <- matrix(as.double(1:8), 4, 2)
+  mask <- c(TRUE, FALSE, TRUE, FALSE)
+  expect_quick_identical(read, list(x, mask))
+  expect_quick_identical(write, list(x, mask))
+
+  qread <- quick(read)
+  qwrite <- quick(write)
+  for (bad_mask in list(c(TRUE, FALSE), rep(TRUE, 5))) {
+    expect_error(qread(x, bad_mask), "logical subscript length")
+    expect_error(qwrite(x, bad_mask), "logical subscript length")
+  }
 })

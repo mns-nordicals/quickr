@@ -58,6 +58,46 @@ subscript_is_scalar_noop <- function(base_value, idxs) {
   FALSE
 }
 
+lower_scalar_logical_subscript <- function(subscript, extent) {
+  r <- unwrap_parens(attr(subscript, "r", exact = TRUE))
+  if (identical(r, TRUE)) {
+    return(Fortran(":", Variable("integer", extent)))
+  }
+  if (identical(r, FALSE)) {
+    stop(
+      "FALSE logical subscripts produce a zero-length result, which is not supported",
+      call. = FALSE
+    )
+  }
+  stop(
+    "runtime-dependent scalar logical subscripts have a runtime-dependent result shape, which is not supported",
+    call. = FALSE
+  )
+}
+
+guard_axis_logical_subscript <- function(
+  base,
+  subscript,
+  axis,
+  hoist,
+  scope
+) {
+  mask <- booleanize_logical_as_int(subscript)
+  guard_conformable_dims(
+    dim_or_one(base, axis),
+    dim_or_one(mask, 1L),
+    "logical subscript length must match the indexed extent; recycling is not supported",
+    hoist,
+    scope,
+    left = base,
+    right = mask,
+    left_axis = axis,
+    right_axis = NULL,
+    checker = check_equal_dims
+  )
+  mask
+}
+
 # --- Handlers ---
 
 r2f_handlers[["["]] <- function(
@@ -95,8 +135,20 @@ r2f_handlers[["["]] <- function(
   )
 
   if (
+    length(idxs) == 1L &&
+      idxs[[1L]]@value@mode == "logical" &&
+      passes_as_scalar(idxs[[1L]]@value)
+  ) {
+    scalar_mask <- booleanize_logical_as_int(idxs[[1L]])
+    if (hoist_mask(scalar_mask)) {
+      return(var)
+    }
+  }
+
+  if (
     length(idxs) == 1 &&
       idxs[[1]]@value@mode == "logical" &&
+      !passes_as_scalar(idxs[[1]]@value) &&
       idxs[[1]]@value@rank == var@value@rank
   ) {
     mask <- idxs[[1]]
@@ -170,15 +222,28 @@ r2f_handlers[["["]] <- function(
   }
 
   idxs <- imap(idxs, function(subscript, i) {
+    if (
+      identical(subscript@value@mode, "logical") &&
+        passes_as_scalar(subscript@value)
+    ) {
+      return(lower_scalar_logical_subscript(
+        subscript,
+        var@value@dims[[i]]
+      ))
+    }
     switch(
       paste0(subscript@value@mode, subscript@value@rank),
-      logical0 = {
-        Fortran(":", Variable("integer", var@value@dims[[i]]))
-      },
       logical1 = {
+        subscript <- guard_axis_logical_subscript(
+          var,
+          subscript,
+          i,
+          hoist,
+          scope
+        )
         # we convert to a temp integer vector, doing the equivalent of R's which()
-        i <- scope_unique_var(scope, "integer")
-        f <- glue("pack([({i}, {i}=1, size({subscript}))], {subscript})")
+        it <- scope_unique_var(scope, "integer")
+        f <- glue("pack([({it}, {it}=1, size({subscript}))], {subscript})")
         return(Fortran(f, Variable("integer", NA)))
       },
       integer0 = {

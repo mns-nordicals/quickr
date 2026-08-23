@@ -9,6 +9,26 @@ test_that("character declarations are refused with a clean message", {
   )
 })
 
+test_that("scalar logical subscripts refuse unsupported result shapes", {
+  false_read <- function(x) {
+    declare(type(x = double(3)))
+    x[FALSE]
+  }
+  dynamic_read <- function(x, mask) {
+    declare(type(x = double(3)), type(mask = logical(1)))
+    x[mask]
+  }
+  false_write <- function(x) {
+    declare(type(x = double(3)))
+    x[FALSE] <- 0
+    x
+  }
+
+  expect_error(quick(false_read), "zero-length result")
+  expect_error(quick(dynamic_read), "runtime-dependent result shape")
+  expect_error(quick(false_write), "zero-length result")
+})
+
 test_that("unsupported complex operations are refused with R's messages", {
   complex_lt <- function(x, y) {
     declare(type(x = complex(1)), type(y = complex(1)))

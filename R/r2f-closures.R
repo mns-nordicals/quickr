@@ -1447,11 +1447,17 @@ compile_subset_designator <- function(
   }
 
   idxs <- imap(idxs, function(subscript, i) {
+    if (
+      identical(subscript@value@mode, "logical") &&
+        passes_as_scalar(subscript@value)
+    ) {
+      return(lower_scalar_logical_subscript(
+        subscript,
+        base_var@dims[[i]]
+      ))
+    }
     switch(
       paste0(subscript@value@mode, subscript@value@rank),
-      logical0 = {
-        Fortran(":", Variable("integer", base_var@dims[[i]]))
-      },
       logical1 = {
         if (!allow_logical_vector_subscripts) {
           stop("logical subscript vectors are not supported for assignment")
@@ -1459,7 +1465,14 @@ compile_subset_designator <- function(
 
         # Convert logical vectors to integer vector subscripts (R's `which()`).
         # Fortran array designators do not accept logical vectors directly.
-        mask <- booleanize_logical_as_int(subscript)
+        base <- Fortran(base_name, base_var)
+        mask <- guard_axis_logical_subscript(
+          base,
+          subscript,
+          i,
+          hoist,
+          scope
+        )
         it <- scope_unique_var(scope, "integer")
         f <- glue("pack([({it}, {it}=1, size({mask}))], {mask})")
         Fortran(f, Variable("integer", NA))
