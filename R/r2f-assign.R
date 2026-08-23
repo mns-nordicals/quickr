@@ -52,6 +52,26 @@ assignment_is_local_closure_call <- function(rhs, scope) {
     inherits(scope[[as.character(rhs[[1L]])]], LocalClosure)
 }
 
+materialize_unknown_reassignment_value <- function(target, value, hoist) {
+  stopifnot(inherits(target, Variable), inherits(value, Fortran))
+  if (
+    !inherits(value@value, Variable) ||
+      is.null(value@value@dims) ||
+      !any(vapply(value@value@dims, is_scalar_na, logical(1L))) ||
+      !is.null(value@value@name) ||
+      (!target@is_external && has_self_size_dims(target))
+  ) {
+    return(value)
+  }
+  materialize_via_hoist(
+    value,
+    mode = value@value@mode,
+    dims = value@value@dims,
+    hoist = hoist,
+    logical_as_int = logical_as_int(value@value)
+  )
+}
+
 register_r2f_handler(
   "<-",
   function(args, scope, ..., hoist = NULL) {
@@ -220,6 +240,7 @@ register_r2f_handler(
         var@dims <- value@value@dims
       }
       check_reassignment_narrowing(name, var, value@value)
+      value <- materialize_unknown_reassignment_value(var, value, hoist)
       check_assignment_compatible(
         name,
         var,
@@ -334,6 +355,7 @@ register_r2f_handler(
 
     value <- r2f(args[[2L]], scope, ..., hoist = hoist)
     check_reassignment_narrowing(name, host_var, value@value)
+    value <- materialize_unknown_reassignment_value(host_var, value, hoist)
     check_assignment_compatible(
       name,
       host_var,

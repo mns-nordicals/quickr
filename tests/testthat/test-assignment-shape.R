@@ -106,6 +106,37 @@ test_that("reassignment from a deferred-shape local gets a runtime guard", {
   )
 })
 
+test_that("reassignment from an anonymous unknown-length value gets a guard", {
+  fn <- function(a, mask) {
+    declare(type(a = double(NA)), type(mask = logical(NA)))
+    a <- a[mask]
+    a
+  }
+
+  qfn <- quick(fn)
+  a <- c(1, 2, 3)
+  expect_identical(qfn(a, rep(TRUE, 3)), a)
+  expect_error(
+    qfn(a, c(TRUE, FALSE, TRUE)),
+    "reassignment must preserve the shape of `a`"
+  )
+
+  super_fn <- function(a, mask) {
+    declare(type(a = double(NA)), type(mask = logical(NA)))
+    update <- function() {
+      a <<- a[mask]
+    }
+    update()
+    a
+  }
+  qsuper <- quick(super_fn)
+  expect_identical(qsuper(a, rep(TRUE, 3)), a)
+  expect_error(
+    qsuper(a, c(TRUE, FALSE, TRUE)),
+    "reassignment must preserve the shape of `a`"
+  )
+})
+
 test_that("shape-preserving reassignments still compile", {
   # same symbolic dims: provably equal, no guard needed
   fn_same <- function(a) {

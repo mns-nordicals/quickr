@@ -706,41 +706,43 @@ check_assignment_compatible <- function(
   for (axis in seq_len(target@rank)) {
     t_dim <- target@dims[[axis]]
     v_dim <- value@dims[[axis]]
-    if (is_scalar_na(t_dim) || is_scalar_na(v_dim)) {
-      next
-    }
-    if (is_wholenumber(t_dim) && is_wholenumber(v_dim)) {
-      if (!identical(as.integer(t_dim), as.integer(v_dim))) {
-        stop(
-          "cannot reassign `",
-          name,
-          "`: dimension ",
-          axis,
-          " would change from ",
-          as.integer(t_dim),
-          " to ",
-          as.integer(v_dim),
-          "; R would rebind `",
-          name,
-          "` to the new shape",
-          call. = FALSE
-        )
+    unknown_extent <- is_scalar_na(t_dim) || is_scalar_na(v_dim)
+    if (!unknown_extent) {
+      if (is_wholenumber(t_dim) && is_wholenumber(v_dim)) {
+        if (!identical(as.integer(t_dim), as.integer(v_dim))) {
+          stop(
+            "cannot reassign `",
+            name,
+            "`: dimension ",
+            axis,
+            " would change from ",
+            as.integer(t_dim),
+            " to ",
+            as.integer(v_dim),
+            "; R would rebind `",
+            name,
+            "` to the new shape",
+            call. = FALSE
+          )
+        }
+        next
       }
-      next
-    }
-    if (
-      identical(
-        fortranize_expr_symbols(t_dim),
-        fortranize_expr_symbols(v_dim)
-      )
-    ) {
-      next
+      if (
+        identical(
+          fortranize_expr_symbols(t_dim),
+          fortranize_expr_symbols(v_dim)
+        )
+      ) {
+        next
+      }
     }
     if (is.null(hoist)) {
       next
     }
     if (
-      dim_guard_spellable(t_dim, scope) && dim_guard_spellable(v_dim, scope)
+      !unknown_extent &&
+        dim_guard_spellable(t_dim, scope) &&
+        dim_guard_spellable(v_dim, scope)
     ) {
       condition <- glue(
         "({dims2f(list(t_dim), scope)}) /= ({dims2f(list(v_dim), scope)})"
