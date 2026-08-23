@@ -241,7 +241,15 @@ scalarize_andor_operand <- function(x, op, hoist, scope) {
 # non-trapping operations. Anything else (subscripts, %%/%/%, function
 # calls, ...) gets the conditional lowering.
 is_pure_scalar_condition <- function(e, scope) {
-  if (is.symbol(e) || (is.atomic(e) && length(e) == 1L)) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(
+      !inherits(var, Variable) ||
+        passes_as_scalar(var) ||
+        var@rank > 0L && all(vapply(var@dims, dim_is_one, logical(1L)))
+    )
+  }
+  if (is.atomic(e) && length(e) == 1L) {
     return(TRUE)
   }
   if (!is.call(e) || !is.symbol(e[[1L]])) {
@@ -301,11 +309,14 @@ lower_short_circuit_operator <- function(args, scope, op, ..., hoist = NULL) {
   if (is.null(hoist)) {
     stop("internal error: `", op, "` requires hoist context", call. = FALSE)
   }
+  # The result must remain visible outside the nested right-operand block.
+  # Declare it in the procedure scope so block-local temporaries cannot
+  # shadow it.
+  tmp <- scope_unique_var(scope, mode = "logical", dims = NULL)
   sub <- new_hoist(scope)
   right <- r2f(args[[2L]], scope, ..., hoist = sub)
   right <- scalarize_andor_operand(right, op, sub, scope)
 
-  tmp <- hoist$declare_tmp(mode = "logical", dims = NULL)
   hoist$emit(glue("{tmp@name} = {left}"))
   condition <- if (op == "&&") tmp@name else glue(".not. {tmp@name}")
   hoist$emit(glue("if ({condition}) then"))
