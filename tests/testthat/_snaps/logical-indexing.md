@@ -188,9 +188,13 @@
         out = 0.0_c_double
         block
           logical :: btmp1_(3, 4) ! logical
+          logical :: btmp2_(3, 4) ! logical
+          logical :: btmp3_(3, 4) ! logical
       
-          btmp1_ = (((((x > 0.0_c_double)) .and. ((x < 0.5_c_double)))))
-          out = merge(1.0_c_double, 0.0_c_double, btmp1_(2_c_int, 3_c_int))
+          btmp1_ = ((x > 0.0_c_double))
+          btmp2_ = ((x < 0.5_c_double))
+          btmp3_ = (((btmp1_ .and. btmp2_)))
+          out = merge(1.0_c_double, 0.0_c_double, btmp3_(2_c_int, 3_c_int))
         end block
       end subroutine
     Code

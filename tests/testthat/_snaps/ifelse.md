@@ -29,12 +29,18 @@
         ! manifest end
       
       
-        if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size((c/=0), 1, kind=c_ptrdiff_t)) then
+        block
+          integer(c_int), allocatable :: btmp1_(:) ! logical
+      
+          allocate(btmp1_(c__len_))
+          btmp1_ = (c/=0)
+          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-          return
-        end if
-        out_ = merge(real(1_c_int, kind=c_double), a, (c/=0))
+            return
+          end if
+          out_ = merge(real(1_c_int, kind=c_double), a, (btmp1_ /= 0))
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
@@ -142,17 +148,23 @@
         ! manifest end
       
       
-        if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size((c/=0), 1, kind=c_ptrdiff_t)) then
+        block
+          integer(c_int), allocatable :: btmp1_(:) ! logical
+      
+          allocate(btmp1_(c__len_))
+          btmp1_ = (c/=0)
+          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-          return
-        end if
-        if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size((c/=0), 1, kind=c_ptrdiff_t)) then
+            return
+          end if
+          if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-          return
-        end if
-        out_ = merge(a, b, (c/=0))
+            return
+          end if
+          out_ = merge(a, b, (btmp1_ /= 0))
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
