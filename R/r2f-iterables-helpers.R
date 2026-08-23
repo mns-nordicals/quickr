@@ -33,6 +33,30 @@ flatten_to_vector <- function(x, scope) {
   if (passes_as_scalar(x@value) || x@value@rank <= 1L) {
     return(x)
   }
+  dim_names <- unique(unlist(lapply(x@value@dims, function(dim) {
+    if (is.symbol(dim)) {
+      return(as.character(dim))
+    }
+    if (is.call(dim)) {
+      return(all.names(dim, functions = FALSE))
+    }
+    character()
+  })))
+  for (name in dim_names) {
+    var <- get0(name, scope, inherits = TRUE)
+    if (
+      inherits(var, Variable) &&
+        passes_as_scalar(var) &&
+        isTRUE(var@modified)
+    ) {
+      stop(
+        "flattening: dimension variable `",
+        name,
+        "` has been reassigned and no longer describes the array extent",
+        call. = FALSE
+      )
+    }
+  }
   len_expr <- value_length_expr(x@value)
   len_str <- if (is_scalar_na(len_expr)) {
     glue("size({x})")

@@ -1,8 +1,6 @@
 # c(matrix), as.vector(), and as.integer()/as.double() of arrays all
 # flatten column-major, matching R's drop-dims semantics.
 
-skip_on_cran()
-
 test_that("c() flattens matrix and array arguments column-major", {
   c_mat <- function(m) {
     declare(type(m = double(2, 3)))
@@ -68,6 +66,20 @@ test_that("as.vector() refuses unsupported modes and non-constant modes", {
   expect_error(
     quick(bad_mode),
     "as.vector() does not support mode",
+    fixed = TRUE
+  )
+})
+
+test_that("flattening refuses dimensions invalidated by reassignment", {
+  fn <- function(n, m) {
+    declare(type(n = integer(1)), type(m = double(n, n)))
+    n <- n + 1L
+    as.vector(m)
+  }
+
+  expect_error(
+    quick(fn),
+    "dimension variable `n` has been reassigned",
     fixed = TRUE
   )
 })
