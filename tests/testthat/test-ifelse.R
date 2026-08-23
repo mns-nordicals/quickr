@@ -112,3 +112,24 @@ test_that("ifelse evaluates earlier branches before later shape errors", {
   runif(3)
   expect_identical(actual_seed, .Random.seed)
 })
+
+test_that("ifelse does not evaluate unselected branches", {
+  fn <- function(test) {
+    declare(type(test = logical(3)))
+    ifelse(test, runif(3), runif(3))
+  }
+  qfn <- quick(fn)
+
+  for (test in list(rep(TRUE, 3), rep(FALSE, 3))) {
+    set.seed(613)
+    expected <- fn(test)
+    expected_seed <- .Random.seed
+
+    set.seed(613)
+    actual <- qfn(test)
+    actual_seed <- .Random.seed
+
+    expect_equal(actual, expected)
+    expect_identical(actual_seed, expected_seed)
+  }
+})
