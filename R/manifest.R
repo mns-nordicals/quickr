@@ -602,7 +602,7 @@ dims2f_needs_final_size_cast <- function(e) {
   }
   if (
     as.character(e[[1L]]) %in%
-      c("/", "%/%", "%%", "^", "as.integer", "min", "max")
+      c("/", "%/%", "%%", "^", "abs", "as.integer", "min", "max")
   ) {
     return(TRUE)
   }
