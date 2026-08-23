@@ -27,6 +27,14 @@ test_that("%*% evaluates effectful operands before a runtime shape error", {
     out <- crossprod(m, runif(3))
     out
   }
+  triangular <- function(m) {
+    declare(type(m = double(n, n)))
+    forwardsolve(m, runif(3))
+  }
+  solve_rhs <- function(m) {
+    declare(type(m = double(n, n)))
+    solve(m, runif(3))
+  }
 
   expect_rng_advance <- function(qfn, input, message) {
     set.seed(123)
@@ -43,6 +51,16 @@ test_that("%*% evaluates effectful operands before a runtime shape error", {
     quick(cross),
     matrix(as.double(1:4), 2, 2),
     "non-conformable arguments in crossprod"
+  )
+  expect_rng_advance(
+    quick(triangular),
+    diag(2),
+    "non-conformable arguments in triangular solve"
+  )
+  expect_rng_advance(
+    quick(solve_rhs),
+    diag(2),
+    "non-conformable arguments in solve"
   )
 })
 
