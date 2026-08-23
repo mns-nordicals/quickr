@@ -68,7 +68,7 @@ materialize_unknown_reassignment_value <- function(target, value, hoist) {
     mode = value@value@mode,
     dims = value@value@dims,
     hoist = hoist,
-    logical_as_int = logical_as_int(value@value)
+    logical_storage = logical_as_int(value@value)
   )
 }
 
