@@ -790,7 +790,12 @@ match_closure_call_args <- function(
     if (!isTRUE(args_present[[nm]])) {
       return(NULL)
     }
-    r2f(args_expr[[nm]], scope, ..., hoist = hoist)
+    lower_r2f_operand_in_order(
+      args_expr[[nm]],
+      scope,
+      ...,
+      hoist = hoist
+    )
   })
   names(args_f) <- formal_names
 
