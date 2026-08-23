@@ -432,6 +432,28 @@ test_that("symbolic fill spreading preserves pointer-sized lengths", {
   expect_quick_identical(fn, list(c(2, 4, 6)))
 })
 
+test_that("array fill spreading preserves pointer-sized products", {
+  fn <- function(k, n, m) {
+    declare(
+      type(k = integer(1)),
+      type(n = integer(1)),
+      type(m = integer(1))
+    )
+    array(numeric(k), dim = c(n, m))
+  }
+  fsub <- as.character(r2f(fn))
+  expect_match(fsub, "integer(c_ptrdiff_t) :: tmp1_", fixed = TRUE)
+  expect_match(
+    fsub,
+    paste0(
+      "tmp1_=1_c_ptrdiff_t, ",
+      "(int(n, kind=c_ptrdiff_t) * int(m, kind=c_ptrdiff_t))"
+    ),
+    fixed = TRUE
+  )
+  expect_quick_identical(fn, list(2L, 2L, 3L))
+})
+
 test_that("local closures can shadow fill constructors in c() and array()", {
   numeric_shadow <- function() {
     numeric <- function() c(1, 2)
