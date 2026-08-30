@@ -281,8 +281,8 @@ test_that("short-circuited division is not evaluated eagerly", {
   expect_quick_identical(skipped_or, list(0))
 })
 
-test_that("short-circuited calls defer arity errors", {
-  unary_intrinsics <- c(
+test_that("short-circuited fixed-arity calls defer arity errors", {
+  unary_calls <- c(
     "sin",
     "cos",
     "tan",
@@ -302,9 +302,14 @@ test_that("short-circuited calls defer arity errors", {
     "Im",
     "Mod",
     "Arg",
-    "Conj"
+    "Conj",
+    "as.double",
+    "as.integer",
+    "is.null",
+    "rev",
+    "t"
   )
-  bad_calls <- lapply(unary_intrinsics, \(op) as.call(list(as.name(op))))
+  bad_calls <- lapply(unary_calls, \(op) as.call(list(as.name(op))))
   skipped <- function() NULL
   body(skipped) <- as.call(c(
     quote(`{`),
@@ -313,9 +318,13 @@ test_that("short-circuited calls defer arity errors", {
   reached <- function() {
     TRUE && sqrt()
   }
+  reached_rev <- function() {
+    TRUE && rev()
+  }
 
   expect_quick_identical(skipped, list())
   expect_error(quick(reached)(), "sqrt")
+  expect_error(quick(reached_rev)(), "rev")
 })
 
 test_that("short-circuited local closure diagnostics are deferred", {
