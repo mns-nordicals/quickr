@@ -51,7 +51,7 @@ register_r2f_handler(
     )
 
     reduce_arg <- function(arg) {
-      captured_hoist <- hoist$capture()
+      captured_hoist <- capture_hoist(hoist)
       mask_hoist <- create_mask_hoist()
       dots <- list(...)
       dots$hoist <- captured_hoist
