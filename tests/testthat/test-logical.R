@@ -286,7 +286,23 @@ test_that("short-circuited calls defer arity errors", {
     "Im",
     "Mod",
     "Arg",
-    "Conj"
+    "Conj",
+    "as.double",
+    "as.integer",
+    "cat",
+    "dim",
+    "drop",
+    "is.null",
+    "length",
+    "ncol",
+    "nrow",
+    "print",
+    "rev",
+    "seq_along",
+    "seq_len",
+    "t",
+    "which.max",
+    "which.min"
   )
   bad_calls <- lapply(unary_intrinsics, \(op) as.call(list(as.name(op))))
   skipped <- function() NULL
