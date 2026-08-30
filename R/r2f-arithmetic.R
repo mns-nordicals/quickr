@@ -137,7 +137,7 @@ r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
   mode <- arith_join_mode(left, right)
   if (identical(mode, "complex")) {
     # Fortran modulo() has no complex form; R refuses too.
-    stop("unimplemented complex operation", call. = FALSE)
+    stop_static_mode_error("unimplemented complex operation", hoist)
   }
   left <- cast_to_mode(left, mode, "%%")
   right <- cast_to_mode(right, mode, "%%")
