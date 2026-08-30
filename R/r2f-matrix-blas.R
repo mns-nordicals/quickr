@@ -972,7 +972,7 @@ lapack_solve_gesv <- function(
       )
     }
   }
-  A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
+  A_work <- hoist$declare_tmp_at_point(mode = "double", dims = list(m, n))
   hoist$emit(glue("{A_work@name} = {A_name}"))
 
   out <- resolve_blas_output(
@@ -981,7 +981,9 @@ lapack_solve_gesv <- function(
     input_names = c(A_name, B_input_name),
     expected_dims = expected_dims,
     context = context,
-    allow_alias = B_input_name
+    allow_alias = B_input_name,
+    scope = scope,
+    allocate_at_point = TRUE
   )
   # The output length follows ncol(a) (R's contract) while `b` follows
   # nrow(a); the two are only runtime-equal. When ncol is statically 1
@@ -995,7 +997,7 @@ lapack_solve_gesv <- function(
   }
   hoist$emit(glue("{out$name} = {b_src}"))
 
-  ipiv <- hoist$declare_tmp(mode = "integer", dims = list(m))
+  ipiv <- hoist$declare_tmp_at_point(mode = "integer", dims = list(m))
   info <- hoist$declare_tmp(mode = "integer", dims = NULL)
 
   hoist$emit(glue(
