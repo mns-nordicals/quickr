@@ -554,27 +554,28 @@ compile_andor <- function(
   sub$defer_static_value_error <- TRUE
   deferred_error <- NULL
   right <- tryCatch(
-    r2f(
-      args[[2L]],
-      scope,
-      ...,
-      hoist = sub,
-      defer_andor_length_error = TRUE
-    ),
+    {
+      right <- r2f(
+        args[[2L]],
+        scope,
+        ...,
+        hoist = sub,
+        defer_andor_length_error = TRUE
+      )
+      scalarize_andor_operand(
+        right,
+        op,
+        sub,
+        scope,
+        defer_length_error = TRUE
+      )
+    },
     quickr_deferred_branch_error = function(error) {
       deferred_error <<- conditionMessage(error)
       NULL
     }
   )
-  if (is.null(deferred_error)) {
-    right <- scalarize_andor_operand(
-      right,
-      op,
-      sub,
-      scope,
-      defer_length_error = TRUE
-    )
-  } else {
+  if (!is.null(deferred_error)) {
     emit_quickr_error_if(".true.", deferred_error, sub, scope)
     right <- Fortran(".false.", Variable("logical"))
   }
