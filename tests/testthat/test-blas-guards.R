@@ -286,6 +286,57 @@ test_that("solve(a) and chol() guard squareness", {
   )
 })
 
+test_that("square guards precede symbolic inverse and Cholesky allocations", {
+  inverse <- function(a) {
+    declare(type(a = double(n, k)))
+    sum(solve(a))
+  }
+  cholesky <- function(a) {
+    declare(type(a = double(n, k)))
+    sum(chol(a))
+  }
+  chol_inverse <- function(a) {
+    declare(type(a = double(n, k)))
+    sum(chol2inv(a))
+  }
+
+  cases <- list(
+    list(fn = inverse, message = "solve requires a square matrix"),
+    list(fn = cholesky, message = "chol requires a square matrix"),
+    list(fn = chol_inverse, message = "chol2inv requires a square matrix")
+  )
+  for (case in cases) {
+    code <- strsplit(as.character(r2f(case$fn)), "\n", fixed = TRUE)[[1L]]
+    output_decl <- grep(
+      "real\\(c_double\\), allocatable :: .*\\(:, :\\)",
+      code
+    )
+    expect_length(output_decl, 1L)
+    output_name <- sub(
+      ".*:: ([^(:]+)\\(:, :\\).*",
+      "\\1",
+      code[[output_decl]]
+    )
+    guard_line <- grep(case$message, code, fixed = TRUE)
+    allocation_line <- grep(
+      paste0("allocate(", output_name, "("),
+      code,
+      fixed = TRUE
+    )
+    expect_length(guard_line, 1L)
+    expect_length(allocation_line, 1L)
+    expect_lt(guard_line, allocation_line)
+
+    qfn <- quick(case$fn)
+    expect_equal(qfn(diag(2)), 2)
+    expect_error(
+      qfn(matrix(as.double(1:6), 2, 3)),
+      case$message,
+      fixed = TRUE
+    )
+  }
+})
+
 test_that("matrix-matrix %*% returns zeros for a known empty contraction", {
   fn <- function(a, b) {
     declare(type(a = double(2, 0)), type(b = double(0, 3)))
