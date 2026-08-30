@@ -304,6 +304,28 @@ test_that("seq() value with a symbolic by is sized by the step", {
   )
 })
 
+test_that("symbolic seq() extents subtract in a pointer-sized kind", {
+  fn <- function(from, to, by) {
+    declare(
+      type(from = integer(1)),
+      type(to = integer(1)),
+      type(by = integer(1))
+    )
+    seq(from, to, by = by)
+  }
+
+  code <- as.character(r2f(fn))
+  expect_match(
+    code,
+    "int(to, kind=c_ptrdiff_t) - int(from, kind=c_ptrdiff_t)",
+    fixed = TRUE
+  )
+  expect_quick_identical(
+    fn,
+    list(-2147483647L, 2147483647L, 2147483647L)
+  )
+})
+
 test_that("x[seq_len(n)] with n = 0 returns a zero-length result like R", {
   fn <- function(x, n) {
     declare(type(x = double(NA)), type(n = integer(1)))

@@ -530,8 +530,13 @@ dims2f_eval_base_env[["as.integer"]] <- function(x) {
   glue("int({x}, kind=c_ptrdiff_t)")
 }
 dims2f_eval_base_env[["quickr_seq_length"]] <- function(from, to, by) {
-  safe_by <- glue("merge(int({by}), 1, int({by}) /= 0)")
-  glue("(abs((int({to}) - int({from})) / {safe_by}) + 1)")
+  from <- glue("int({from}, kind=c_ptrdiff_t)")
+  to <- glue("int({to}, kind=c_ptrdiff_t)")
+  by <- glue("int({by}, kind=c_ptrdiff_t)")
+  safe_by <- glue(
+    "merge({by}, 1_c_ptrdiff_t, {by} /= 0_c_ptrdiff_t)"
+  )
+  glue("(abs(({to} - {from}) / {safe_by}) + 1_c_ptrdiff_t)")
 }
 dims2f_eval_base_env[["length"]] <- function(x) {
   if (is.symbol(x)) {
