@@ -157,3 +157,30 @@ test_that("ifelse does not evaluate unselected branches", {
     expect_identical(actual_seed, expected_seed)
   }
 })
+
+test_that("ifelse allocates branch temporaries only when selected", {
+  fn <- function(test, n) {
+    declare(type(test = logical(3)), type(n = integer(1)))
+    ifelse(test, runif(n), 0)
+  }
+
+  fsub <- as.character(r2f(fn))
+  expect_lt(
+    regexpr("if (any(", fsub, fixed = TRUE)[[1L]],
+    regexpr("allocate(", fsub, fixed = TRUE)[[1L]]
+  )
+  qfn <- quick(fn)
+
+  for (test in list(rep(FALSE, 3), rep(TRUE, 3))) {
+    set.seed(826)
+    expected <- fn(test, 3L)
+    expected_seed <- .Random.seed
+
+    set.seed(826)
+    actual <- qfn(test, 3L)
+    actual_seed <- .Random.seed
+
+    expect_equal(actual, expected)
+    expect_identical(actual_seed, expected_seed)
+  }
+})
