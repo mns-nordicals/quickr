@@ -1042,9 +1042,9 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
 
   hoist$emit(glue("{out_name} = {A_name}"))
 
-  ipiv <- hoist$declare_tmp(mode = "integer", dims = list(n))
+  ipiv <- hoist$declare_tmp_at_point(mode = "integer", dims = list(n))
   info <- hoist$declare_tmp(mode = "integer", dims = NULL)
-  work <- hoist$declare_tmp(mode = "double", dims = list(n))
+  work <- hoist$declare_tmp_at_point(mode = "double", dims = list(n))
 
   hoist$emit(glue(
     "call dgetrf({blas_int(n)}, {blas_int(n)}, {out_name}, {blas_int(n)}, {ipiv@name}, {info@name})"
