@@ -17,6 +17,7 @@ stop_deferred_branch_error <- function(message) {
 new_hoist <- function(scope) {
   hoisted <- character()
   block_scope <- NULL
+  point_allocated <- character()
 
   emit <- function(...) {
     hoisted <<- c(
@@ -51,6 +52,22 @@ new_hoist <- function(scope) {
     )
   }
 
+  allocate_tmp_at_point <- function(var, emit_at_point) {
+    if (!block_tmp_allocatable(var, block_scope)) {
+      return(var)
+    }
+    point_allocated <<- c(point_allocated, var@name)
+    emit_at_point(glue(
+      "allocate({var@name}({dims2f(var@dims, block_scope)}))"
+    ))
+    var
+  }
+
+  declare_tmp_at_point <- function(mode, dims, logical_as_int = FALSE) {
+    var <- declare_tmp(mode, dims, logical_as_int)
+    allocate_tmp_at_point(var, emit)
+  }
+
   capture <- function() {
     captured <- character()
     capture_emit <- function(...) {
@@ -63,10 +80,19 @@ new_hoist <- function(scope) {
       str_flatten_lines(str_split_lines(captured, code))
     }
     capture_has_code <- function() length(captured) > 0L
+    capture_declare_tmp_at_point <- function(
+      mode,
+      dims,
+      logical_as_int = FALSE
+    ) {
+      var <- declare_tmp(mode, dims, logical_as_int)
+      allocate_tmp_at_point(var, capture_emit)
+    }
     list2env(
       list(
         emit = capture_emit,
         declare_tmp = declare_tmp,
+        declare_tmp_at_point = capture_declare_tmp_at_point,
         render = capture_render,
         has_code = capture_has_code,
         capture = capture
@@ -86,7 +112,11 @@ new_hoist <- function(scope) {
     if (has_block()) {
       block_vars <- scope_vars(block_scope)
       decls <- emit_decls(block_vars, block_scope)
-      allocs <- block_tmp_allocation_lines(block_vars, block_scope)
+      prologue_vars <- keep(
+        block_vars,
+        \(var) !var@name %in% point_allocated
+      )
+      allocs <- block_tmp_allocation_lines(prologue_vars, block_scope)
       if (length(allocs)) {
         stmts <- c(allocs, stmts)
       }
@@ -100,6 +130,7 @@ new_hoist <- function(scope) {
     list(
       emit = emit,
       declare_tmp = declare_tmp,
+      declare_tmp_at_point = declare_tmp_at_point,
       is_empty = is_empty,
       render = render,
       capture = capture
