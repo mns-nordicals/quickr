@@ -298,6 +298,9 @@ Empty `which.min()` and `which.max()` inputs also differ. R returns
 `integer(0)`; quickr returns the scalar index produced by Fortran's
 `minloc()` or `maxloc()`. Do not pass empty inputs to these reductions.
 
+`min()`, `max()`, `sum()`, and `prod()` accept only positional data arguments.
+Named arguments, including `na.rm`, are compile errors.
+
 ### Whole-valued real exponents can differ for negative bases {#real-exponents}
 
 R recognizes a whole-valued double exponent such as `3.0` when raising a
@@ -326,7 +329,8 @@ longer vector, where R would recycle with a deprecation warning.
 
 Non-fill `array(data, dim)` calls also refuse to recycle `data` when it is shorter than `prod(dim)`.
 
-`matrix(data, nrow, ncol)` requires both dimensions; R can infer either omitted dimension from the other one and `length(data)`.
+`matrix(data, nrow, ncol)` requires both dimensions and refuses
+`byrow = TRUE`; R can infer an omitted dimension and supports row-wise filling.
 
 ### Zero-length operands do not recycle to zero-length results
 
@@ -398,6 +402,10 @@ before calling `runif()` when their order is not known statically.
 When `min` and `max` are equal, R returns the bound without consuming an RNG
 value. quickr still draws and scales a uniform value, so the result is equal
 but the subsequent RNG state differs.
+
+`runif()` is supported only in serial generated code. A loop or `sapply()`
+marked by `declare(parallel())` rejects it to avoid sharing R's RNG across
+threads.
 
 ### Scalar transpose {#scalar-transpose}
 
