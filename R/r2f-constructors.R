@@ -311,7 +311,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       col_count <- if (nzchar(col_count)) col_count else "1"
       emit_quickr_error_if(
         glue(
-          "({source_len_f}) == 0 .and. ({row_count}) * ({col_count}) > 0"
+          "({source_len_f}) == 0 .and. ({row_count}) > 0 .and. ({col_count}) > 0"
         ),
         "matrix() with empty data would produce NA values, which are not supported",
         hoist,
