@@ -822,20 +822,15 @@ test_that("integer-backed logical matrix fills materialize portably", {
   expect_quick_identical(fn, list(TRUE))
 })
 
-test_that("local closure arguments materialize from left to right", {
+test_that("local closure calls reject effectful argument promises", {
   fn <- function() {
     subtract <- function(a, b) a - b
     subtract(runif(1), runif(1))
   }
 
-  code <- as.character(r2f(fn))
-  expect_false(grepl("call subtract(unif_rand()", code, fixed = TRUE))
-
-  set.seed(42)
-  expected <- fn()
-  expected_seed <- .Random.seed
-  set.seed(42)
-  actual <- quick(fn)()
-  expect_identical(actual, expected)
-  expect_identical(.Random.seed, expected_seed)
+  expect_error(
+    quick(fn),
+    "local closure calls only support pure argument expressions",
+    fixed = TRUE
+  )
 })
