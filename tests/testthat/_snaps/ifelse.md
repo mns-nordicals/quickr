@@ -11,16 +11,13 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(c, a, out_, c__len_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
+      subroutine fn(c, a, out_, c__len_) bind(c)
+        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
         implicit none
       
         ! manifest start
         ! sizes
         integer(c_ptrdiff_t), intent(in), value :: c__len_
-      
-        ! error
-        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
       
         ! args
         integer(c_int), intent(in) :: c(c__len_) ! logical
@@ -104,19 +101,11 @@
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
         
-        char quickr_err_msg[256];
-        quickr_err_msg[0] = '\0';
-        
-        
         fn(
           c__,
           a__,
           out___,
-          c__len_,
-          quickr_err_msg);
-        if (quickr_err_msg[0] != '\0') {
-          Rf_error("%s", quickr_err_msg);
-        }
+          c__len_);
         
         UNPROTECT(1);
         return out_;
@@ -264,4 +253,3 @@
         UNPROTECT(1);
         return out_;
       }
-
