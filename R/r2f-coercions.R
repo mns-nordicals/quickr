@@ -3,13 +3,18 @@
 
 # --- Handlers ---
 
-r2f_handlers[["as.double"]] <- function(args, scope = NULL, ...) {
+r2f_handlers[["as.double"]] <- function(
+  args,
+  scope = NULL,
+  ...,
+  hoist = NULL
+) {
   stopifnot(length(args) == 1L)
-  x <- r2f(args[[1L]], scope, ...)
+  x <- r2f(args[[1L]], scope, ..., hoist = hoist)
   if (identical(x@value@mode, "complex")) {
-    stop(
+    stop_static_mode_error(
       "as.double() does not support complex input; imaginary parts would be discarded",
-      call. = FALSE
+      hoist
     )
   }
   x <- maybe_cast_double(x)
