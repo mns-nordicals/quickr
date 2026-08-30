@@ -21,7 +21,6 @@ grid_op_families <- list(
   ),
   div = c(div = "/", pow = "^", mod = "%%", idv = "%/%")
 )
-
 grid_logical_only_ops <- c("and", "or")
 
 grid_mode_pairs <- function(opname) {

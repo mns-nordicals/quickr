@@ -33,11 +33,14 @@ test_that("parallel loops execute fill constructors with private indices", {
     out <- integer(n)
     declare(parallel())
     for (i in seq_len(n)) {
-      out[i] <- sum(c(integer(n), i))
+      out[i] <- sum(c(integer(n), array(integer(n), c(n)), i))
     }
     out
   }
 
+  lines <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1L]]
+  directive <- grep("!$omp parallel do", lines, value = TRUE, fixed = TRUE)
+  expect_match(directive, ",")
   expect_quick_identical(fn, list(256L))
 })
 

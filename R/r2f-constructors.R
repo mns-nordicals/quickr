@@ -242,7 +242,13 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
       Variable("integer", x@value@dims)
     )
   }
-  if (times@value@mode == "double") {
+  times_is_double <- times@value@mode == "double"
+  if (times_is_double) {
+    times <- hoist_unless_name(times, hoist)
+    invalid <- glue(
+      "{times} < 0 .or. {times} > 2147483647 .or. {times} /= {times}"
+    )
+    emit_quickr_error_if(invalid, "invalid 'times' value", hoist, scope)
     times <- Fortran(
       glue("int({times}, kind=c_int)"),
       Variable("integer", times@value@dims)
@@ -264,7 +270,7 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
   if (is_scalar_integerish(len_expr) && as.integer(len_expr) < 0L) {
     stop("invalid 'times' value", call. = FALSE)
   }
-  if (!is_wholenumber(len_expr)) {
+  if (!times_is_double && !is_wholenumber(len_expr)) {
     emit_quickr_error_if(
       glue("{times} < 0"),
       "invalid 'times' value",
@@ -616,6 +622,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
           "integer",
           integer_kind = "c_ptrdiff_t"
         )
+        register_openmp_private(scope, i@name)
         glue("[({out}, {i}=1_c_ptrdiff_t, {n_expr_ptrdiff})]")
       } else {
         n_target <- known_prod(target_dims)
