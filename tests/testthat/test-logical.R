@@ -442,6 +442,17 @@ test_that("short-circuited matrix calls defer missing-argument errors", {
   expect_quick_identical(skipped, list())
   expect_error(quick(reached_one)(), "requires at least one argument")
   expect_error(quick(reached_two)(), "requires at least two arguments")
+
+  braced <- function(flag) {
+    declare(type(flag = logical(1)))
+    flag &&
+      {
+        sum(matrix(1, 1, 1, byrow = TRUE)) > 0
+      }
+  }
+  qbraced <- quick(braced)
+  expect_false(qbraced(FALSE))
+  expect_error(qbraced(TRUE), "byrow=TRUE", fixed = TRUE)
 })
 
 test_that("short-circuited operators defer arity errors", {
