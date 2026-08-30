@@ -149,18 +149,24 @@ test_that("reused BLAS locals are allocated on every reachable path", {
     )
     if (flag) {
       out <- a %*% b
+      extracted <- diag(a)
+      constructed <- a %*% b
+      outered <- a %*% b
     }
     out <- crossprod(b)
-    sum(out)
+    extracted <- diag(a)
+    constructed <- diag(1, nrow = nrow(a), ncol = ncol(b))
+    outered <- outer(a[, 1L], a[, 1L])
+    sum(out) + sum(extracted) + sum(constructed) + sum(outered)
   }
 
   code <- as.character(r2f(fn))
   allocation_guards <- gregexpr(
-    "if (.not. allocated(out)) allocate(out(",
+    "if (.not. allocated(",
     code,
     fixed = TRUE
   )[[1L]]
-  expect_length(allocation_guards[allocation_guards > 0L], 2L)
+  expect_length(allocation_guards[allocation_guards > 0L], 8L)
 
   a <- matrix(as.double(1:6), 2, 3)
   b <- matrix(as.double(1:6), 3, 2)

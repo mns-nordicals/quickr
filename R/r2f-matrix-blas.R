@@ -697,6 +697,7 @@ outer_mul <- function(
       context = context
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     hoist$emit(glue("{dest@name} = 0.0_c_double"))
     hoist$emit(glue(
       "call dger({blas_int(m)}, {blas_int(n)}, 1.0_c_double, {x_name}, 1_c_int, {y_name}, 1_c_int, {dest@name}, {blas_int(m)})"
@@ -1283,6 +1284,7 @@ diag_extract <- function(x, scope, hoist, dest = NULL, context = "diag") {
       logical_is_c_int = logical_is_c_int
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     out_var <- dest
     out_name <- dest@name
     writes_to_dest <- TRUE
@@ -1365,6 +1367,7 @@ diag_matrix <- function(
       logical_is_c_int = logical_is_c_int
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     out_var <- dest
     out_name <- dest@name
     writes_to_dest <- TRUE
