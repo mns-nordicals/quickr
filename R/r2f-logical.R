@@ -304,12 +304,20 @@ is_pure_scalar_condition <- function(e, scope) {
   if (!((length(e) - 1L) %in% allowed)) {
     return(FALSE)
   }
-  all(vapply(
-    as.list(e)[-1L],
-    is_pure_scalar_condition,
-    logical(1L),
-    scope = scope
-  ))
+  if (
+    !all(vapply(
+      as.list(e)[-1L],
+      is_pure_scalar_condition,
+      logical(1L),
+      scope = scope
+    ))
+  ) {
+    return(FALSE)
+  }
+  if (op %in% c("!", "&&", "||", "&", "|", "<", "<=", ">", ">=")) {
+    return(is_statically_logical_condition(e, scope))
+  }
+  TRUE
 }
 
 is_statically_complex_expression <- function(e, scope) {
