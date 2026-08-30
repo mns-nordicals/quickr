@@ -563,7 +563,10 @@ lang2fortran <- r2f <- function(
     # "bytecode",
     # "weakref"
     # default
-    stop("Unsupported object type encountered: ", typeof(e))
+    stop_static_mode_error(
+      paste0("Unsupported object type encountered: ", typeof(e)),
+      hoist
+    )
   )
 
   attr(fortran, "r") <- e
