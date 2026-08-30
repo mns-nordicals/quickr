@@ -238,15 +238,40 @@ test_that("short-circuited division is not evaluated eagerly", {
 })
 
 test_that("short-circuited calls defer arity errors", {
-  skipped_abs <- function() {
-    FALSE && abs()
-  }
-  reached_abs <- function() {
-    TRUE && abs()
+  unary_intrinsics <- c(
+    "sin",
+    "cos",
+    "tan",
+    "tanh",
+    "asin",
+    "acos",
+    "atan",
+    "sqrt",
+    "exp",
+    "log",
+    "floor",
+    "ceiling",
+    "trunc",
+    "log10",
+    "abs",
+    "Re",
+    "Im",
+    "Mod",
+    "Arg",
+    "Conj"
+  )
+  bad_calls <- lapply(unary_intrinsics, \(op) as.call(list(as.name(op))))
+  skipped <- function() NULL
+  body(skipped) <- as.call(c(
+    quote(`{`),
+    list(as.call(c(quote(c), lapply(bad_calls, \(x) call("&&", FALSE, x)))))
+  ))
+  reached <- function() {
+    TRUE && sqrt()
   }
 
-  expect_quick_identical(skipped_abs, list())
-  expect_error(quick(reached_abs)(), "abs")
+  expect_quick_identical(skipped, list())
+  expect_error(quick(reached)(), "sqrt")
 })
 
 test_that("short-circuited operators defer arity errors", {
@@ -266,7 +291,14 @@ test_that("short-circuited operators defer arity errors", {
       "!=",
       "+",
       "-",
-      "*"
+      "*",
+      "/",
+      "^",
+      "%%",
+      "%/%",
+      "%*%",
+      "%o%",
+      ":"
     ),
     \(op) as.call(list(as.name(op)))
   )
