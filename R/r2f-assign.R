@@ -172,7 +172,16 @@ register_r2f_handler(
       }
     } else if (inherits(inferred_var, Variable)) {
       var <- inferred_var
+      var@r_name <- name
       var@name <- fortran_name
+      return_names <- scope_get(scope, "return_names", character()) %||%
+        character()
+      if (name %in% return_names) {
+        var@is_return <- TRUE
+        if (identical(var@mode, "logical")) {
+          var@logical_as_int <- TRUE
+        }
+      }
       value <- r2f(rhs, scope, ..., hoist = hoist, dest = var)
     } else {
       value <- r2f(rhs, scope, ..., hoist = hoist)
