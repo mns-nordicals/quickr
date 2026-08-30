@@ -127,13 +127,15 @@ register_r2f_handler(
       }
 
       if (ordered) {
-        out <- snapshot_operand_before_later_effects(
-          out,
-          arg,
-          later_args,
-          scope,
-          arg_hoist
-        )
+        if (!allow_empty || identical(nonempty, TRUE)) {
+          out <- snapshot_operand_before_later_effects(
+            out,
+            arg,
+            later_args,
+            scope,
+            arg_hoist
+          )
+        }
         if (allow_empty) {
           return(list(value = out, nonempty = nonempty, hoist = arg_hoist))
         }
