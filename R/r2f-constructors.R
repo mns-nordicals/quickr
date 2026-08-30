@@ -62,9 +62,9 @@ materialize_via_hoist <- function(
   Fortran(tmp@name, tmp)
 }
 
-guard_matrix_dims <- function(dims, hoist, scope) {
-  stopifnot(is.list(dims))
-  message <- "matrix() dimensions must be non-negative"
+guard_constructor_dims <- function(dims, constructor, hoist, scope) {
+  stopifnot(is.list(dims), is_string(constructor))
+  message <- paste0(constructor, "() dimensions must be non-negative")
   for (dim in dims) {
     if (is_scalar_integerish(dim)) {
       if (dim < 0) {
@@ -339,7 +339,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   src <- r2f(args$data, scope, ..., hoist = hoist)
   dims <- r2dims(list(args$nrow, args$ncol), scope)
-  guard_matrix_dims(dims, hoist, scope)
+  guard_constructor_dims(dims, "matrix", hoist, scope)
   out_val <- Variable(mode = src@value@mode, dims = dims)
 
   # A scalar broadcasts natively on direct whole-array assignment, so keep
@@ -469,6 +469,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   if (!length(target_dims)) {
     stop("array(dim=) must not be empty", call. = FALSE)
   }
+  guard_constructor_dims(target_dims, "array", hoist, scope)
   if (!passes_as_scalar(out@value)) {
     # R semantics: `array()` flattens its input (dropping dim) then reshapes.
     # We implement this as Fortran `reshape()`. Recycling (i.e. expanding a
