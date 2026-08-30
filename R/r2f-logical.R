@@ -299,22 +299,62 @@ is_pure_scalar_condition <- function(e, scope) {
   ))
 }
 
-short_circuit_arity_error <- function(e, scope) {
+lazy_builtin_arities <- list(
+  `(` = 1L,
+  `!` = 1L,
+  `&&` = 2L,
+  `||` = 2L,
+  `&` = 2L,
+  `|` = 2L,
+  `<` = 2L,
+  `<=` = 2L,
+  `>` = 2L,
+  `>=` = 2L,
+  `==` = 2L,
+  `!=` = 2L,
+  `+` = 1:2,
+  `-` = 1:2,
+  `*` = 2L,
+  abs = 1L
+)
+
+lazy_builtin_arity_error <- function(e, scope, recursive = TRUE) {
   if (!is.call(e) || !is.symbol(e[[1L]])) {
     return(NULL)
   }
 
   op <- as.character(e[[1L]])
+  allowed <- lazy_builtin_arities[[op]]
+  is_builtin <- !inherits(scope[[op]], LocalClosure)
   if (
-    identical(op, "abs") &&
-      !inherits(scope[[op]], LocalClosure) &&
-      length(e) != 2L
+    is_builtin &&
+      !is.null(allowed) &&
+      !((length(e) - 1L) %in% allowed)
   ) {
-    return("abs() requires exactly one argument")
+    expected <- if (length(allowed) == 2L) {
+      "one or two arguments"
+    } else {
+      paste0(
+        "exactly ",
+        if (allowed == 1L) "one" else "two",
+        " argument",
+        if (allowed == 1L) "" else "s"
+      )
+    }
+    return(paste0("`", op, "` requires ", expected))
+  }
+  if (!recursive) {
+    return(NULL)
   }
 
-  for (arg in as.list(e)[-1L]) {
-    error <- short_circuit_arity_error(arg, scope)
+  args <- as.list(e)[-1L]
+  if (is_builtin && op %in% c("&&", "||") && length(args) == 2L) {
+    # A nested scalar short-circuit owns its right operand. Only its left
+    # operand is unconditionally evaluated when the nested call is reached.
+    args <- args[1L]
+  }
+  for (arg in args) {
+    error <- lazy_builtin_arity_error(arg, scope, recursive = TRUE)
     if (!is.null(error)) {
       return(error)
     }
@@ -348,7 +388,7 @@ lower_short_circuit_operator <- function(
   )
 
   f <- if (op == "&&") ".and." else ".or."
-  rhs_arity_error <- short_circuit_arity_error(args[[2L]], scope)
+  rhs_arity_error <- lazy_builtin_arity_error(args[[2L]], scope)
 
   if (
     is.null(rhs_arity_error) &&
@@ -383,14 +423,23 @@ lower_short_circuit_operator <- function(
   tmp <- scope_unique_var(scope, mode = "logical", dims = NULL)
   register_openmp_private(scope, tmp@name)
   sub <- new_hoist(scope)
-  if (is.null(rhs_arity_error)) {
-    right <- r2f(
+  sub$defer_static_elementwise_error <- TRUE
+  sub$defer_builtin_arity_error <- TRUE
+  deferred_error <- NULL
+  right <- tryCatch(
+    r2f(
       args[[2L]],
       scope,
       ...,
       hoist = sub,
       defer_andor_length_error = TRUE
-    )
+    ),
+    quickr_deferred_branch_error = function(error) {
+      deferred_error <<- conditionMessage(error)
+      NULL
+    }
+  )
+  if (is.null(deferred_error)) {
     right <- scalarize_andor_operand(
       right,
       op,
@@ -399,7 +448,7 @@ lower_short_circuit_operator <- function(
       defer_length_error = TRUE
     )
   } else {
-    emit_quickr_error_if(".true.", rhs_arity_error, sub, scope)
+    emit_quickr_error_if(".true.", deferred_error, sub, scope)
     right <- Fortran(".false.", Variable("logical"))
   }
 
