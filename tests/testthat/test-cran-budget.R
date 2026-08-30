@@ -26,6 +26,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-matrix-inference.R",
     "test-matrix-lapack.R",
     "test-matrix-mul.R",
+    "test-parallel-declare.R",
     "test-reduction-scalars.R",
     "test-recycling.R",
     "test-r2f-registry.R",
