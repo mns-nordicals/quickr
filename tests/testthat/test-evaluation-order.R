@@ -97,3 +97,16 @@ test_that("later matrix effects cannot change the evaluated left operand", {
 
   expect_quick_identical(fn, list(matrix(3, 1, 1)))
 })
+
+test_that("parenthesized closure effects preserve earlier operands", {
+  fn <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 1
+      10
+    }
+    x + ((bump))()
+  }
+
+  expect_quick_identical(fn, list(1))
+})
