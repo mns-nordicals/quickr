@@ -208,3 +208,21 @@ test_that("ifelse point-allocates named impure branch temporaries", {
     expect_equal(qfn(test, x), fn(test, x))
   }
 })
+
+test_that("ifelse accepts matching empty inputs", {
+  static <- function() {
+    ifelse(logical(), numeric(), numeric())
+  }
+  dynamic <- function(test, yes, no) {
+    declare(
+      type(test = logical(NA)),
+      type(yes = double(NA)),
+      type(no = double(NA))
+    )
+    ifelse(test, yes, no)
+  }
+
+  expect_no_error(r2f(static))
+  qdynamic <- quick(dynamic)
+  expect_identical(qdynamic(logical(), numeric(), numeric()), numeric())
+})
