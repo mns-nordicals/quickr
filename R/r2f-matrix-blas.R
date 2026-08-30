@@ -304,6 +304,7 @@ resolve_blas_output <- function(
   allow_alias = character(),
   mode = "double",
   logical_is_c_int = FALSE,
+  scope = NULL,
   allocate_at_point = FALSE
 ) {
   stopifnot(is_bool(allocate_at_point))
@@ -318,6 +319,9 @@ resolve_blas_output <- function(
       logical_is_c_int = logical_is_c_int
     )
   ) {
+    if (allocate_at_point) {
+      allocate_reusable_local_output_at_point(dest, scope, hoist)
+    }
     return(list(var = dest, name = dest@name, use_dest = TRUE))
   }
   declare_tmp <- if (allocate_at_point) {
@@ -412,6 +416,46 @@ assert_blas_dimensions_stable <- function(x, scope, context) {
     }
   }
   invisible(TRUE)
+}
+
+allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
+  stopifnot(inherits(dest, Variable), inherits(scope, "quickr_scope"))
+  assert_hoist_env(hoist)
+
+  if (
+    !identical(scope_kind(scope), "subroutine") ||
+      isTRUE(dest@is_external) ||
+      !is.na(var_element_count(dest)) ||
+      !subroutine_local_allocatable(dest, scope)
+  ) {
+    return(invisible(dest))
+  }
+
+  return_names <- scope_get(scope, "return_names", character()) %||%
+    character()
+  return_fortran_names <- vapply(
+    return_names,
+    fortranize_name,
+    character(1L)
+  )
+  if (tolower(dest@name) %in% tolower(return_fortran_names)) {
+    return(invisible(dest))
+  }
+
+  point_allocated <- scope_get(
+    scope,
+    "point_allocated_local_names",
+    character()
+  )
+  scope_set(
+    scope,
+    "point_allocated_local_names",
+    unique(c(point_allocated, dest@name))
+  )
+  hoist$emit(glue(
+    "if (.not. allocated({dest@name})) allocate({dest@name}({dims2f(dest@dims, scope)}))"
+  ))
+  invisible(dest)
 }
 
 # Ensure a BLAS operand is named, hoisting into a temp if needed.
@@ -512,6 +556,7 @@ gemm <- function(
   out <- resolve_blas_output(
     dest,
     hoist,
+    scope = scope,
     input_names = c(A_name, B_name),
     expected_dims = list(m, n),
     context = context,
@@ -558,6 +603,7 @@ gemv <- function(
   out <- resolve_blas_output(
     dest,
     hoist,
+    scope = scope,
     input_names = c(A_name, x_name),
     expected_dims = out_dims,
     context = context,

@@ -71,6 +71,48 @@ test_that("matrix-vector %*% guards before allocating its result", {
   )
 })
 
+test_that("matrix-matrix %*% guards before allocating a reusable local", {
+  fn <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(m, p)))
+    out <- a %*% b
+    sum(out)
+  }
+
+  code <- as.character(r2f(fn))
+  guard <- regexpr("non-conformable arguments in %*%", code, fixed = TRUE)
+  allocation <- regexpr("allocate(out(", code, fixed = TRUE)
+  expect_lt(guard, allocation)
+
+  qfn <- quick(fn)
+  expect_equal(qfn(matrix(as.double(1:4), 2, 2), diag(2)), 10)
+  expect_error(
+    qfn(matrix(as.double(1:2), 2, 1), matrix(as.double(1:4), 2, 2)),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+})
+
+test_that("matrix-vector %*% guards before allocating a reusable local", {
+  fn <- function(a, x) {
+    declare(type(a = double(m, k)), type(x = double(n)))
+    out <- a %*% x
+    sum(out)
+  }
+
+  code <- as.character(r2f(fn))
+  guard <- regexpr("non-conformable arguments in %*%", code, fixed = TRUE)
+  allocation <- regexpr("allocate(out(", code, fixed = TRUE)
+  expect_lt(guard, allocation)
+
+  qfn <- quick(fn)
+  expect_equal(qfn(matrix(as.double(1:4), 2, 2), c(1, 1)), 10)
+  expect_error(
+    qfn(matrix(as.double(1:2), 2, 1), c(1, 1)),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))
