@@ -560,7 +560,8 @@ gemv <- function(
     hoist,
     input_names = c(A_name, x_name),
     expected_dims = out_dims,
-    context = context
+    context = context,
+    allocate_at_point = TRUE
   )
   blas_call <- glue(
     "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {out$name}, 1_c_int)"
