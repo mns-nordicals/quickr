@@ -19,6 +19,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-logical.R",
     "test-matrix-inference.R",
     "test-matrix-mul.R",
+    "test-reduction-scalars.R",
     "test-recycling.R"
   )
   test_files <- list.files(
