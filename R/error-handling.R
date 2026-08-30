@@ -161,3 +161,7 @@ quickr_error_return_if_set <- function(
   }
   glue("if ({quickr_error_msg_name()}(1) /= c_null_char) return")
 }
+
+quickr_error_after_serial_loop <- function(scope) {
+  if (scope_in_openmp(scope)) quickr_error_return_if_set(scope) else ""
+}

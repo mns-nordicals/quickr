@@ -82,12 +82,14 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
   # (`{` bodies already isolate each statement.)
   body <- r2f(args[[2]], scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
+  error_check_after <- quickr_error_after_serial_loop(scope)
   if (cond_hoist$is_empty()) {
     # nothing hoisted: keep the plain do-while form
     return(Fortran(glue(
       "do while ({cond})
       {indent(body)}
       end do
+      {error_check_after}
       "
     )))
   }
@@ -97,6 +99,7 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
     {indent(cond_code)}
     {indent(body)}
     end do
+    {error_check_after}
     "
   ))
 }
@@ -226,7 +229,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
         openmp_depth = scope_openmp_depth(scope) - 1L
       )
     } else {
-      ""
+      quickr_error_after_serial_loop(scope)
     }
     return(Fortran(glue(
       "
@@ -272,7 +275,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
       openmp_depth = scope_openmp_depth(scope) - 1L
     )
   } else {
-    ""
+    quickr_error_after_serial_loop(scope)
   }
   loop_header <- glue("do {var_name} = {iterable}")
   Fortran(glue(

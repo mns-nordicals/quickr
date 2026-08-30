@@ -50,7 +50,13 @@ test_that("guarded OpenMP iterations stop when cancellation is disabled", {
     out <- 0
     declare(parallel())
     for (i in seq_len(1L)) {
-      out <- sum(x + y)
+      for (j in seq_len(1L)) {
+        k <- 0L
+        while (k < 1L) {
+          k <- k + 1L
+          out <- sum(x + y)
+        }
+      }
       out <- out + 1
     }
     out
@@ -58,15 +64,16 @@ test_that("guarded OpenMP iterations stop when cancellation is disabled", {
 
   code <- as.character(r2f(guarded))
   guard <- regexpr("elementwise vector operations", code, fixed = TRUE)
-  cycle <- regexpr("cycle", code, fixed = TRUE)
+  cycles <- gregexpr("cycle", code, fixed = TRUE)[[1L]]
   later_statement <- regexpr(
     "out = (out + 1.0_c_double)",
     code,
     fixed = TRUE
   )
-  expect_true(all(c(guard, cycle, later_statement) > 0L))
-  expect_lt(guard, cycle)
-  expect_lt(cycle, later_statement)
+  expect_true(all(c(guard, cycles, later_statement) > 0L))
+  expect_length(cycles, 3L)
+  expect_lt(guard, cycles[[1L]])
+  expect_lt(cycles[[3L]], later_statement)
 
   qguarded <- quick(guarded)
   expect_error(
