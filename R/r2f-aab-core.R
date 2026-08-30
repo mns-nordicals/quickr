@@ -584,6 +584,9 @@ lang2fortran <- r2f <- function(
 # --- Atomic Conversion ---
 
 atomic2Fortran <- function(x) {
+  if (is_scalar_na(x)) {
+    stop("NA literals are not supported", call. = FALSE)
+  }
   stopifnot(is_scalar_atomic(x))
   s <- switch(
     typeof(x),
