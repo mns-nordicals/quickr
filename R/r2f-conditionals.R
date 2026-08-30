@@ -47,6 +47,9 @@ r2f_expression_is_pure <- function(e, scope) {
   ) {
     return(FALSE)
   }
+  if (inherits(get0(op, scope), LocalClosure)) {
+    return(FALSE)
+  }
   all(vapply(as.list(e)[-1L], r2f_expression_is_pure, logical(1L), scope))
 }
 
