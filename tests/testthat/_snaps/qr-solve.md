@@ -225,6 +225,10 @@
             call quickr_set_error_msg("qr.solve zero-sized outputs are not supported")
             return
           end if
+          if (size(b, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve zero-sized outputs are not supported")
+            return
+          end if
           if (size(a, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
             call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
             return
@@ -359,4 +363,3 @@
         UNPROTECT(2);
         return out_;
       }
-
