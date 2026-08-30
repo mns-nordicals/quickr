@@ -61,10 +61,22 @@ register_r2f_handler(
       hoisted_mask <- mask_hoist$get_hoisted()
       nonempty <- TRUE
       empty_condition <- NULL
-      if (call_name %in% c("min", "max") && !x@value@is_scalar) {
+      if (
+        call_name %in%
+          c("min", "max") &&
+          (!x@value@is_scalar || !is.null(hoisted_mask))
+      ) {
         element_count <- var_element_count(x@value)
         if (!is.null(hoisted_mask)) {
-          nonempty <- glue("any({hoisted_mask})")
+          mask_code <- trimws(as.character(hoisted_mask))
+          mask_is_scalar <-
+            passes_as_scalar(hoisted_mask@value) &&
+            !startsWith(mask_code, "[")
+          nonempty <- if (mask_is_scalar) {
+            glue("{hoisted_mask}")
+          } else {
+            glue("any({hoisted_mask})")
+          }
           empty_condition <- glue(".not. ({nonempty})")
         } else if (!is.na(element_count)) {
           nonempty <- element_count > 0
