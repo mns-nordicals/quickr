@@ -91,6 +91,48 @@ test_that("empty extrema are rejected explicitly", {
   expect_error(qmax(numeric()), message, fixed = TRUE)
 })
 
+test_that("multi-argument extrema ignore empty inputs", {
+  static_extrema <- function() {
+    min(numeric(), 5)
+  }
+  dynamic_min <- function(x) {
+    declare(type(x = double(NA)))
+    min(x, 5)
+  }
+  dynamic_max <- function(x) {
+    declare(type(x = double(NA)))
+    max(x, -5)
+  }
+  dynamic_pair <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    min(x, y)
+  }
+
+  expect_identical(quick(static_extrema)(), static_extrema())
+
+  qmin <- quick(dynamic_min)
+  expect_identical(qmin(numeric()), dynamic_min(numeric()))
+  expect_identical(qmin(c(9, 2)), dynamic_min(c(9, 2)))
+
+  qmax <- quick(dynamic_max)
+  expect_identical(qmax(numeric()), dynamic_max(numeric()))
+  expect_identical(qmax(c(-9, -2)), dynamic_max(c(-9, -2)))
+
+  qpair <- quick(dynamic_pair)
+  for (args in list(
+    list(numeric(), c(9, 2)),
+    list(c(9, 2), numeric()),
+    list(c(9, 2), c(8, 1))
+  )) {
+    expect_identical(do.call(qpair, args), do.call(dynamic_pair, args))
+  }
+  expect_error(
+    qpair(numeric(), numeric()),
+    "min()/max() of empty inputs are not supported",
+    fixed = TRUE
+  )
+})
+
 
 test_that("nested scalar min/max compiles and runs", {
   fn <- function(m) {
