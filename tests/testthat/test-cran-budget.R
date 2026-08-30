@@ -16,6 +16,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-blas-guards.R",
     "test-block-scopes.R",
     "test-conformability-grid.R",
+    "test-evaluation-order.R",
     "test-ifelse.R",
     "test-logical.R",
     "test-loops.R",
