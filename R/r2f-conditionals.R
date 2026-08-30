@@ -137,11 +137,6 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     branch <- tryCatch(
       {
         branch <- r2f(arg, scope, ..., hoist = sub)
-        if (is.symbol(arg) && is.null(branch@value)) {
-          stop_deferred_branch_error(
-            paste0("object '", as.character(arg), "' not found")
-          )
-        }
         if (
           !passes_as_scalar(mask@value) &&
             (!r2f_expression_is_pure(arg, scope) ||
