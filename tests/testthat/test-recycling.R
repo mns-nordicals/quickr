@@ -8,13 +8,11 @@ test_that("known unequal vector lengths are a compile error", {
     a + b
   }
   expect_error(quick(divisible), "equal lengths")
-
   ragged <- function(a, b) {
     declare(type(a = double(2)), type(b = double(3)))
     a * b
   }
   expect_error(quick(ragged), "equal lengths")
-
   zero_len <- function(a, b) {
     declare(type(a = double(0)), type(b = double(4)))
     a + b
@@ -30,19 +28,16 @@ test_that("a known length-0 operand is rejected against an unknown length", {
     numeric(0) + x
   }
   expect_error(quick(fill_left), "equal lengths")
-
   fill_right <- function(x) {
     declare(type(x = double(n)))
     x > numeric(0)
   }
   expect_error(quick(fill_right), "equal lengths")
-
   declared <- function(a, b) {
     declare(type(a = double(0)), type(b = double(n)))
     a * b
   }
   expect_error(quick(declared), "equal lengths")
-
   # An NA dim is unknown, not "matches anything"
   unspecified <- function(a, b) {
     declare(type(a = double(NA)), type(b = double(0)))
@@ -56,13 +51,11 @@ test_that("length checks cover comparisons, logical ops, and modulo", {
     a < b
   }
   expect_error(quick(comparison), "equal lengths")
-
   logical_op <- function(a, b) {
     declare(type(a = logical(2)), type(b = logical(4)))
     a & b
   }
   expect_error(quick(logical_op), "equal lengths")
-
   modulo <- function(a, b) {
     declare(type(a = integer(2)), type(b = integer(4)))
     a %% b
@@ -115,7 +108,6 @@ test_that("scalar broadcast rejects empty array operands", {
   }
   expect_error(quick(known_left), "equal lengths")
   expect_error(quick(known_right), "equal lengths")
-
   symbolic <- function(x) {
     declare(type(x = double(NA)))
     x + 1
@@ -131,14 +123,12 @@ test_that("elementwise guards evaluate operands before reporting errors", {
   }
   qfn <- quick(fn)
   mat <- matrix(as.double(1:4), 2, 2)
-
   set.seed(101)
   suppressWarnings(fn(mat))
   expected_next <- runif(1)
   set.seed(101)
   expect_error(qfn(mat), "matrix first dimension")
   expect_identical(runif(1), expected_next)
-
   conditional <- function(mask) {
     declare(type(mask = logical(NA)))
     ifelse(mask, runif(3), 0)
@@ -164,7 +154,6 @@ test_that("nested elementwise operands preserve left-to-right evaluation", {
   set.seed(104)
   expect_error(qmismatch(c(1, 2), c(1, 2, 3)), "equal lengths")
   expect_identical(runif(1), expected_next)
-
   conformable <- function() {
     runif(3) - (runif(3) * 10)
   }
@@ -182,7 +171,6 @@ test_that("later effects cannot change earlier elementwise operands", {
     }
     x + bump()
   }
-
   expression <- function(x) {
     declare(type(x = double(1)))
     bump <- function() {
@@ -191,7 +179,6 @@ test_that("later effects cannot change earlier elementwise operands", {
     }
     (x * 2) + bump()
   }
-
   expect_quick_identical(bare, list(3))
   expect_quick_identical(expression, list(3))
 })
@@ -204,7 +191,6 @@ test_that("c() fixes fill lengths before evaluating later arguments", {
     }
     c(integer(n), bump())
   }
-
   expect_quick_identical(fn, list(2L))
 })
 test_that("subscript operands preserve left-to-right evaluation", {
@@ -214,7 +200,6 @@ test_that("subscript operands preserve left-to-right evaluation", {
   }
   qfn <- quick(fn)
   x <- matrix(c(11, 21, 12, 22), 2, 2)
-
   set.seed(106)
   expected <- fn(x)
   expected_next <- runif(1)
@@ -264,7 +249,6 @@ test_that("vector-matrix ops reject zero-column results", {
     vec + mat
   }
   expect_error(quick(known), "matrix first dimension")
-
   symbolic <- function(vec, mat) {
     declare(type(vec = double(n)), type(mat = double(n, k)))
     vec + mat
@@ -295,7 +279,6 @@ test_that("known-shape expression operands stay fused", {
     )
     (a + b) + c
   }
-
   fsub <- r2f(fn)
   expect_false(grepl("btmp", as.character(fsub), fixed = TRUE))
   expect_quick_identical(
@@ -317,14 +300,12 @@ test_that("1x1 matrix operands follow R: arithmetic scalarizes, strict ops rejec
   a <- c(1.5, 2.5, 3.5)
   b <- matrix(TRUE)
   expect_identical(qfn(a, b), suppressWarnings(cast_fn(a, b)))
-
   div_fn <- function(a, b) {
     declare(type(a = double(3)), type(b = logical(1, 1)))
     a / b
   }
   qdiv <- quick(div_fn)
   expect_identical(qdiv(a, b), suppressWarnings(div_fn(a, b)))
-
   # Comparisons and & | do not get R's length-1 array recycling: R errors
   # ("dims [product 1] do not match the length of object"). Scalarizing
   # here would answer where R refuses, so the 1x1 is treated as an
@@ -334,13 +315,11 @@ test_that("1x1 matrix operands follow R: arithmetic scalarizes, strict ops rejec
     a < b
   }
   expect_error(quick(cmp_fn), "matrix first dimension")
-
   and_fn <- function(a, b) {
     declare(type(a = logical(3)), type(b = logical(1, 1)))
     a & b
   }
   expect_error(quick(and_fn), "matrix first dimension")
-
   # Unknown vector length against a 1x1: strict ops guard at runtime
   # (length 1 conforms, like R; anything longer is the R error above)
   sym_cmp <- function(a, b) {
@@ -357,7 +336,6 @@ test_that("1x1 matrix arithmetic rejects known empty vectors", {
     m + x
   }
   expect_error(quick(matrix_left), "matrix first dimension")
-
   matrix_right <- function(x, m) {
     declare(type(x = double(0)), type(m = double(1, 1)))
     x + m
@@ -388,7 +366,6 @@ test_that("1x1 matrix with a symbolic-length vector keeps R's shape", {
   qfn <- quick(fn)
   expect_identical(qfn(matrix(2), 3), fn(matrix(2), 3))
   expect_error(qfn(matrix(2), c(1, 2, 3)), "matrix first dimension")
-
   rev_fn <- function(x, m) {
     declare(type(x = double(n)), type(m = double(1, 1)))
     x + m
@@ -403,7 +380,6 @@ test_that("fill constructors spread inside c()", {
     c(numeric(2), x)
   }
   expect_quick_identical(known, list(as.double(1:3)))
-
   symbolic <- function(x, k) {
     declare(type(x = double(3)), type(k = double(1)))
     c(numeric(k), x)
@@ -414,19 +390,16 @@ test_that("fill constructors spread inside c()", {
   for (k in c(-1, Inf, NaN, 2147483648)) {
     expect_error(qsymbolic(as.double(1:3), k), "invalid 'length' argument")
   }
-
   promoted <- function(x) {
     declare(type(x = double(1)))
     c(integer(2), x)
   }
   expect_quick_identical(promoted, list(1.5))
-
   logical_fill <- function(x) {
     declare(type(x = logical(2)))
     c(logical(3), x)
   }
   expect_quick_identical(logical_fill, list(c(TRUE, FALSE)))
-
   parenthesized <- function(x) {
     declare(type(x = double(2)))
     c((numeric)(2), x)
@@ -443,7 +416,6 @@ test_that("parallel fill constructors privatize implied-do indices", {
     }
     out
   }
-
   fsub <- as.character(r2f(fn))
   expect_match(fsub, "!$omp parallel do private(tmp1_)", fixed = TRUE)
 })
@@ -451,7 +423,6 @@ test_that("c() evaluates effectful arguments from left to right", {
   fn <- function() {
     c(runif(2), runif(2) + 1)
   }
-
   set.seed(913)
   expected <- fn()
   set.seed(913)
@@ -500,7 +471,6 @@ test_that("local closures can shadow fill constructors in c() and array()", {
     list(combined = combined, reshaped = reshaped)
   }
   expect_quick_identical(numeric_shadow, list())
-
   integer_shadow <- function() {
     integer <- function() c(1L, 2L)
     combined <- c(integer(), 3L)
@@ -508,7 +478,6 @@ test_that("local closures can shadow fill constructors in c() and array()", {
     list(combined = combined, reshaped = reshaped)
   }
   expect_quick_identical(integer_shadow, list())
-
   double_shadow <- function() {
     double <- function() c(1, 2)
     combined <- c(double(), 3)
@@ -516,7 +485,6 @@ test_that("local closures can shadow fill constructors in c() and array()", {
     list(combined = combined, reshaped = reshaped)
   }
   expect_quick_identical(double_shadow, list())
-
   logical_shadow <- function() {
     logical <- function() c(1L, 2L)
     combined <- c(logical(), 3L)
@@ -534,14 +502,12 @@ test_that("fill constructors materialize where an array is required", {
     c(numeric(2) + 1, x)
   }
   expect_quick_identical(through_op, list(c(5, 6)))
-
   # Same leak as a silent wrong answer: sum() over a fill expression saw
   # one scalar instead of the filled length.
   reduced <- function() {
     sum(numeric(2) + 3)
   }
   expect_quick_identical(reduced, list())
-
   symbolic <- function(x, k) {
     declare(type(x = double(2)), type(k = integer(1)))
     c(integer(k) + 1L, x)
@@ -560,17 +526,14 @@ test_that("fill constructors materialize inside matrix()", {
     matrix(numeric(6), 3, 2)
   }
   expect_quick_identical(numeric_fill, list())
-
   integer_fill <- function() {
     matrix(integer(6), 3, 2)
   }
   expect_quick_identical(integer_fill, list())
-
   logical_fill <- function() {
     matrix(logical(6), 3, 2)
   }
   expect_quick_identical(logical_fill, list())
-
   assigned <- function() {
     x <- matrix(numeric(6), 3, 2)
     x
@@ -581,14 +544,12 @@ test_that("omitted fill lengths default to zero", {
   fn <- function() {
     c(numeric(), double(), integer(), logical(), 1, 2)
   }
-
   expect_quick_identical(fn, list())
 })
 test_that("array() rejects empty fills when the result would contain NA", {
   fn <- function() {
     array(numeric(), dim = c(1L, 2L))
   }
-
   qfn <- quick(fn)
   expect_error(
     qfn(),
@@ -600,14 +561,12 @@ test_that("array() recognizes parenthesized fill expressions", {
   fn <- function() {
     sum(array((numeric(2)), dim = 4))
   }
-
   expect_quick_identical(fn, list())
 })
 test_that("matrix() rejects empty fills when the result would contain NA", {
   fn <- function() {
     matrix(numeric(), nrow = 2L, ncol = 2L)
   }
-
   qfn <- quick(fn)
   expect_error(
     qfn(),
@@ -625,11 +584,9 @@ test_that("matrix() rejects every empty array-valued source", {
     matrix(x[x > 0], nrow = 2L, ncol = 2L)
   }
   message <- "NA values, which are not supported"
-
   qdirect <- quick(direct)
   expect_equal(qdirect(as.double(1:4)), direct(as.double(1:4)))
   expect_error(qdirect(double()), message, fixed = TRUE)
-
   qcomputed <- quick(computed)
   expect_equal(qcomputed(as.double(1:4)), computed(as.double(1:4)))
   expect_error(qcomputed(as.double(-4:-1)), message, fixed = TRUE)
@@ -638,14 +595,12 @@ test_that("array() allows empty fills for empty results", {
   fn <- function() {
     array(numeric(), dim = c(0L, 2L))
   }
-
   expect_quick_identical(fn, list())
 })
 test_that("matrix() allows empty fills for empty results", {
   fn <- function() {
     matrix(numeric(), nrow = 0L, ncol = 2L)
   }
-
   expect_quick_identical(fn, list())
 })
 test_that("matrix(scalar, m, n) materializes where an array is required", {
@@ -653,7 +608,6 @@ test_that("matrix(scalar, m, n) materializes where an array is required", {
     sum(matrix(2, 2, 3))
   }
   expect_quick_identical(reduced, list())
-
   transposed <- function() {
     t(matrix(1, 2, 3))
   }
@@ -679,7 +633,6 @@ test_that("constructors reject invalid extents before materializing", {
     }
   )
   bad_dims <- list(c(-1, 2), c(2, -1), c(Inf, 2), c(2147483648, 2))
-
   for (constructor in names(dynamic)) {
     message <- paste0(constructor, "() dimensions must be non-negative")
     expect_error(quick(static[[constructor]]), message, fixed = TRUE)
@@ -712,7 +665,6 @@ test_that("a closure's return expression materializes fills and matrix()", {
     x + zeros()
   }
   expect_quick_identical(fill, list(c(1, 2, 3)))
-
   mat <- function(x) {
     declare(type(x = double(2, 2)))
     ones <- function() matrix(1, 2, 2)
@@ -740,7 +692,6 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
   }
   expect_false(grepl("allocate", r2f(broadcast), fixed = TRUE))
   expect_quick_identical(broadcast, list(matrix(as.double(1:4), 2, 2), 2L))
-
   scalar_var_data <- function(x, s, n) {
     declare(type(x = double(n, n)), type(s = double(1)), type(n = integer(1)))
     x * matrix(s, n, n)
@@ -749,14 +700,12 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
     scalar_var_data,
     list(matrix(as.double(1:4), 2, 2), 3, 2L)
   )
-
   # The claimed dims still participate in the conformability contract.
   static_mismatch <- function(x) {
     declare(type(x = double(2, 2)))
     x + matrix(1, 3, 3)
   }
   expect_error(quick(static_mismatch), "matching dimensions")
-
   symbolic <- function(x, k) {
     declare(type(x = double(2, 2)), type(k = integer(1)))
     x + matrix(1, k, k)
@@ -770,7 +719,6 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
     q_symbolic(matrix(as.double(1:4), 2, 2), 2L),
     symbolic(matrix(as.double(1:4), 2, 2), 2L)
   )
-
   numeric_dim <- function(x, n) {
     declare(type(x = double(2, 2)), type(n = double(1)))
     x + matrix(1, n, 2)
@@ -779,7 +727,6 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
     numeric_dim,
     list(matrix(as.double(1:4), 2, 2), 2.5)
   )
-
   # Two fills meeting each other still materialize (no scalar result
   # with claimed array dims may escape).
   both_fills <- function(n) {
@@ -787,7 +734,6 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
     sum(matrix(2, n, n) + matrix(3, n, n))
   }
   expect_quick_identical(both_fills, list(2L))
-
   # A vector operand keeps the vector-matrix reshape rule.
   vec_operand <- function(v) {
     declare(type(v = double(2)))
@@ -802,7 +748,6 @@ test_that("elementwise matrix fills respect a local matrix closure", {
     matrix <- function(data, nrow, ncol) data + 1
     matrix(1, 2, 2) + x
   }
-
   expect_quick_identical(fn, list(matrix(as.double(1:4), 2, 2)))
 })
 test_that("a left matrix fill is evaluated before its right operand", {
@@ -820,7 +765,6 @@ test_that("a left matrix fill is evaluated before its right operand", {
     out <- matrix(s, n, n) + bump()
     out
   }
-
   expect_quick_identical(fn, list(matrix(as.double(1:4), 2, 2), 1, 2L))
 })
 test_that("matrix fill operands preserve evaluation order", {
@@ -832,9 +776,7 @@ test_that("matrix fill operands preserve evaluation order", {
     }
     matrix(1, n, 1) + bump()
   }
-
   expect_quick_identical(fn, list(2L))
-
   right_fill <- function(x) {
     declare(type(x = double(2, 2)))
     bump <- function() {
@@ -862,7 +804,6 @@ test_that("integer-backed logical matrix fills materialize portably", {
     declare(type(flag = logical(1)))
     !matrix(rev(flag), 2, 2)
   }
-
   code <- as.character(r2f(fn))
   expect_match(
     code,
@@ -876,7 +817,6 @@ test_that("local closure calls reject effectful argument promises", {
     subtract <- function(a, b) a - b
     subtract(runif(1), runif(1))
   }
-
   expect_error(
     quick(fn),
     "local closure calls only support pure argument expressions",
