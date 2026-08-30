@@ -579,6 +579,14 @@ test_that("array() rejects empty fills when the result would contain NA", {
   )
 })
 
+test_that("array() recognizes parenthesized fill expressions", {
+  fn <- function() {
+    sum(array((numeric(2)), dim = 4))
+  }
+
+  expect_quick_identical(fn, list())
+})
+
 test_that("matrix() rejects empty fills when the result would contain NA", {
   fn <- function() {
     matrix(numeric(), nrow = 2L, ncol = 2L)
