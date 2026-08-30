@@ -414,7 +414,10 @@ gemm <- function(
     return(out)
   }
 
-  output_var <- hoist$declare_tmp(mode = "double", dims = list(m, n))
+  output_var <- hoist$declare_tmp_at_point(
+    mode = "double",
+    dims = list(m, n)
+  )
   blas_call <- glue(
     "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {output_var@name}, {blas_int(ldc_expr)})"
   )
