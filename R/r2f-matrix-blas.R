@@ -471,7 +471,7 @@ gemv <- function(
     return(out)
   }
   # Else assign to a temporary variable
-  output_var <- hoist$declare_tmp(mode = "double", dims = out_dims)
+  output_var <- hoist$declare_tmp_at_point(mode = "double", dims = out_dims)
   blas_call <- glue(
     "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {output_var@name}, 1_c_int)"
   )
