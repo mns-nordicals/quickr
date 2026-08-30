@@ -190,6 +190,29 @@ test_that("short-circuited nested operands defer length errors", {
   expect_error(quick(reached_and)(), "requires length-1 operands")
 })
 
+test_that("short-circuited unresolved names are deferred", {
+  skipped_and <- function() {
+    FALSE && missing_name
+  }
+  skipped_or <- function() {
+    TRUE || missing_name
+  }
+  reached_and <- function() {
+    TRUE && missing_name
+  }
+  reached_or <- function() {
+    FALSE || missing_name
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_quick_identical(skipped_or, list())
+
+  qand <- quick(reached_and)
+  expect_error(qand(), "`&&` requires logical operands", fixed = TRUE)
+  qor <- quick(reached_or)
+  expect_error(qor(), "`||` requires logical operands", fixed = TRUE)
+})
+
 test_that("short-circuited division is not evaluated eagerly", {
   skipped_and <- function(x) {
     declare(type(x = double(1)))

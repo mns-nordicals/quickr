@@ -181,10 +181,15 @@ scalarize_andor_operand <- function(
   op,
   hoist,
   scope,
-  defer_length_error = FALSE
+  defer_error = FALSE
 ) {
   if (is.null(x@value) || !identical(x@value@mode, "logical")) {
-    stop("`", op, "` requires logical operands", call. = FALSE)
+    message <- paste0("`", op, "` requires logical operands")
+    if (!defer_error) {
+      stop(message, call. = FALSE)
+    }
+    emit_quickr_error_if(".true.", message, hoist, scope)
+    return(Fortran(".false.", Variable("logical")))
   }
 
   message <- paste0(
@@ -205,7 +210,7 @@ scalarize_andor_operand <- function(
     logical(1L)
   ))
   if (length_known_bad) {
-    if (!defer_length_error) {
+    if (!defer_error) {
       stop(message, call. = FALSE)
     }
     emit_quickr_error_if(".true.", message, hoist, scope)
@@ -249,9 +254,9 @@ is_pure_scalar_condition <- function(e, scope) {
   if (is.symbol(e)) {
     var <- get0(as.character(e), scope)
     return(
-      !inherits(var, Variable) ||
-        passes_as_scalar(var) ||
-        var@rank > 0L && all(vapply(var@dims, dim_is_one, logical(1L)))
+      inherits(var, Variable) &&
+        (passes_as_scalar(var) ||
+          var@rank > 0L && all(vapply(var@dims, dim_is_one, logical(1L))))
     )
   }
   if (is.atomic(e) && length(e) == 1L) {
@@ -361,7 +366,7 @@ compile_andor <- function(
   scope,
   ...,
   hoist = NULL,
-  defer_andor_length_error = FALSE
+  defer_andor_error = FALSE
 ) {
   op <- last(list(...)$calls)
   stopifnot(length(args) == 2L, op %in% c("&&", "||"))
@@ -372,14 +377,14 @@ compile_andor <- function(
     scope,
     ...,
     hoist = hoist,
-    defer_andor_length_error = defer_andor_length_error
+    defer_andor_error = defer_andor_error
   )
   left <- scalarize_andor_operand(
     left,
     op,
     hoist,
     scope,
-    defer_length_error = defer_andor_length_error
+    defer_error = defer_andor_error
   )
 
   f <- if (op == "&&") ".and." else ".or."
@@ -397,14 +402,14 @@ compile_andor <- function(
       scope,
       ...,
       hoist = hoist,
-      defer_andor_length_error = defer_andor_length_error
+      defer_andor_error = defer_andor_error
     )
     right <- scalarize_andor_operand(
       right,
       op,
       hoist,
       scope,
-      defer_length_error = defer_andor_length_error
+      defer_error = defer_andor_error
     )
     return(Fortran(glue("{left} {f} {right}"), Variable("logical")))
   }
@@ -430,7 +435,7 @@ compile_andor <- function(
       scope,
       ...,
       hoist = sub,
-      defer_andor_length_error = TRUE
+      defer_andor_error = TRUE
     ),
     quickr_deferred_branch_error = function(error) {
       deferred_error <<- conditionMessage(error)
@@ -443,7 +448,7 @@ compile_andor <- function(
       op,
       sub,
       scope,
-      defer_length_error = TRUE
+      defer_error = TRUE
     )
   } else {
     emit_quickr_error_if(".true.", deferred_error, sub, scope)
