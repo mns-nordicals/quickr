@@ -284,8 +284,14 @@ can_use_output <- function(
   !output_name %in% disallowed
 }
 
-allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
+allocate_reusable_local_output_at_point <- function(
+  dest,
+  scope,
+  hoist,
+  dims = dest@dims
+) {
   stopifnot(inherits(dest, Variable), inherits(scope, "quickr_scope"))
+  stopifnot(is.null(dims) || is.list(dims))
   assert_hoist_env(hoist)
 
   if (
@@ -326,7 +332,7 @@ allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
     )
   }
   hoist$emit(glue(
-    "if (.not. allocated({dest@name})) allocate({dest@name}({dims2f(dest@dims, scope)}))"
+    "if (.not. allocated({dest@name})) allocate({dest@name}({dims2f(dims, scope)}))"
   ))
   invisible(dest)
 }

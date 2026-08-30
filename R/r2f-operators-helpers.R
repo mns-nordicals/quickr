@@ -159,7 +159,23 @@ promote_arith_pair <- function(left, right, context = "arithmetic") {
 # fill handling below.
 lower_operands_in_order <- function(args, scope, ..., hoist) {
   stopifnot(!is.null(hoist))
-  lapply(args, lower_r2f_operand_in_order, scope, ..., hoist = hoist)
+  out <- vector("list", length(args))
+  names(out) <- names(args)
+  for (i in seq_along(args)) {
+    later_args <- if (i < length(args)) {
+      args[seq.int(i + 1L, length(args))]
+    } else {
+      list()
+    }
+    out[[i]] <- lower_r2f_operand_in_order(
+      args[[i]],
+      scope,
+      ...,
+      hoist = hoist,
+      later_args = later_args
+    )
+  }
+  out
 }
 
 # Match `matrix(<scalar>, nrow, ncol)`: data a length-1 literal or a
@@ -298,7 +314,7 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
     return(if (j == 1L) out else rev(out))
   }
 
-  lapply(args, lower_one)
+  lower_operands_in_order(args, scope, ..., hoist = hoist)
 }
 
 # Check if a dimension expression equals 1.

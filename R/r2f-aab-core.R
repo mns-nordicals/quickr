@@ -232,21 +232,32 @@ capture_hoist <- function(hoist) {
 # actual arguments before the call, so repeating an expression duplicates
 # its side effects (e.g. RNG state via runif()) -- which names and literals
 # don't have.
-hoist_unless_name <- function(x, hoist, allocate_at_point = FALSE) {
+hoist_unless_name <- function(
+  x,
+  hoist,
+  allocate_at_point = FALSE,
+  force = FALSE
+) {
   stopifnot(
     inherits(x, Fortran),
     inherits(x@value, Variable),
-    is_bool(allocate_at_point)
+    is_bool(allocate_at_point),
+    is_bool(force)
   )
   code <- trimws(as.character(x))
-  if (!is.null(x@value@name) && identical(code, x@value@name)) {
+  if (
+    !force &&
+      !is.null(x@value@name) &&
+      identical(code, x@value@name)
+  ) {
     if (allocate_at_point) {
       hoist$allocate_tmp_at_point(x@value)
     }
     return(x)
   }
   if (
-    passes_as_scalar(x@value) &&
+    !force &&
+      passes_as_scalar(x@value) &&
       grepl("^-?[0-9]+(\\.[0-9]+)?(_c_(int|double))?$", code)
   ) {
     return(x)
@@ -303,20 +314,59 @@ finish_captured_operand <- function(operand, captured_hoist, hoist) {
   operand
 }
 
+snapshot_operand_before_later_effects <- function(
+  operand,
+  arg,
+  later_args,
+  scope,
+  hoist
+) {
+  stopifnot(is.list(later_args), inherits(scope, "quickr_scope"))
+  if (
+    !length(later_args) ||
+      all(vapply(
+        later_args,
+        r2f_expression_is_pure,
+        logical(1L),
+        scope = scope
+      )) ||
+      is.null(arg) ||
+      is_scalar_atomic(arg) ||
+      !inherits(operand@value, Variable)
+  ) {
+    return(operand)
+  }
+  hoist_unless_name(
+    operand,
+    hoist,
+    allocate_at_point = TRUE,
+    force = TRUE
+  )
+}
+
 lower_r2f_operand_in_order <- function(
   arg,
   scope,
   ...,
   hoist,
+  later_args = list(),
   reject_runtime_guard = FALSE,
   runtime_guard_message = NULL
 ) {
   stopifnot(
+    is.list(later_args),
     is_bool(reject_runtime_guard),
     !reject_runtime_guard || is_string(runtime_guard_message)
   )
   if (is.symbol(arg) || is_scalar_atomic(arg)) {
-    return(r2f(arg, scope, ..., hoist = hoist))
+    operand <- r2f(arg, scope, ..., hoist = hoist)
+    return(snapshot_operand_before_later_effects(
+      operand,
+      arg,
+      later_args,
+      scope,
+      hoist
+    ))
   }
 
   captured_hoist <- capture_hoist(hoist)
@@ -324,7 +374,14 @@ lower_r2f_operand_in_order <- function(
   if (reject_runtime_guard && captured_hoist$contains_runtime_guard()) {
     stop(runtime_guard_message, call. = FALSE)
   }
-  finish_captured_operand(operand, captured_hoist, hoist)
+  operand <- finish_captured_operand(operand, captured_hoist, hoist)
+  snapshot_operand_before_later_effects(
+    operand,
+    arg,
+    later_args,
+    scope,
+    hoist
+  )
 }
 
 
