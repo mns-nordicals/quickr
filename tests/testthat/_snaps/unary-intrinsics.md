@@ -2078,14 +2078,15 @@
         ! manifest end
       
         allocate(y(x__len_))
-        allocate(tmp1_(x__len_))
       
       
         y = (.not. (x/=0))
         if (any(y)) then
+          if (.not. allocated(tmp1_)) allocate(tmp1_(x__len_))
           where (y) tmp1_ = 1_c_int
         end if
         if (any(.not. y)) then
+          if (.not. allocated(tmp1_)) allocate(tmp1_(x__len_))
           where (.not. y) tmp1_ = 0_c_int
         end if
         out = tmp1_
