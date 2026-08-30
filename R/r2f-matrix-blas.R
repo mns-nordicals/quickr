@@ -326,6 +326,15 @@ allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
     return(invisible(dest))
   }
 
+  initialized_local_names <- scope_get(
+    scope,
+    "initialized_local_names",
+    character()
+  )
+  if (tolower(dest@name) %in% tolower(initialized_local_names)) {
+    return(invisible(dest))
+  }
+
   point_allocated <- scope_get(
     scope,
     "point_allocated_local_names",
