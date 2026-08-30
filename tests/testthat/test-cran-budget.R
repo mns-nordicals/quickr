@@ -15,7 +15,10 @@ test_that("non-smoke test files skip on CRAN", {
   always_run_files <- c(
     "test-blas-guards.R",
     "test-conformability-grid.R",
+    "test-ifelse.R",
     "test-logical.R",
+    "test-matrix-inference.R",
+    "test-matrix-mul.R",
     "test-reduction-scalars.R",
     "test-recycling.R"
   )
