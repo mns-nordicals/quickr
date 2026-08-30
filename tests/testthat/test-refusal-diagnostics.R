@@ -179,6 +179,15 @@ test_that("seq_len refuses negative bounds", {
   expect_identical(qvalue(3L), value(3L))
   expect_error(qvalue(-1L), message, fixed = TRUE)
 })
+test_that("logical PACK masks require matching extents", {
+  fn <- function(x, pred) {
+    declare(type(x = double(n)), type(pred = logical(m)))
+    length(x[pred])
+  }
+  qfn <- quick(fn)
+  expect_identical(qfn(as.double(1:4), c(TRUE, FALSE, TRUE, FALSE)), 2L)
+  expect_error(qfn(as.double(1:4), c(TRUE, FALSE)), "logical mask extent")
+})
 test_that("parallel loops refuse RNG calls", {
   parallel_for <- function(n, out) {
     declare(type(n = integer(1)), type(out = double(n)))
