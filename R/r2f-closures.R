@@ -203,12 +203,26 @@ compile_internal_subroutine <- function(
   if (length(optional_args)) {
     unsafe <- character()
     for (nm in optional_args) {
-      used <- any(map_lgl(stmts, optional_arg_used, nm = nm))
+      used <- any(map_lgl(
+        stmts,
+        optional_arg_used,
+        nm = nm,
+        scope = proc_scope
+      ))
       if (!used) {
         next
       }
-      missing_init <- any(map_lgl(stmts, optional_arg_missing_init, nm = nm))
-      assigned_before_use <- optional_arg_assigned_before_use(stmts, nm = nm)
+      missing_init <- any(map_lgl(
+        stmts,
+        optional_arg_missing_init,
+        nm = nm,
+        scope = proc_scope
+      ))
+      assigned_before_use <- optional_arg_assigned_before_use(
+        stmts,
+        nm = nm,
+        scope = proc_scope
+      )
       if (!missing_init && !assigned_before_use) {
         unsafe <- c(unsafe, nm)
       }
@@ -449,7 +463,10 @@ closure_last_expr <- function(fun) {
   }
 }
 
-optional_arg_used <- function(expr, nm) {
+optional_arg_used <- function(expr, nm, scope) {
+  stopifnot(inherits(scope, "quickr_scope"))
+  builtin_is_null <- !inherits(scope[["is.null"]], LocalClosure)
+
   if (is.symbol(expr)) {
     return(identical(as.character(expr), nm))
   }
@@ -459,7 +476,8 @@ optional_arg_used <- function(expr, nm) {
   }
 
   if (
-    is_call(expr, quote(`||`)) &&
+    builtin_is_null &&
+      is_call(expr, quote(`||`)) &&
       is_call(expr[[2L]], quote(is.null)) &&
       length(expr[[2L]]) == 2L &&
       is.symbol(expr[[2L]][[2L]]) &&
@@ -469,7 +487,8 @@ optional_arg_used <- function(expr, nm) {
   }
 
   if (
-    is_call(expr, quote(`&&`)) &&
+    builtin_is_null &&
+      is_call(expr, quote(`&&`)) &&
       is_call(expr[[2L]], quote(`!`)) &&
       length(expr[[2L]]) == 2L &&
       is_call(expr[[2L]][[2L]], quote(is.null)) &&
@@ -481,7 +500,8 @@ optional_arg_used <- function(expr, nm) {
   }
 
   if (
-    is_call(expr, quote(is.null)) &&
+    builtin_is_null &&
+      is_call(expr, quote(is.null)) &&
       length(expr) == 2L &&
       is.symbol(expr[[2L]]) &&
       identical(as.character(expr[[2L]]), nm)
@@ -490,7 +510,8 @@ optional_arg_used <- function(expr, nm) {
   }
 
   if (
-    is_call(expr, quote(`!`)) &&
+    builtin_is_null &&
+      is_call(expr, quote(`!`)) &&
       length(expr) == 2L &&
       is_call(expr[[2L]], quote(is.null)) &&
       length(expr[[2L]]) == 2L &&
@@ -501,17 +522,25 @@ optional_arg_used <- function(expr, nm) {
   }
 
   if (is_call(expr, quote(`{`))) {
-    return(any(map_lgl(as.list(expr)[-1L], optional_arg_used, nm = nm)))
+    return(any(map_lgl(
+      as.list(expr)[-1L],
+      optional_arg_used,
+      nm = nm,
+      scope = scope
+    )))
   }
 
   if (is_call(expr, quote(`if`))) {
-    if (optional_arg_used(expr[[2L]], nm = nm)) {
+    if (optional_arg_used(expr[[2L]], nm = nm, scope = scope)) {
       return(TRUE)
     }
-    if (optional_arg_used(expr[[3L]], nm = nm)) {
+    if (optional_arg_used(expr[[3L]], nm = nm, scope = scope)) {
       return(TRUE)
     }
-    if (length(expr) == 4L && optional_arg_used(expr[[4L]], nm = nm)) {
+    if (
+      length(expr) == 4L &&
+        optional_arg_used(expr[[4L]], nm = nm, scope = scope)
+    ) {
       return(TRUE)
     }
     return(FALSE)
@@ -522,10 +551,15 @@ optional_arg_used <- function(expr, nm) {
       is_call(expr, quote(`=`)) ||
       is_call(expr, quote(`<<-`))
   ) {
-    return(optional_arg_used(expr[[3L]], nm = nm))
+    return(optional_arg_used(expr[[3L]], nm = nm, scope = scope))
   }
 
-  any(map_lgl(as.list(expr)[-1L], optional_arg_used, nm = nm))
+  any(map_lgl(
+    as.list(expr)[-1L],
+    optional_arg_used,
+    nm = nm,
+    scope = scope
+  ))
 }
 
 optional_arg_assigned <- function(expr, nm) {
@@ -565,13 +599,21 @@ optional_arg_assigned <- function(expr, nm) {
   any(map_lgl(as.list(expr)[-1L], optional_arg_assigned, nm = nm))
 }
 
-optional_arg_missing_init <- function(expr, nm) {
+optional_arg_missing_init <- function(expr, nm, scope) {
+  stopifnot(inherits(scope, "quickr_scope"))
+  builtin_is_null <- !inherits(scope[["is.null"]], LocalClosure)
+
   if (!is.call(expr)) {
     return(FALSE)
   }
 
   if (is_call(expr, quote(`{`))) {
-    return(any(map_lgl(as.list(expr)[-1L], optional_arg_missing_init, nm = nm)))
+    return(any(map_lgl(
+      as.list(expr)[-1L],
+      optional_arg_missing_init,
+      nm = nm,
+      scope = scope
+    )))
   }
 
   if (is_call(expr, quote(`if`))) {
@@ -580,7 +622,8 @@ optional_arg_missing_init <- function(expr, nm) {
     else_branch <- if (length(expr) == 4L) expr[[4L]] else NULL
 
     if (
-      is_call(cond, quote(is.null)) &&
+      builtin_is_null &&
+        is_call(cond, quote(is.null)) &&
         length(cond) == 2L &&
         is.symbol(cond[[2L]]) &&
         identical(as.character(cond[[2L]]), nm)
@@ -589,7 +632,8 @@ optional_arg_missing_init <- function(expr, nm) {
     }
 
     if (
-      is_call(cond, quote(`!`)) &&
+      builtin_is_null &&
+        is_call(cond, quote(`!`)) &&
         length(cond) == 2L &&
         is_call(cond[[2L]], quote(is.null)) &&
         length(cond[[2L]]) == 2L &&
@@ -604,12 +648,12 @@ optional_arg_missing_init <- function(expr, nm) {
       }
     }
 
-    if (optional_arg_missing_init(then_branch, nm = nm)) {
+    if (optional_arg_missing_init(then_branch, nm = nm, scope = scope)) {
       return(TRUE)
     }
     if (
       !is.null(else_branch) &&
-        optional_arg_missing_init(else_branch, nm = nm)
+        optional_arg_missing_init(else_branch, nm = nm, scope = scope)
     ) {
       return(TRUE)
     }
@@ -619,8 +663,12 @@ optional_arg_missing_init <- function(expr, nm) {
   FALSE
 }
 
-optional_arg_assigned_before_use <- function(stmts, nm) {
-  stopifnot(is.list(stmts), is_string(nm))
+optional_arg_assigned_before_use <- function(stmts, nm, scope) {
+  stopifnot(
+    is.list(stmts),
+    is_string(nm),
+    inherits(scope, "quickr_scope")
+  )
   assigned <- FALSE
 
   scan_expr <- function(expr, assigned) {
@@ -646,7 +694,7 @@ optional_arg_assigned_before_use <- function(stmts, nm) {
       }
     }
 
-    if (optional_arg_used(expr, nm = nm)) {
+    if (optional_arg_used(expr, nm = nm, scope = scope)) {
       return(list(assigned = assigned, used_before = !assigned))
     }
 
