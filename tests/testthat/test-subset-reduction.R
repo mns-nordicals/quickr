@@ -261,6 +261,31 @@ test_that("any/all reduction intrinsics cover scalar, multi-arg, and mask cases"
   )
 })
 
+test_that("multi-argument any/all evaluate arguments before later guards", {
+  any_fn <- function(x, y) {
+    declare(type(x = double(n)), type(y = double(m)))
+    any(runif(1) > 0, (x + y) > 0)
+  }
+  all_fn <- function(x, y) {
+    declare(type(x = double(n)), type(y = double(m)))
+    all(runif(1) > 0, (x + y) > 0)
+  }
+
+  for (fn in list(any_fn, all_fn)) {
+    qfn <- quick(fn)
+    set.seed(829)
+    runif(1)
+    expected_seed <- .Random.seed
+
+    set.seed(829)
+    expect_error(
+      qfn(c(1, 2), c(1, 2, 3)),
+      "equal lengths",
+      fixed = TRUE
+    )
+    expect_identical(.Random.seed, expected_seed)
+  }
+})
 
 test_that("1x1 subsetting keeps dims and C bridge builds", {
   fn <- function(m) {
