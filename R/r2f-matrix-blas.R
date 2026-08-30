@@ -1176,10 +1176,12 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   out <- resolve_blas_output(
     dest,
     hoist,
+    scope = scope,
     input_names = A_name,
     expected_dims = list(n, n),
     context = context,
-    allow_alias = A_name
+    allow_alias = A_name,
+    allocate_at_point = TRUE
   )
 
   hoist$emit(glue("{out$name} = {A_name}"))
@@ -1228,10 +1230,12 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   out <- resolve_blas_output(
     dest,
     hoist,
+    scope = scope,
     input_names = A_name,
     expected_dims = list(n, n),
     context = context,
-    allow_alias = A_name
+    allow_alias = A_name,
+    allocate_at_point = TRUE
   )
 
   hoist$emit(glue("{out$name} = {A_name}"))
@@ -1274,10 +1278,12 @@ lapack_chol2inv <- function(
   out <- resolve_blas_output(
     dest,
     hoist,
+    scope = scope,
     input_names = R_name,
     expected_dims = list(n, n),
     context = context,
-    allow_alias = R_name
+    allow_alias = R_name,
+    allocate_at_point = TRUE
   )
 
   hoist$emit(glue("{out$name} = {R_name}"))
