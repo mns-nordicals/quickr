@@ -196,6 +196,22 @@ test_that("ifelse defers shape errors in unselected branches", {
   )
 })
 
+test_that("ifelse defers empty extrema errors in unselected branches", {
+  skipped <- function() {
+    ifelse(FALSE, min(numeric()), 0)
+  }
+  reached <- function() {
+    ifelse(TRUE, min(numeric()), 0)
+  }
+
+  expect_quick_identical(skipped, list())
+  expect_error(
+    quick(reached)(),
+    "min()/max() of empty inputs are not supported",
+    fixed = TRUE
+  )
+})
+
 test_that("ifelse defers mode errors in unselected branches", {
   skipped <- function() {
     ifelse(FALSE, 1L & 1L, FALSE)

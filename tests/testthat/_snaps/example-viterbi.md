@@ -115,7 +115,23 @@
       
         num_states = size(states)
         num_steps = size(observations)
+        if (states__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
+        if (observations__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
         trellis = 0.0_c_double
+        if (states__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
+        if (observations__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
         backpointer = 0_c_int
       if (size(initial_probs, kind=c_ptrdiff_t) == 0 .or. size(initial_probs, kind=c_ptrdiff_t) /= size(emission_probs(:,&
       & observations(1_c_int)), kind=c_ptrdiff_t)) then
@@ -133,6 +149,10 @@
               return
             end if
             probabilities = (trellis(:, (step - 1_c_int)) * transition_probs(:, current_state))
+            if (size(probabilities, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("min()/max() of empty inputs are not supported")
+              return
+            end if
             trellis(current_state, step) = (maxval(probabilities) * emission_probs(current_state, observations(step)))
             backpointer(current_state, step) = maxloc(probabilities, 1)
           end do
@@ -370,7 +390,23 @@
         allocate(path(observations__len_))
       
       
+        if (states__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
+        if (observations__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
         trellis = 0.0_c_double
+        if (states__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
+        if (observations__len_ < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
         backpointer = 0_c_int
       if (size(initial_probs, kind=c_ptrdiff_t) == 0 .or. size(initial_probs, kind=c_ptrdiff_t) /= size(emission_probs(:,&
       & observations(1_c_int)), kind=c_ptrdiff_t)) then
@@ -388,6 +424,10 @@
               return
             end if
             probabilities = (trellis(:, (step - 1_c_int)) * transition_probs(:, current_state))
+            if (size(probabilities, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("min()/max() of empty inputs are not supported")
+              return
+            end if
             trellis(current_state, step) = (maxval(probabilities) * emission_probs(current_state, observations(step)))
             backpointer(current_state, step) = maxloc(probabilities, 1)
           end do
