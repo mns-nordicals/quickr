@@ -216,17 +216,13 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     hoist$emit(indent(no$hoist$render(glue("{result@name} = {fsource}"))))
     hoist$emit("end if")
   } else {
+    allocate_reusable_local_output_at_point(result, scope, hoist)
     selectors <- list(mask, glue(".not. {mask}"))
     branches <- list(tsource, fsource)
     branch_hoists <- list(yes$hoist, no$hoist)
     for (i in seq_along(branches)) {
       selector <- selectors[[i]]
       hoist$emit(glue("if (any({selector})) then"))
-      allocate_reusable_local_output_at_point(
-        result,
-        scope,
-        branch_hoists[[i]]
-      )
       assignment <- glue(
         "where ({selector}) {result@name} = {branches[[i]]}"
       )

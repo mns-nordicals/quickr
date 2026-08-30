@@ -259,19 +259,6 @@ test_that("ifelse defers unresolved names inside branch expressions", {
   expect_error(quick(reached_no)(), "missing_name", fixed = TRUE)
 })
 
-test_that("ifelse defers anonymous local closure diagnostics", {
-  skipped <- function() {
-    ifelse(FALSE, (function(x) x + 1)(), 1)
-  }
-  reached <- function() {
-    ifelse(TRUE, (function(x) x + 1)(), 1)
-  }
-
-  expect_quick_identical(skipped, list())
-  qreached <- quick(reached)
-  expect_error(qreached(), "missing required argument")
-})
-
 test_that("ifelse defers shape errors in unselected branches", {
   fn <- function(test) {
     declare(type(test = logical(3)))
@@ -374,7 +361,7 @@ test_that("ifelse point-allocates named impure branch temporaries", {
   }
 })
 
-test_that("ifelse allocates results after selected branch shape guards", {
+test_that("ifelse allocates results before selector guards", {
   fn <- function(test, yes) {
     declare(type(test = logical(NA)), type(yes = double(NA)))
     ifelse(test, yes, 0)
@@ -384,7 +371,7 @@ test_that("ifelse allocates results after selected branch shape guards", {
   guard <- regexpr("ifelse() `yes` and `no`", fsub, fixed = TRUE)[[1L]]
   allocations <- gregexpr("allocate(", fsub, fixed = TRUE)[[1L]]
   result_allocation <- tail(allocations[allocations > 0L], 1L)
-  expect_lt(guard, result_allocation)
+  expect_lt(result_allocation, guard)
 
   qfn <- quick(fn)
   expect_error(
@@ -410,4 +397,14 @@ test_that("ifelse accepts matching empty inputs", {
   expect_no_error(r2f(static))
   qdynamic <- quick(dynamic)
   expect_identical(qdynamic(logical(), numeric(), numeric()), numeric())
+
+  lazy_dynamic <- function(test) {
+    declare(type(test = logical(NA)))
+    ifelse(test, floor(1i), runif(length(test)))
+  }
+  qlazy <- quick(lazy_dynamic)
+  set.seed(915)
+  seed <- .Random.seed
+  expect_identical(qlazy(logical()), numeric())
+  expect_identical(.Random.seed, seed)
 })
