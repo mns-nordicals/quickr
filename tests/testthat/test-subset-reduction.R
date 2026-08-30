@@ -73,6 +73,56 @@ test_that("reduction intrinsics cover scalar, multi-arg, and mask cases", {
   expect_quick_equal(prod_two, list(c(1, 2, 3), c(4, 5, 6)))
 })
 
+test_that("multi-argument reductions evaluate arguments in order", {
+  fn <- function(x) {
+    declare(type(x = double(n)))
+    max(runif(1), x + runif(3))
+  }
+  qfn <- quick(fn)
+
+  set.seed(472)
+  expected <- fn(c(1, 2, 3))
+  expected_next <- runif(1)
+
+  set.seed(472)
+  actual <- qfn(c(1, 2, 3))
+  actual_next <- runif(1)
+
+  expect_identical(actual, expected)
+  expect_identical(actual_next, expected_next)
+
+  set.seed(913)
+  expect_error(qfn(c(1, 2)), "elementwise vector operations")
+  actual_seed <- .Random.seed
+
+  set.seed(913)
+  runif(1)
+  runif(3)
+  expect_identical(actual_seed, .Random.seed)
+})
+
+test_that("multi-argument reductions snapshot scalars before later effects", {
+  min_fn <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 10
+      5
+    }
+    min(x, bump())
+  }
+  sum_fn <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 10
+      5
+    }
+    sum(x, bump())
+  }
+
+  expect_quick_identical(min_fn, list(1))
+  expect_quick_identical(sum_fn, list(1))
+})
+
 test_that("any/all reduction intrinsics cover scalar, multi-arg, and mask cases", {
   any_basic <- function(x) {
     declare(type(x = logical(NA)))

@@ -52,7 +52,12 @@ register_r2f_handler(
 
     empty_extrema_message <- "min()/max() of empty inputs are not supported"
 
-    reduce_arg <- function(arg, allow_empty = FALSE) {
+    reduce_arg <- function(
+      arg,
+      allow_empty = FALSE,
+      later_args = list()
+    ) {
+      stopifnot(is.list(later_args))
       captured_hoist <- capture_hoist(hoist)
       mask_hoist <- create_mask_hoist()
       dots <- list(...)
@@ -120,6 +125,13 @@ register_r2f_handler(
         Fortran(s, Variable(x@value@mode))
       }
 
+      out <- snapshot_operand_before_later_effects(
+        out,
+        arg,
+        later_args,
+        scope,
+        captured_hoist
+      )
       if (allow_empty) {
         return(list(
           value = out,
@@ -133,7 +145,13 @@ register_r2f_handler(
     if (length(args) == 1) {
       reduce_arg(args[[1]])
     } else if (call_name %in% c("min", "max")) {
-      reduced <- lapply(args, reduce_arg, allow_empty = TRUE)
+      reduced <- lapply(seq_along(args), function(i) {
+        reduce_arg(
+          args[[i]],
+          allow_empty = TRUE,
+          later_args = tail(args, -i)
+        )
+      })
       if (
         all(vapply(
           reduced,
@@ -220,7 +238,12 @@ register_r2f_handler(
       )
       Fortran(result@name, result)
     } else {
-      args <- lapply(args, reduce_arg)
+      args <- lapply(seq_along(args), function(i) {
+        reduce_arg(
+          args[[i]],
+          later_args = tail(args, -i)
+        )
+      })
       # Fortran's max/min require uniform argument types; cast every operand
       # whose mode differs from the join. The + / * spellings for sum/prod
       # don't strictly need it, but one code path beats two. Logical
