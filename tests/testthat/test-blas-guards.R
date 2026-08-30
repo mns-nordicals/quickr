@@ -337,6 +337,28 @@ test_that("square guards precede symbolic inverse and Cholesky allocations", {
   }
 })
 
+test_that("solve guards squareness before allocating system workspaces", {
+  fn <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(NA)))
+    sum(solve(a, b))
+  }
+
+  code <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1L]]
+  guard_line <- grep("solve requires a square matrix", code, fixed = TRUE)
+  allocation_lines <- grep("^ *allocate\\(", code)
+  expect_length(guard_line, 1L)
+  expect_length(allocation_lines, 3L)
+  expect_true(all(guard_line < allocation_lines))
+
+  qfn <- quick(fn)
+  expect_equal(qfn(diag(2), c(1, 2)), 3)
+  expect_error(
+    qfn(matrix(as.double(1:6), 2, 3), c(1, 2)),
+    "solve requires a square matrix",
+    fixed = TRUE
+  )
+})
+
 test_that("matrix-matrix %*% returns zeros for a known empty contraction", {
   fn <- function(a, b) {
     declare(type(a = double(2, 0)), type(b = double(0, 3)))
