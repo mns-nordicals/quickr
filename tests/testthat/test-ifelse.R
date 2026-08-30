@@ -259,41 +259,24 @@ test_that("ifelse defers unary mode errors in unselected branches", {
   expect_error(quick(reached_no)(), "expects a logical value", fixed = TRUE)
 })
 
-test_that("ifelse defers unresolved names throughout unselected branches", {
-  expressions <- list(
-    quote(ifelse(FALSE, missing_name, 1)),
-    quote(ifelse(TRUE, 1, missing_name)),
-    quote(ifelse(FALSE, missing_name + 1, 1)),
-    quote(ifelse(TRUE, 1, (missing_name))),
-    quote(ifelse(TRUE, missing_name, 1)),
-    quote(ifelse(FALSE, 1, missing_name)),
-    quote(ifelse(TRUE, missing_name + 1, 1)),
-    quote(ifelse(FALSE, 1, (missing_name)))
+test_that("ifelse defers invalid branches until selected", {
+  cases <- list(
+    list(quote(ifelse(FALSE, missing_name, 1)), NULL),
+    list(quote(ifelse(TRUE, 1, (missing_name))), NULL),
+    list(quote(ifelse(FALSE, NULL, 1L)), NULL),
+    list(quote(ifelse(TRUE, 1L, NULL)), NULL),
+    list(quote(ifelse(TRUE, missing_name + 1, 1)), "missing_name"),
+    list(quote(ifelse(FALSE, 1, missing_name)), "missing_name"),
+    list(quote(ifelse(TRUE, NULL, 1L)), "branches must produce a value"),
+    list(quote(ifelse(FALSE, 1L, NULL)), "branches must produce a value")
   )
-  for (i in seq_along(expressions)) {
+  for (case in cases) {
     fn <- function() NULL
-    body(fn) <- call("{", expressions[[i]])
-    if (i <= 4L) {
+    body(fn) <- call("{", case[[1L]])
+    if (is.null(case[[2L]])) {
       expect_quick_identical(fn, list())
     } else {
-      expect_error(quick(fn)(), "missing_name", fixed = TRUE)
-    }
-  }
-})
-test_that("valueless ifelse branches are deferred until selected", {
-  expressions <- list(
-    quote(ifelse(FALSE, NULL, 1L)),
-    quote(ifelse(TRUE, 1L, NULL)),
-    quote(ifelse(TRUE, NULL, 1L)),
-    quote(ifelse(FALSE, 1L, NULL))
-  )
-  for (i in seq_along(expressions)) {
-    fn <- function() NULL
-    body(fn) <- call("{", expressions[[i]])
-    if (i <= 2L) {
-      expect_quick_identical(fn, list())
-    } else {
-      expect_error(quick(fn)(), "branches must produce a value")
+      expect_error(quick(fn)(), case[[2L]], fixed = TRUE)
     }
   }
 

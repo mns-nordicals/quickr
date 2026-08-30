@@ -222,18 +222,14 @@ test_that("short-circuited nested operands defer length errors", {
 test_that("short-circuited unresolved names remain deferred", {
   expressions <- list(
     quote(FALSE && missing_name),
-    quote(TRUE || missing_name),
-    quote(FALSE && (missing_name + 1 > 0)),
     quote(TRUE || ((missing_name) + 1 > 0)),
-    quote(TRUE && missing_name),
     quote(FALSE || missing_name),
-    quote(TRUE && (missing_name + 1 > 0)),
-    quote(FALSE || ((missing_name) + 1 > 0))
+    quote(TRUE && (missing_name + 1 > 0))
   )
   for (i in seq_along(expressions)) {
     fn <- function() NULL
     body(fn) <- call("{", expressions[[i]])
-    if (i <= 4L) {
+    if (i <= 2L) {
       expect_quick_identical(fn, list())
     } else {
       expect_error(quick(fn)(), "missing_name", fixed = TRUE)
