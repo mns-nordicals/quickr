@@ -145,6 +145,11 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     branch <- tryCatch(
       {
         branch <- r2f(arg, scope, ..., hoist = sub)
+        if (!inherits(branch@value, Variable)) {
+          stop_deferred_branch_error(
+            "ifelse() branches must produce a value"
+          )
+        }
         if (
           !passes_as_scalar(mask@value) &&
             (!r2f_expression_is_pure(arg, scope) ||
