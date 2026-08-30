@@ -282,7 +282,10 @@ is_pure_scalar_condition <- function(e, scope) {
     )
   }
   if (is.atomic(e) && length(e) == 1L) {
-    return(typeof(e) %in% c("logical", "integer", "double", "complex"))
+    return(
+      !anyNA(e) &&
+        typeof(e) %in% c("logical", "integer", "double", "complex")
+    )
   }
   if (!is.call(e) || !is.symbol(e[[1L]])) {
     return(FALSE)
@@ -599,6 +602,10 @@ compile_andor <- function(
 ) {
   op <- last(list(...)$calls)
   stopifnot(length(args) == 2L, op %in% c("&&", "||"))
+  arg_names <- unlist(lapply(args, all.names, functions = TRUE))
+  if (any(c("<-", "=") %in% arg_names)) {
+    stop(op, " does not support assignment expressions", call. = FALSE)
+  }
 
   # R always evaluates the left operand: its hoists stay unconditional.
   left <- r2f(
