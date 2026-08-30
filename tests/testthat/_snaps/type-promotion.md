@@ -323,16 +323,31 @@
       
       
         block
-          integer(c_int) :: btmp1_
-          real(c_double) :: btmp2_
+          real(c_double) :: btmp1_
+          integer(c_int) :: btmp2_
       
-          if (size(x, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+          btmp2_ = 0_c_int
+      
+          if (size(x, kind=c_ptrdiff_t) > 0_c_ptrdiff_t) then
+            if (btmp2_ == 0_c_int) then
+              btmp1_ = real(maxval(x), kind=c_double)
+              btmp2_ = 1_c_int
+            else
+              btmp1_ = max(btmp1_, real(maxval(x), kind=c_double))
+            end if
+          end if
+      
+          if (btmp2_ == 0_c_int) then
+            btmp1_ = 2.5_c_double
+            btmp2_ = 1_c_int
+          else
+            btmp1_ = max(btmp1_, 2.5_c_double)
+          end if
+          if (btmp2_ == 0_c_int) then
             call quickr_set_error_msg("min()/max() of empty inputs are not supported")
             return
           end if
-          btmp1_ = maxval(x)
-          btmp2_ = 2.5_c_double
-          out_ = max(real(btmp1_, kind=c_double), btmp2_)
+          out_ = btmp1_
         end block
       
         contains
