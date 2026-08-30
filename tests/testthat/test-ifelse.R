@@ -208,6 +208,17 @@ test_that("ifelse defers mode errors in unselected branches", {
   expect_error(quick(reached)(), "requires logical operands")
 })
 
+test_that("ifelse temporaries do not bind later source names", {
+  fn <- function(mask, x) {
+    declare(type(mask = logical(1)), type(x = integer(2)))
+    y <- ifelse(mask, 1.5, 2.5)
+    for (Tmp1. in x) {}
+    Tmp1.
+  }
+
+  expect_quick_identical(fn, list(FALSE, c(1L, 2L)))
+})
+
 test_that("ifelse allocates impure branch temporaries only when selected", {
   fn <- function(test) {
     declare(type(test = logical(NA)))
