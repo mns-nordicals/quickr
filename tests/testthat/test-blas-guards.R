@@ -31,6 +31,26 @@ test_that("crossprod and tcrossprod reject arrays above rank two", {
   expect_error(quick(two_args), "only supports rank 0-2 inputs")
 })
 
+test_that("matrix-matrix %*% guards before allocating its result", {
+  fn <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(m, p)))
+    sum(a %*% b)
+  }
+
+  code <- as.character(r2f(fn))
+  guard <- regexpr("non-conformable arguments in %*%", code, fixed = TRUE)
+  allocation <- regexpr("allocate(", code, fixed = TRUE)
+  expect_lt(guard, allocation)
+
+  qfn <- quick(fn)
+  expect_equal(qfn(matrix(as.double(1:4), 2, 2), diag(2)), 10)
+  expect_error(
+    qfn(matrix(as.double(1:2), 2, 1), matrix(as.double(1:4), 2, 2)),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))

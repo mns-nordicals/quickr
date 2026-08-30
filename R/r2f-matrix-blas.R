@@ -303,8 +303,10 @@ resolve_blas_output <- function(
   context,
   allow_alias = character(),
   mode = "double",
-  logical_is_c_int = FALSE
+  logical_is_c_int = FALSE,
+  allocate_at_point = FALSE
 ) {
+  stopifnot(is_bool(allocate_at_point))
   if (
     can_use_output(
       dest,
@@ -318,7 +320,12 @@ resolve_blas_output <- function(
   ) {
     return(list(var = dest, name = dest@name, use_dest = TRUE))
   }
-  var <- hoist$declare_tmp(
+  declare_tmp <- if (allocate_at_point) {
+    hoist$declare_tmp_at_point
+  } else {
+    hoist$declare_tmp
+  }
+  var <- declare_tmp(
     mode = mode,
     dims = expected_dims,
     logical_as_int = logical_is_c_int
@@ -507,7 +514,8 @@ gemm <- function(
     hoist,
     input_names = c(A_name, B_name),
     expected_dims = list(m, n),
-    context = context
+    context = context,
+    allocate_at_point = TRUE
   )
   blas_call <- glue(
     "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {out$name}, {blas_int(ldc_expr)})"
