@@ -647,6 +647,9 @@ outer_mul <- function(
   m <- dim_or_one(x, 1L)
   n <- dim_or_one(y, 1L)
 
+  assert_nonempty_blas_output(m, x, 1L, context, hoist, scope)
+  assert_nonempty_blas_output(n, y, 1L, context, hoist, scope)
+
   x_name <- ensure_blas_operand_name(x, hoist)
   y_name <- ensure_blas_operand_name(y, hoist)
 
