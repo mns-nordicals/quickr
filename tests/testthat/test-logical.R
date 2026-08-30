@@ -190,6 +190,26 @@ test_that("short-circuit right operands defer static validation", {
   )
 })
 
+test_that("short-circuited right operands defer mode errors", {
+  skipped_and <- function() {
+    FALSE && (1L & 1L)
+  }
+  skipped_or <- function() {
+    TRUE || (1L & 1L)
+  }
+  reached_and <- function() {
+    TRUE && (1L & 1L)
+  }
+  reached_or <- function() {
+    FALSE || (1L & 1L)
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_quick_identical(skipped_or, list())
+  expect_error(quick(reached_and)(), "requires logical operands")
+  expect_error(quick(reached_or)(), "requires logical operands")
+})
+
 test_that("short-circuiting does not read absent optional arguments", {
   fn <- function(fallback) {
     declare(type(fallback = double(1)))
