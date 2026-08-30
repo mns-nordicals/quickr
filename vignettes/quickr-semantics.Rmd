@@ -455,12 +455,14 @@ when the left side does not decide the answer, so a guarded access like
 `i <= n && x[i] > 0` never evaluates `x[i]` out of range. For
 elementwise logic over vectors, use `&` and `|`.
 
-### Closure arguments are evaluated eagerly
+### Local closures accept only pure argument expressions
 
 R evaluates function arguments lazily. Local closures inside compiled
-functions (including functions passed to `sapply()`) evaluate their
-arguments eagerly. Code that relies on an argument never being evaluated
-will behave differently.
+functions (including functions passed to `sapply()`) accept only argument
+expressions that quickr can prove are pure, and evaluate accepted arguments
+eagerly. Calls with effectful expressions such as `pair(runif(1), 2)` are
+compile errors. Code that relies on an argument never being evaluated will
+behave differently.
 
 ### Deprecation warnings are not reproduced
 
