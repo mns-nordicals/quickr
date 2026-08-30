@@ -67,7 +67,10 @@ r2f_handlers[["as.integer"]] <- function(
         Fortran(glue("merge(1_c_int, 0_c_int, {arg})"), out_val)
       }
     },
-    stop("as.integer() only implemented for logical, integer, and double")
+    stop_static_mode_error(
+      "as.integer() only implemented for logical, integer, and double",
+      hoist
+    )
   )
 
   # R drops dimensions for as.integer(<array>): the result is a vector.

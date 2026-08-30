@@ -639,6 +639,34 @@ test_that("short-circuited real-only math calls defer mode errors", {
   }
 })
 
+test_that("short-circuited coercions defer mode errors", {
+  messages <- c(
+    as.double = "as.double() does not support complex input",
+    as.integer = "as.integer() only implemented"
+  )
+  for (op in names(messages)) {
+    skipped_and <- function() NULL
+    body(skipped_and) <- call(
+      "{",
+      call("&&", FALSE, call(">", call(op, 1i), 0))
+    )
+    reached_and <- function() NULL
+    body(reached_and) <- call(
+      "{",
+      call("&&", TRUE, call(">", call(op, 1i), 0))
+    )
+    skipped_ifelse <- function() NULL
+    body(skipped_ifelse) <- call("{", call("ifelse", FALSE, call(op, 1i), 0))
+    reached_ifelse <- function() NULL
+    body(reached_ifelse) <- call("{", call("ifelse", TRUE, call(op, 1i), 0))
+
+    expect_identical(quick(skipped_and)(), FALSE)
+    expect_error(quick(reached_and)(), messages[[op]], fixed = TRUE)
+    expect_identical(quick(skipped_ifelse)(), 0)
+    expect_error(quick(reached_ifelse)(), messages[[op]], fixed = TRUE)
+  }
+})
+
 test_that("invalid literal arithmetic remains inside lazy branches", {
   skipped_and <- function() {
     FALSE && (1 + "a" > 0)
