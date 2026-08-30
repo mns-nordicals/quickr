@@ -37,6 +37,26 @@ test_that("matrix-matrix %*% guards before allocating its result", {
   )
 })
 
+test_that("matrix-vector %*% guards before allocating its result", {
+  fn <- function(a, x) {
+    declare(type(a = double(m, k)), type(x = double(n)))
+    sum(a %*% x)
+  }
+
+  code <- as.character(r2f(fn))
+  guard <- regexpr("non-conformable arguments in %*%", code, fixed = TRUE)
+  allocation <- regexpr("allocate(", code, fixed = TRUE)
+  expect_lt(guard, allocation)
+
+  qfn <- quick(fn)
+  expect_equal(qfn(matrix(as.double(1:4), 2, 2), c(1, 1)), 10)
+  expect_error(
+    qfn(matrix(as.double(1:2), 2, 1), c(1, 1)),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))
