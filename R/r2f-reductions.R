@@ -64,16 +64,21 @@ register_r2f_handler(
       }
       hoisted_mask <- mask_hoist$get_hoisted()
       nonempty <- TRUE
+      empty_condition <- NULL
       if (call_name %in% c("min", "max") && !x@value@is_scalar) {
         element_count <- var_element_count(x@value)
         if (!is.null(hoisted_mask)) {
           nonempty <- glue("any({hoisted_mask})")
+          empty_condition <- glue(".not. ({nonempty})")
         } else if (!is.na(element_count)) {
           nonempty <- element_count > 0
         } else {
           x <- hoist_unless_name(x, arg_hoist)
           nonempty <- glue(
             "size({x}, kind=c_ptrdiff_t) > 0_c_ptrdiff_t"
+          )
+          empty_condition <- glue(
+            "size({x}, kind=c_ptrdiff_t) == 0_c_ptrdiff_t"
           )
         }
 
@@ -82,9 +87,8 @@ register_r2f_handler(
             stop_empty_extrema(arg_hoist)
           }
           if (is_string(nonempty)) {
-            condition <- glue(".not. ({nonempty})")
             emit_quickr_error_if(
-              condition,
+              empty_condition,
               empty_extrema_message,
               arg_hoist,
               scope
