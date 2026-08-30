@@ -231,8 +231,14 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
   x_arg <- whole_doubles_to_ints(x_arg)
   times_arg <- whole_doubles_to_ints(times_arg)
 
-  x <- r2f(x_arg, scope, ..., hoist = hoist)
-  times <- r2f(times_arg, scope, ..., hoist = hoist)
+  operands <- lower_operands_in_order(
+    list(x = x_arg, times = times_arg),
+    scope,
+    ...,
+    hoist = hoist
+  )
+  x <- operands$x
+  times <- operands$times
 
   if (is.null(x@value) || is.null(times@value)) {
     stop(

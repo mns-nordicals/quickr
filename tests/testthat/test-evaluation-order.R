@@ -45,6 +45,17 @@ test_that("later subscript effects cannot change the evaluated base", {
   }
 
   expect_quick_identical(fn, list(c(3, 4)))
+
+  rep_index <- function(v) {
+    declare(type(v = integer(2)))
+    i <- 1L
+    count <- function() {
+      i <<- 2L
+      2L
+    }
+    sum(v[rep.int(i, count())])
+  }
+  expect_quick_identical(rep_index, list(10:11))
 })
 test_that("later matrix effects cannot change the evaluated left operand", {
   fn <- function(x) {
