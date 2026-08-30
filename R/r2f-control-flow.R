@@ -145,13 +145,10 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   stopifnot(is.symbol(var))
   var <- as.character(var)
   existing <- get0(var, scope, inherits = FALSE)
-  base_fortran <- fortranize_name(var)
   var_name <- if (inherits(existing, Variable) && !is.null(existing@name)) {
     existing@name
-  } else if (scope_is_closure(scope) && inherits(get0(var, scope), Variable)) {
-    make_shadow_fortran_name(scope, base_fortran)
   } else {
-    base_fortran
+    assignment_fortran_name(var, scope)
   }
 
   iterable_info <- r2f_unwrap_for_iterable(iterable)
@@ -203,6 +200,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
 
     loop_var <- existing %||% Variable(mode = iterable_var@mode)
     loop_var@name <- var_name
+    loop_var@r_name <- var
     if (identical(loop_var@mode, "logical") && !inherits(existing, Variable)) {
       loop_var@logical_as_int <- logical_as_int(iterable_var)
     }
@@ -278,7 +276,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   # Index iteration: `for (i in 1:n) { ... }`
-  loop_var <- Variable(mode = "integer", name = var_name)
+  loop_var <- Variable(mode = "integer", name = var_name, r_name = var)
   if (iterable_is_singleton_one(iterable_unwrapped, scope)) {
     loop_var@loop_is_singleton <- TRUE
   }
