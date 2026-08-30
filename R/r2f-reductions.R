@@ -34,7 +34,13 @@ register_r2f_handler(
 
     empty_extrema_message <- "min()/max() of empty inputs are not supported"
 
-    reduce_arg <- function(arg, ordered = FALSE, allow_empty = FALSE) {
+    reduce_arg <- function(
+      arg,
+      ordered = FALSE,
+      allow_empty = FALSE,
+      later_args = list()
+    ) {
+      stopifnot(is.list(later_args))
       mask_hoist <- create_mask_hoist()
       # Nested reductions (e.g., min(max(...), ...)) can thread an existing
       # hoist_mask through `...`. We always want a single mask hoister per
@@ -121,6 +127,13 @@ register_r2f_handler(
       }
 
       if (ordered) {
+        out <- snapshot_operand_before_later_effects(
+          out,
+          arg,
+          later_args,
+          scope,
+          arg_hoist
+        )
         if (allow_empty) {
           return(list(value = out, nonempty = nonempty, hoist = arg_hoist))
         }
@@ -133,7 +146,14 @@ register_r2f_handler(
     if (length(args) == 1) {
       reduce_arg(args[[1]])
     } else if (call_name %in% c("min", "max")) {
-      reduced <- lapply(args, reduce_arg, ordered = TRUE, allow_empty = TRUE)
+      reduced <- lapply(seq_along(args), function(i) {
+        reduce_arg(
+          args[[i]],
+          ordered = TRUE,
+          allow_empty = TRUE,
+          later_args = tail(args, -i)
+        )
+      })
       if (
         all(vapply(
           reduced,
@@ -222,7 +242,13 @@ register_r2f_handler(
       )
       Fortran(result@name, result)
     } else {
-      args <- lapply(args, reduce_arg, ordered = TRUE)
+      args <- lapply(seq_along(args), function(i) {
+        reduce_arg(
+          args[[i]],
+          ordered = TRUE,
+          later_args = tail(args, -i)
+        )
+      })
       # Fortran's max/min require uniform argument types; cast every operand
       # whose mode differs from the join. The + / * spellings for sum/prod
       # don't strictly need it, but one code path beats two. Logical
