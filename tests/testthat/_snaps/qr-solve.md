@@ -221,6 +221,10 @@
             call quickr_set_error_msg("qr.solve zero-sized outputs are not supported")
             return
           end if
+          if (size(b, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve zero-sized outputs are not supported")
+            return
+          end if
           allocate(btmp1_(a__dim_1_, a__dim_2_))
           btmp1_ = a
           allocate(btmp2_(a__dim_1_, b__dim_2_))
