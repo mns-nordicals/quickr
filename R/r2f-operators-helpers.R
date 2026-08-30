@@ -333,6 +333,27 @@ dims_match <- function(left, right) {
   identical(left, right)
 }
 
+# Equality-only dimension checks permit matching zero extents. This is the
+# conformability contract for BLAS operands and shape-preserving operations
+# such as ifelse(); arithmetic uses the stricter nonempty checker below.
+check_equal_dims <- function(left, right) {
+  if (is_wholenumber(left) && is_wholenumber(right)) {
+    return(list(
+      ok = identical(as.integer(left), as.integer(right)),
+      unknown = FALSE,
+      reject_zero = FALSE
+    ))
+  }
+  if (!is_scalar_na(left) && !is_scalar_na(right)) {
+    left_norm <- fortranize_expr_symbols(left)
+    right_norm <- fortranize_expr_symbols(right)
+    if (identical(left_norm, right_norm)) {
+      return(list(ok = TRUE, unknown = FALSE, reject_zero = FALSE))
+    }
+  }
+  list(ok = TRUE, unknown = TRUE, reject_zero = FALSE)
+}
+
 # Three-valued conformability verdict for one axis of an elementwise op:
 # ok+known (no guard needed), not-ok+known (compile error at the caller),
 # or unknown (caller emits a runtime guard). Known lengths must be equal

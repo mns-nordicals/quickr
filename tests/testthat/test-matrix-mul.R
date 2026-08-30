@@ -476,6 +476,10 @@ test_that("tcrossprod treats right-hand vectors as columns", {
     tcrossprod(x, y)
   }
 
+  code <- as.character(r2f(dynamic))
+  expect_match(code, "size(x, 2, kind=c_ptrdiff_t) /= 1", fixed = TRUE)
+  expect_false(grepl("size(y, 2", code, fixed = TRUE))
+
   x <- matrix(as.double(1:2), nrow = 2L)
   y <- as.double(1:3)
   expect_quick_equal(static, list(x, y))
