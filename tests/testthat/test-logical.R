@@ -227,11 +227,11 @@ test_that("short-circuited local closure diagnostics are deferred", {
     TRUE && predicate()
   }
   skipped_body <- function() {
-    predicate <- function(x) abs()
+    predicate <- function(x) is.null(1)
     FALSE && predicate(1)
   }
   reached_body <- function() {
-    predicate <- function(x) abs()
+    predicate <- function(x) is.null(1)
     TRUE && predicate(1)
   }
 
@@ -241,7 +241,7 @@ test_that("short-circuited local closure diagnostics are deferred", {
   qmissing <- quick(reached_missing)
   expect_error(qmissing(), "missing required argument")
   qbody <- quick(reached_body)
-  expect_error(qbody(), "abs")
+  expect_error(qbody(), "is only supported on symbols")
 })
 
 test_that("short-circuited operators defer arity errors", {
