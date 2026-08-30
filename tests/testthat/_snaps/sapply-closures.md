@@ -406,14 +406,6 @@
         ! manifest end
       
       
-        if (x__dim_1_ < 0) then
-          call quickr_set_error_msg("matrix() dimensions must be non-negative")
-          return
-        end if
-        if (x__dim_2_ < 0) then
-          call quickr_set_error_msg("matrix() dimensions must be non-negative")
-          return
-        end if
         out = 0.0_c_double
         do tmp1_ = 1_c_int, x__dim_2_
           call closure1_(tmp1_, out(:, tmp1_))
@@ -550,14 +542,6 @@
         ! manifest end
       
       
-        if (x__dim_1_ < 0) then
-          call quickr_set_error_msg("matrix() dimensions must be non-negative")
-          return
-        end if
-        if (x__dim_2_ < 0) then
-          call quickr_set_error_msg("matrix() dimensions must be non-negative")
-          return
-        end if
         out = .false.
         do tmp1_ = 1_c_int, x__dim_2_
           call closure1_(tmp1_, out(:, tmp1_))
@@ -1444,14 +1428,6 @@
         ! manifest end
       
       
-        if (x__dim_1_ < 0) then
-          call quickr_set_error_msg("matrix() dimensions must be non-negative")
-          return
-        end if
-        if (x__dim_2_ < 0) then
-          call quickr_set_error_msg("matrix() dimensions must be non-negative")
-          return
-        end if
         out = 0.0_c_double
         out = x
         block
