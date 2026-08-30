@@ -183,6 +183,26 @@ test_that("ifelse allocates branch temporaries only when selected", {
   }
 })
 
+test_that("ifelse allocates results after selected branch shape guards", {
+  fn <- function(test, yes) {
+    declare(type(test = logical(NA)), type(yes = double(NA)))
+    ifelse(test, yes, 0)
+  }
+
+  fsub <- as.character(r2f(fn))
+  guard <- regexpr("ifelse() `yes` and `no`", fsub, fixed = TRUE)[[1L]]
+  allocations <- gregexpr("allocate(", fsub, fixed = TRUE)[[1L]]
+  result_allocation <- tail(allocations[allocations > 0L], 1L)
+  expect_lt(guard, result_allocation)
+
+  qfn <- quick(fn)
+  expect_error(
+    qfn(c(TRUE, FALSE, TRUE), c(1, 2)),
+    "must be scalars or match the shape",
+    fixed = TRUE
+  )
+})
+
 test_that("ifelse accepts matching empty inputs", {
   static <- function() {
     ifelse(logical(), numeric(), numeric())

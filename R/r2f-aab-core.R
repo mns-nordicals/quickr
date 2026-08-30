@@ -57,6 +57,17 @@ new_hoist <- function(scope) {
     allocate_tmp_at_point(var, emit)
   }
 
+  allocation_guard_at_point <- function(var) {
+    stopifnot(inherits(var, Variable))
+    if (!block_tmp_allocatable(var, block_scope)) {
+      return(character())
+    }
+    point_allocated <<- unique(c(point_allocated, var@name))
+    glue(
+      "if (.not. allocated({var@name})) allocate({var@name}({dims2f(var@dims, block_scope)}))"
+    )
+  }
+
   capture <- function() {
     captured <- character()
     capture_emit <- function(...) {
@@ -80,6 +91,7 @@ new_hoist <- function(scope) {
     list2env(
       list(
         emit = capture_emit,
+        allocation_guard_at_point = allocation_guard_at_point,
         declare_tmp = declare_tmp,
         declare_tmp_at_point = capture_declare_tmp_at_point,
         render = capture_render,
@@ -123,6 +135,7 @@ new_hoist <- function(scope) {
   list2env(
     list(
       emit = emit,
+      allocation_guard_at_point = allocation_guard_at_point,
       declare_tmp = declare_tmp,
       declare_tmp_at_point = declare_tmp_at_point,
       render = render,

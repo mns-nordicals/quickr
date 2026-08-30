@@ -187,8 +187,9 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     for (i in seq_along(branches)) {
       selector <- selectors[[i]]
       hoist$emit(glue("if (any({selector})) then"))
-      assignment <- glue(
-        "where ({selector}) {result@name} = {branches[[i]]}"
+      assignment <- c(
+        hoist$allocation_guard_at_point(result),
+        glue("where ({selector}) {result@name} = {branches[[i]]}")
       )
       hoist$emit(indent(branch_hoists[[i]]$render(assignment)))
       hoist$emit("end if")

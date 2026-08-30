@@ -31,12 +31,13 @@
           real(c_double), allocatable :: btmp2_(:)
       
           allocate(btmp1_(c__len_))
-          allocate(btmp2_(c__len_))
           btmp1_ = (c/=0)
           if (any(btmp1_)) then
+            if (.not. allocated(btmp2_)) allocate(btmp2_(c__len_))
             where (btmp1_) btmp2_ = real(1_c_int, kind=c_double)
           end if
           if (any(.not. btmp1_)) then
+            if (.not. allocated(btmp2_)) allocate(btmp2_(c__len_))
             where (.not. btmp1_) btmp2_ = a
           end if
           out_ = btmp2_
@@ -132,7 +133,6 @@
           real(c_double), allocatable :: btmp2_(:)
       
           allocate(btmp1_(c__len_))
-          allocate(btmp2_(c__len_))
           btmp1_ = (c/=0)
           if (any(btmp1_)) then
             if (size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
@@ -140,6 +140,7 @@
       & supported")
               return
             end if
+            if (.not. allocated(btmp2_)) allocate(btmp2_(c__len_))
             where (btmp1_) btmp2_ = a
           end if
           if (any(.not. btmp1_)) then
@@ -148,6 +149,7 @@
       & supported")
               return
             end if
+            if (.not. allocated(btmp2_)) allocate(btmp2_(c__len_))
             where (.not. btmp1_) btmp2_ = b
           end if
           out_ = btmp2_
