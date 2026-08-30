@@ -258,6 +258,15 @@ integer range. quickr accumulates and returns an integer, so the result can
 overflow instead. Convert the input to double before summing when the total
 may exceed the integer range.
 
+### Floating `sum()` can differ by platform
+
+R accumulates double sums in `long double` on builds where that type is wider
+than `double`. quickr emits a Fortran `sum()` over double values instead. With
+cancellation-sensitive inputs, the extra precision can change the result. For
+example, on an R build with wider `long double`,
+`sum(c(1e16, 1, -1e16))` can return `1` in R and `0` in quickr. On platforms
+without wider `long double` precision, both can return `0`.
+
 ### Integer arithmetic can overflow
 
 R detects overflow in integer `+`, `-`, and `*`, warns, and returns `NA`.
@@ -270,6 +279,13 @@ calculation can exceed the integer range.
 R returns `NA` or `NaN` with a warning for a zero divisor. Fortran's
 remainder and division operations do not define it, so quickr refuses a
 literal zero divisor at compile time and checks computed divisors at run time.
+
+### Floating `%/%` can differ at quotient boundaries
+
+For double operands, R corrects a quotient that rounded to an integer using
+the corresponding floating-point remainder. quickr floors the rounded double
+quotient directly. The results can differ at these boundaries: `1 %/% 0.2`
+returns `4` in R and `5` in quickr.
 
 ### Empty `min()` and `max()` use Fortran identities
 
