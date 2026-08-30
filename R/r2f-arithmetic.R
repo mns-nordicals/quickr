@@ -182,7 +182,7 @@ r2f_handlers[["%/%"]] <- function(args, scope, ..., hoist = NULL) {
       )
       real_floor_expr(q)
     },
-    stop("%/% only implemented for numeric types")
+    stop_static_mode_error("%/% only implemented for numeric types", hoist)
   )
 
   Fortran(expr, out_val)
