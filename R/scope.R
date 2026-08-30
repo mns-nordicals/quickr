@@ -136,13 +136,18 @@ new_scope <- function(closure, parent = emptyenv()) {
       )
       if (identical(prefix, "btmp")) {
         counter <- state$block_name_state
-        counter$i <- counter$i + 1L
-        name <- paste0(prefix, counter$i, "_")
+        repeat {
+          counter$i <- counter$i + 1L
+          name <- paste0(prefix, counter$i, "_")
+          if (!name %in% scope_fortran_names(scope)) {
+            break
+          }
+        }
         return(scope[[name]] <- Variable(..., name = name))
       }
       repeat {
         name <- paste0(prefix, i <<- i + 1L, "_")
-        if (is.null(get0(name, scope))) {
+        if (!name %in% scope_fortran_names(scope)) {
           break
         }
       }
