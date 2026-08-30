@@ -319,7 +319,14 @@
         ! manifest end
       
       
-        out_ = max(real(maxval(x), kind=c_double), 2.5_c_double)
+        block
+          integer(c_int) :: btmp1_
+          real(c_double) :: btmp2_
+      
+          btmp1_ = maxval(x)
+          btmp2_ = 2.5_c_double
+          out_ = max(real(btmp1_, kind=c_double), btmp2_)
+        end block
       end subroutine
     Code
       cat(cwrapper)
