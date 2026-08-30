@@ -194,6 +194,18 @@ test_that("ifelse defers shape errors in unselected branches", {
     "elementwise vector operations",
     fixed = TRUE
   )
+
+  direct <- function(test) {
+    declare(type(test = logical(3)))
+    ifelse(test, logical(2), FALSE)
+  }
+  expect_quick_identical(direct, list(rep(FALSE, 3)))
+  qdirect <- quick(direct)
+  expect_error(
+    qdirect(c(TRUE, FALSE, FALSE)),
+    "match the shape of `test`",
+    fixed = TRUE
+  )
 })
 
 test_that("ifelse defers mode errors in unselected branches", {

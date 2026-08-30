@@ -187,6 +187,18 @@ test_that("short-circuited right operands defer mode errors", {
   reached_or <- function() {
     FALSE || (1L & 1L)
   }
+  direct_skipped_and <- function() {
+    FALSE && 1L
+  }
+  direct_skipped_or <- function() {
+    TRUE || 1L
+  }
+  direct_reached_and <- function() {
+    TRUE && 1L
+  }
+  direct_reached_or <- function() {
+    FALSE || 1L
+  }
   skipped_comparison <- function() {
     FALSE && ((1L & 1L) == FALSE)
   }
@@ -196,9 +208,13 @@ test_that("short-circuited right operands defer mode errors", {
 
   expect_quick_identical(skipped_and, list())
   expect_quick_identical(skipped_or, list())
+  expect_quick_identical(direct_skipped_and, list())
+  expect_quick_identical(direct_skipped_or, list())
   expect_quick_identical(skipped_comparison, list())
   expect_error(quick(reached_and)(), "requires logical operands")
   expect_error(quick(reached_or)(), "requires logical operands")
+  expect_error(quick(direct_reached_and)(), "requires logical operands")
+  expect_error(quick(direct_reached_or)(), "requires logical operands")
   expect_error(quick(reached_comparison)(), "requires logical operands")
 })
 

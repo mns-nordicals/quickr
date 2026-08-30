@@ -131,7 +131,27 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     sub$defer_static_mode_error <- TRUE
     deferred_error <- NULL
     branch <- tryCatch(
-      r2f(arg, scope, ..., hoist = sub),
+      {
+        branch <- r2f(arg, scope, ..., hoist = sub)
+        if (
+          !passes_as_scalar(mask@value) &&
+            (!r2f_expression_is_pure(arg, scope) ||
+              !ifelse_branch_shape_is_known(branch, mask))
+        ) {
+          # WHERE may evaluate only selected RHS elements. Materialize a branch
+          # when full evaluation is observable or a runtime shape guard needs its
+          # actual extent.
+          branch <- hoist_unless_name(
+            branch,
+            sub,
+            allocate_at_point = TRUE
+          )
+        }
+        if (!passes_as_scalar(mask@value)) {
+          check_ifelse_branch_shape(branch, mask, sub, scope)
+        }
+        branch
+      },
       quickr_deferred_branch_error = function(error) {
         deferred_error <<- conditionMessage(error)
         NULL
@@ -140,16 +160,6 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     if (!is.null(deferred_error)) {
       emit_quickr_error_if(".true.", deferred_error, sub, scope)
       return(list(value = NULL, hoist = sub))
-    }
-    if (
-      !passes_as_scalar(mask@value) &&
-        (!r2f_expression_is_pure(arg, scope) ||
-          !ifelse_branch_shape_is_known(branch, mask))
-    ) {
-      # WHERE may evaluate only selected RHS elements. Materialize a branch
-      # when full evaluation is observable or a runtime shape guard needs its
-      # actual extent.
-      branch <- hoist_unless_name(branch, sub, allocate_at_point = TRUE)
     }
     list(value = branch, hoist = sub)
   }
@@ -186,11 +196,6 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
       call. = FALSE
     )
   }
-
-  # Checked before casts so guards splice the bare operand text. Keep each
-  # guard with its branch because an unselected branch is not evaluated by R.
-  check_ifelse_branch_shape(tsource, mask, yes$hoist, scope)
-  check_ifelse_branch_shape(fsource, mask, no$hoist, scope)
 
   mask <- booleanize_logical_as_int(mask)
 
