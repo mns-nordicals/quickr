@@ -3,11 +3,14 @@
     Code
       r2f(fn)
     Output
-      subroutine fn(a, b, out) bind(c)
-        use iso_c_binding, only: c_double, c_int
+      subroutine fn(a, b, out, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
         implicit none
       
         ! manifest start
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
+      
         ! args
         integer(c_int), intent(in) :: a
         integer(c_int), intent(in) :: b
@@ -16,7 +19,27 @@
       
       
       
+        if (a < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
+        if (b < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
         out = 0.0_c_double
+      
+        contains
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
       
       @r: function (a, b)
@@ -34,7 +57,8 @@
         extern void fn(
           const int* const a__,
           const int* const b__,
-          double* const out__);
+          double* const out__,
+          char* quickr_err_msg);
         
         SEXP fn_(SEXP _args) {
           // a
@@ -74,7 +98,18 @@
             Rf_dimgets(out, _dim_sexp);
           }
         
-          fn(a__, b__, out__);
+          char quickr_err_msg[256];
+          quickr_err_msg[0] = '\0';
+        
+        
+          fn(
+            a__,
+            b__,
+            out__,
+            quickr_err_msg);
+          if (quickr_err_msg[0] != '\0') {
+            Rf_error("%s", quickr_err_msg);
+          }
         
           UNPROTECT(2);
           return out;
