@@ -123,7 +123,12 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
   condition <- str_flatten(
     map_chr(
       unknown_axes,
-      function(axis) glue("size({branch}, {axis}) /= size({mask}, {axis})")
+      function(axis) {
+        glue(
+          "size({branch}, {axis}, kind=c_ptrdiff_t) /= ",
+          "size({mask}, {axis}, kind=c_ptrdiff_t)"
+        )
+      }
     ),
     " .or. "
   )
@@ -155,7 +160,7 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   lower_branch <- function(arg) {
-    sub <- hoist$capture()
+    sub <- hoist$capture_block()
     branch <- r2f(arg, scope, ..., hoist = sub)
     if (
       !passes_as_scalar(mask@value) &&

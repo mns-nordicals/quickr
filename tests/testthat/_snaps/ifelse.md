@@ -135,7 +135,7 @@
           allocate(btmp2_(c__len_))
           btmp1_ = (c/=0)
           if (any(btmp1_)) then
-            if (size(a, 1) /= size(btmp1_, 1)) then
+            if (size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
               return
@@ -143,7 +143,7 @@
             where (btmp1_) btmp2_ = a
           end if
           if (any(.not. btmp1_)) then
-            if (size(b, 1) /= size(btmp1_, 1)) then
+            if (size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
               return
