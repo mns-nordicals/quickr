@@ -367,6 +367,11 @@ emit_block <- function(decls, stmts) {
 r2f.scope <- function(scope, include_errors = FALSE) {
   return_var_names <- unname(scope_return_var_names(scope))
   vars <- scope_vars(scope)
+  point_allocated_local_names <- tolower(scope_get(
+    scope,
+    "point_allocated_local_names",
+    character()
+  ))
 
   local_allocs <- character()
   vars <- lapply(vars, function(var) {
@@ -425,10 +430,12 @@ r2f.scope <- function(scope, include_errors = FALSE) {
     if (isTRUE(heap_local)) {
       # Deferred-shape allocatable avoids large stack allocations (notably flang).
       dims <- sprintf("(%s)", str_flatten_commas(rep(":", var@rank)))
-      local_allocs <<- c(
-        local_allocs,
-        glue("allocate({var@name}({dims2f(var@dims, scope)}))")
-      )
+      if (!tolower(var@name) %in% point_allocated_local_names) {
+        local_allocs <<- c(
+          local_allocs,
+          glue("allocate({var@name}({dims2f(var@dims, scope)}))")
+        )
+      }
     }
 
     allocatable <- if (isTRUE(heap_local)) {
