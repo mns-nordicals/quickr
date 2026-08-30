@@ -838,6 +838,23 @@ match_closure_call_args <- function(
 
   args_expr <- args_aligned
 
+  # Local closures lower to Fortran procedures, so they cannot reproduce R's
+  # lazy promise forcing for effectful or trapping actual expressions. Keep
+  # that boundary explicit instead of choosing an observably wrong order.
+  present_names <- formal_names[args_present]
+  pure_args <- map_lgl(
+    args_expr[present_names],
+    r2f_expression_is_pure,
+    scope = scope
+  )
+  if (any(!pure_args)) {
+    stop(
+      closure_name,
+      " call: local closure calls only support pure argument expressions",
+      call. = FALSE
+    )
+  }
+
   args_f <- lapply(formal_names, function(nm) {
     if (!isTRUE(args_present[[nm]])) {
       return(NULL)
