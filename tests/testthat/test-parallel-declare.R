@@ -27,6 +27,22 @@ test_that("declare(parallel()) and declare(omp()) parallelize loops", {
   expect_quick_identical(parallel_sapply, list(x))
 })
 
+test_that("parallel loops execute fill constructors with private indices", {
+  skip_if_no_openmp()
+
+  fn <- function(n) {
+    declare(type(n = integer(1)), type(out = integer(n)))
+    out <- integer(n)
+    declare(parallel())
+    for (i in seq_len(n)) {
+      out[i] <- sum(c(integer(n), i))
+    }
+    out
+  }
+
+  expect_quick_identical(fn, list(256L))
+})
+
 test_that("parallel quick avoids unsupported R CMD config probes", {
   skip_if_no_openmp()
   withr::local_options(quickr.fortran_compiler = "gfortran")

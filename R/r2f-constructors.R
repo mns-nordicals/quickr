@@ -135,6 +135,7 @@ r2f_handlers[["c"]] <- function(args, scope = NULL, ..., hoist = NULL) {
           "integer",
           integer_kind = "c_ptrdiff_t"
         )
+      register_openmp_private(scope, spread_var@name)
       ff[[j]] <- Fortran(
         glue(
           "({ff[[j]]}, {spread_var}=1_c_ptrdiff_t, int({len_f}, kind=c_ptrdiff_t))"
