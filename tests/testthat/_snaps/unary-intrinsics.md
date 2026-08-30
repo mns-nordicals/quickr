@@ -61,7 +61,6 @@
         UNPROTECT(1);
         return out;
       }
-
 ---
 
     Code
@@ -2081,12 +2080,11 @@
       
       
         y = (.not. (x/=0))
+        if (.not. allocated(tmp1_)) allocate(tmp1_(x__len_))
         if (any(y)) then
-          if (.not. allocated(tmp1_)) allocate(tmp1_(x__len_))
           where (y) tmp1_ = 1_c_int
         end if
         if (any(.not. y)) then
-          if (.not. allocated(tmp1_)) allocate(tmp1_(x__len_))
           where (.not. y) tmp1_ = 0_c_int
         end if
         out = tmp1_
@@ -2123,4 +2121,3 @@
         UNPROTECT(1);
         return out;
       }
-
