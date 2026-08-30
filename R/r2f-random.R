@@ -33,7 +33,14 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
     max <- bound(max)
     get1rand <- glue("unif_rand() * {max}")
   } else {
-    min <- bound(min)
+    min <- lower_r2f_operand_in_order(
+      min,
+      scope,
+      ...,
+      hoist = hoist,
+      later_args = list(max)
+    )
+    min <- hoist_unless_name(min, hoist)
     max <- bound(max)
     get1rand <- glue("({min} + (unif_rand() * ({max} - {min})))")
   }

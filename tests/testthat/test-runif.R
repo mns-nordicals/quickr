@@ -155,4 +155,15 @@ test_that("runif evaluates bounds before rejecting a dynamic count", {
   set.seed(1)
   expect_error(qfn(-1L), "sample count must be non-negative")
   expect_identical(.Random.seed, expected_seed)
+
+  fn <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 10
+      20
+    }
+    runif(1L, x, bump())
+  }
+  qfn <- quick(fn)
+  expect_equal(set_seed_and_call(fn, 1), set_seed_and_call(qfn, 1))
 })
