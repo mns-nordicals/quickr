@@ -387,6 +387,28 @@ test_that("solve guards squareness before allocating system workspaces", {
   )
 })
 
+test_that("inverse solve guards before allocating all workspaces", {
+  fn <- function(a) {
+    declare(type(a = double(n, k)))
+    sum(solve(a))
+  }
+
+  code <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1L]]
+  guard_line <- grep("solve requires a square matrix", code, fixed = TRUE)
+  allocation_lines <- grep("^ *allocate\\(", code)
+  expect_length(guard_line, 1L)
+  expect_length(allocation_lines, 3L)
+  expect_true(all(guard_line < allocation_lines))
+
+  qfn <- quick(fn)
+  expect_equal(qfn(diag(2)), 2)
+  expect_error(
+    qfn(matrix(as.double(1:6), 2, 3)),
+    "solve requires a square matrix",
+    fixed = TRUE
+  )
+})
+
 test_that("triangular solve guards before allocating a nested result", {
   fn <- function(a, b) {
     declare(type(a = double(n, n)), type(b = double(NA)))
