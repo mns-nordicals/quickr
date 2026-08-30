@@ -1,7 +1,7 @@
 # Matrix-specific r2f handlers and wiring
 
 lower_transposed_operand_in_order <- function(arg, scope, ..., hoist) {
-  captured_hoist <- hoist$capture()
+  captured_hoist <- capture_hoist(hoist)
   info <- unwrap_transpose_arg(arg, scope, ..., hoist = captured_hoist)
   info$value <- finish_captured_operand(info$value, captured_hoist, hoist)
   info
