@@ -182,7 +182,8 @@ r2size <- function(r, scope) {
           stop("could not resolve size: ", as.character(r))
         }
         # !identical(): @mode can be NULL (deferred-mode binding)
-        if (!var@mode %in% c("integer", "double") || !passes_as_scalar(var)) {
+        valid_mode <- isTRUE(var@mode %in% c("integer", "double"))
+        if (!valid_mode || !passes_as_scalar(var)) {
           warning("size is not an integer:", as.character(r))
         }
         if (var@is_arg && !var@modified) {
