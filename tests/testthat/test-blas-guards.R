@@ -259,6 +259,32 @@ test_that("SYRK point-allocates reused conditional destinations", {
   expect_equal(qfn(TRUE, a, b, x), expected)
 })
 
+test_that("outer point-allocates reused conditional destinations", {
+  fn <- function(flag, a, b, x, y) {
+    declare(
+      type(flag = logical(1)),
+      type(a = double(n, k)),
+      type(b = double(k, p)),
+      type(x = double(n)),
+      type(y = double(p))
+    )
+    if (flag) {
+      out <- a %*% b
+    }
+    out <- outer(x, y)
+    sum(out)
+  }
+
+  a <- matrix(as.double(1:6), 2, 3)
+  b <- matrix(as.double(1:6), 3, 2)
+  x <- as.double(1:2)
+  y <- as.double(3:4)
+  qfn <- quick(fn)
+  expected <- sum(outer(x, y))
+  expect_equal(qfn(FALSE, a, b, x, y), expected)
+  expect_equal(qfn(TRUE, a, b, x, y), expected)
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))

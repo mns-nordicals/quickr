@@ -783,7 +783,9 @@ outer_mul <- function(
     hoist,
     input_names = c(x_name, y_name),
     expected_dims = list(m, n),
-    context = context
+    context = context,
+    scope = scope,
+    allocate_at_point = TRUE
   )
   hoist$emit(glue("{out$name} = 0.0_c_double"))
   hoist$emit(glue(
