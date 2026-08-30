@@ -146,6 +146,16 @@ test_that("as.integer refuses values outside R's integer range", {
   expect_error(qfn(1e100), "representable as an R integer")
 })
 
+test_that("as.integer(logical matrix) drops dimensions", {
+  fn <- function(x) {
+    declare(type(x = logical(2, 2)))
+    as.integer(x)
+  }
+
+  x <- matrix(c(TRUE, FALSE, TRUE, FALSE), nrow = 2L)
+  expect_quick_identical(fn, list(x))
+})
+
 test_that("runif refuses negative runtime sample counts", {
   static <- function() {
     sum(runif(-1L))
