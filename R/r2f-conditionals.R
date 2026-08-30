@@ -58,7 +58,7 @@ ifelse_branch_shape_is_known <- function(branch, mask) {
   all(vapply(
     seq_len(mask@value@rank),
     function(axis) {
-      !check_elementwise_lengths(
+      !check_equal_dims(
         dim_or_one(mask, axis),
         dim_or_one(branch, axis)
       )$unknown
@@ -92,7 +92,8 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
       left = branch,
       right = mask,
       left_axis = axis,
-      right_axis = axis
+      right_axis = axis,
+      checker = check_equal_dims
     )
   }
   invisible()
