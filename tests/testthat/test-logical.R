@@ -517,6 +517,14 @@ test_that("short-circuited complex refusals are deferred", {
     declare(type(z = complex(1)))
     TRUE && ((z %% z) == z)
   }
+  skipped_integer_division <- function(z) {
+    declare(type(z = complex(1)))
+    FALSE && ((z %/% z) == z)
+  }
+  reached_integer_division <- function(z) {
+    declare(type(z = complex(1)))
+    TRUE && ((z %/% z) == z)
+  }
   skipped_matmul <- function(z) {
     declare(type(z = complex(1, 1)))
     FALSE && ((z %*% z) == 0i)
@@ -528,6 +536,11 @@ test_that("short-circuited complex refusals are deferred", {
 
   expect_quick_identical(skipped_modulo, list(1 + 1i))
   expect_error(quick(reached_modulo)(1 + 1i), "unimplemented complex operation")
+  expect_quick_identical(skipped_integer_division, list(1 + 1i))
+  expect_error(
+    quick(reached_integer_division)(1 + 1i),
+    "%/% only implemented for numeric types"
+  )
   z <- matrix(1 + 1i, 1L, 1L)
   expect_quick_identical(skipped_matmul, list(z))
   expect_error(
