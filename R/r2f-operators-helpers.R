@@ -91,23 +91,27 @@ maybe_cast_double <- function(x) {
 # wrong answer, and quickr has no z* lowerings. R supports complex
 # linear algebra, so the message names the divergence.
 # Used by: r2f-matrix.R, r2f-matrix-parse.R, r2f-matrix-blas.R
-cast_linalg_double <- function(x, context) {
+cast_linalg_double <- function(x, context, hoist = NULL) {
   if (identical(x@value@mode, "complex")) {
-    stop(
-      context,
-      " does not support complex operands; ",
-      "linear algebra in quickr is double-only",
-      call. = FALSE
+    stop_static_mode_error(
+      paste0(
+        context,
+        " does not support complex operands; ",
+        "linear algebra in quickr is double-only"
+      ),
+      hoist
     )
   }
   x <- maybe_cast_double(x)
   if (!identical(x@value@mode, "double")) {
-    stop(
-      context,
-      " does not support ",
-      x@value@mode,
-      " operands; linear algebra in quickr is double-only",
-      call. = FALSE
+    stop_static_mode_error(
+      paste0(
+        context,
+        " does not support ",
+        x@value@mode,
+        " operands; linear algebra in quickr is double-only"
+      ),
+      hoist
     )
   }
   x

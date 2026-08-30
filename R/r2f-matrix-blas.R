@@ -398,8 +398,8 @@ gemm <- function(
   context = "gemm"
 ) {
   assert_hoist_env(hoist)
-  left <- cast_linalg_double(left, context)
-  right <- cast_linalg_double(right, context)
+  left <- cast_linalg_double(left, context, hoist)
+  right <- cast_linalg_double(right, context, hoist)
   assert_nonempty_blas_output(
     m,
     left,
@@ -466,8 +466,8 @@ gemv <- function(
   context = "gemv"
 ) {
   assert_hoist_env(hoist)
-  A <- cast_linalg_double(A, context)
-  x <- cast_linalg_double(x, context)
+  A <- cast_linalg_double(A, context, hoist)
+  x <- cast_linalg_double(x, context, hoist)
   output_dim <- if (transA == "N") m else n
   assert_nonempty_blas_output(
     output_dim,
@@ -569,7 +569,7 @@ syrk <- function(
   context = "syrk"
 ) {
   assert_hoist_env(hoist)
-  X <- cast_linalg_double(X, context)
+  X <- cast_linalg_double(X, context, hoist)
   x_dims <- matrix_dims(X)
 
   # For trans = "T": C = t(X) %*% X, so C is k x k where k = ncol(X)
@@ -638,8 +638,8 @@ outer_mul <- function(
 ) {
   assert_hoist_env(hoist)
 
-  x <- cast_linalg_double(x, context)
-  y <- cast_linalg_double(y, context)
+  x <- cast_linalg_double(x, context, hoist)
+  y <- cast_linalg_double(y, context, hoist)
 
   if (x@value@rank > 1L || y@value@rank > 1L) {
     stop("outer() only supports vectors or scalars")
@@ -693,8 +693,8 @@ triangular_solve <- function(
 ) {
   assert_hoist_env(hoist)
 
-  A <- cast_linalg_double(A, context)
-  B <- cast_linalg_double(B, context)
+  A <- cast_linalg_double(A, context, hoist)
+  B <- cast_linalg_double(B, context, hoist)
 
   assert_rank2_matrix(A, "triangular solve expects a matrix")
 
@@ -783,8 +783,8 @@ lapack_solve <- function(
 ) {
   assert_hoist_env(hoist)
 
-  A <- cast_linalg_double(A, context)
-  B <- cast_linalg_double(B, context)
+  A <- cast_linalg_double(A, context, hoist)
+  B <- cast_linalg_double(B, context, hoist)
 
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
 
@@ -1001,7 +1001,7 @@ end do"
 lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   assert_hoist_env(hoist)
 
-  A <- cast_linalg_double(A, context)
+  A <- cast_linalg_double(A, context, hoist)
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
   A <- hoist_unless_name(A, hoist)
 
@@ -1080,7 +1080,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
 lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   assert_hoist_env(hoist)
 
-  A <- cast_linalg_double(A, context)
+  A <- cast_linalg_double(A, context, hoist)
   assert_rank2_matrix(A, paste0(context, " expects a matrix"))
   A <- hoist_unless_name(A, hoist)
 
@@ -1148,7 +1148,7 @@ lapack_chol2inv <- function(
 ) {
   assert_hoist_env(hoist)
 
-  R <- cast_linalg_double(R, context)
+  R <- cast_linalg_double(R, context, hoist)
   assert_rank2_matrix(R, paste0(context, " expects a matrix"))
   R <- hoist_unless_name(R, hoist)
 
@@ -1365,7 +1365,7 @@ lapack_svd <- function(
   assert_hoist_env(hoist)
   stopifnot(inherits(d, Variable), inherits(u, Variable), inherits(v, Variable))
 
-  A <- cast_linalg_double(A, context)
+  A <- cast_linalg_double(A, context, hoist)
   dims <- svd_dims(A, context = context)
   m <- dims$m
   n <- dims$n

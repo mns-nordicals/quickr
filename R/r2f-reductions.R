@@ -40,7 +40,11 @@ register_r2f_handler(
       # hoist_mask through `...`. We always want a single mask hoister per
       # reduction context, so we ignore any inherited one and install ours.
       dots <- list(...)
-      arg_hoist <- if (ordered) dots$hoist$capture() else dots$hoist
+      arg_hoist <- if (ordered) {
+        capture_inheriting_deferred_errors(dots$hoist)
+      } else {
+        dots$hoist
+      }
       x <- r2f(
         arg,
         scope,
