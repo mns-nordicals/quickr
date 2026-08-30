@@ -701,11 +701,11 @@ test_that("matrix(scalar, m, n) materializes where an array is required", {
 
 test_that("matrix() rejects negative extents before materializing", {
   static <- function() {
-    sum(matrix(1, -1L, 2L))
+    sum(matrix(1, -1L, 2L) + 1)
   }
   dynamic <- function(n, k) {
     declare(type(n = integer(1)), type(k = integer(1)))
-    sum(matrix(1, n, k))
+    sum(matrix(1, n, k) + 1)
   }
 
   expect_error(

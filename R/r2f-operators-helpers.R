@@ -321,6 +321,10 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       return(if (j == 1L) out else rev(out))
     }
     fallback <- if (j == 1L) {
+      static_dims <- map_lgl(fill_dims, is_scalar_integerish)
+      guard_constructor_dims(fill_dims[static_dims], "matrix", hoist, scope)
+      dynamic_dims <- as.list(fill$dims_f[!static_dims])
+      guard_constructor_dims(dynamic_dims, "matrix", hoist, scope)
       out <- materialize_via_hoist(
         fill$value,
         fill$value@value@mode,
