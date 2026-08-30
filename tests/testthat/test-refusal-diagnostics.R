@@ -59,6 +59,20 @@ test_that("as.double refuses unsupported complex coercion", {
   expect_error(quick(fn), "does not support complex")
 })
 
+test_that("lazy branches defer unsupported as.double coercion", {
+  skipped <- function(x) {
+    declare(type(x = complex(1)))
+    ifelse(FALSE, as.double(x), 0)
+  }
+  reached <- function(x) {
+    declare(type(x = complex(1)))
+    ifelse(TRUE, as.double(x), 0)
+  }
+
+  expect_quick_identical(skipped, list(1 + 1i))
+  expect_error(quick(reached)(1 + 1i), "does not support complex")
+})
+
 test_that("arithmetic refuses raw operands", {
   for (op in c("+", "-", "*", "/", "^", "%%", "%/%")) {
     fn <- eval(bquote(function(x, y) {
