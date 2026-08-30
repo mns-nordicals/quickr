@@ -271,12 +271,12 @@ R returns `NA` or `NaN` with a warning for a zero divisor. Fortran's
 remainder and division operations do not define it, so quickr refuses a
 literal zero divisor at compile time and checks computed divisors at run time.
 
-### Empty `min()` and `max()` use Fortran identities
+### Empty `min()` and `max()` inputs are rejected
 
 R returns `Inf` from `min()` and `-Inf` from `max()` when the input is empty.
-quickr uses the Fortran reduction intrinsics, whose empty-array results are
-the largest and smallest representable values of the input type instead.
-Do not pass empty inputs to these reductions when that distinction matters.
+quickr does not support those identity values, so it rejects `min()` and
+`max()` calls when every input is empty. Empty operands in a multi-argument
+call are ignored when at least one other operand contributes a value.
 
 Empty `which.min()` and `which.max()` inputs also differ. R returns
 `integer(0)`; quickr returns the scalar index produced by Fortran's
