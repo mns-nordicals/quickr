@@ -9,16 +9,16 @@
 # R supports equality on complex values but refuses ordering. Refuse it
 # here rather than handing gfortran an invalid comparison; shared by the
 # four ordering handlers below (== and /= stay legal, as in R).
-check_ordered_operands <- function(left, right) {
+check_ordered_operands <- function(left, right, hoist) {
   if ("complex" %in% c(left@value@mode, right@value@mode)) {
-    stop("invalid comparison with complex values", call. = FALSE)
+    stop_static_mode_error("invalid comparison with complex values", hoist)
   }
   invisible(TRUE)
 }
 
 r2f_handlers[[">="]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
-  check_ordered_operands(left, right)
+  check_ordered_operands(left, right, hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -35,7 +35,7 @@ r2f_handlers[[">="]] <- function(args, scope, ..., hoist = NULL) {
 
 r2f_handlers[[">"]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
-  check_ordered_operands(left, right)
+  check_ordered_operands(left, right, hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -52,7 +52,7 @@ r2f_handlers[[">"]] <- function(args, scope, ..., hoist = NULL) {
 
 r2f_handlers[["<"]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
-  check_ordered_operands(left, right)
+  check_ordered_operands(left, right, hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -69,7 +69,7 @@ r2f_handlers[["<"]] <- function(args, scope, ..., hoist = NULL) {
 
 r2f_handlers[["<="]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
-  check_ordered_operands(left, right)
+  check_ordered_operands(left, right, hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
   .[left, right] <- maybe_reshape_vector_matrix(
@@ -118,11 +118,14 @@ r2f_handlers[["!="]] <- function(args, scope, ..., hoist = NULL) {
 
 # ---- unary logical not ----
 
-r2f_handlers[["!"]] <- function(args, scope, ...) {
+r2f_handlers[["!"]] <- function(args, scope, ..., hoist = NULL) {
   stopifnot(length(args) == 1L)
-  x <- r2f(args[[1L]], scope, ...)
+  x <- r2f(args[[1L]], scope, ..., hoist = hoist)
   if (x@value@mode != "logical") {
-    stop("'!' expects a logical value; numeric coercions not yet supported")
+    stop_static_mode_error(
+      "'!' expects a logical value; numeric coercions not yet supported",
+      hoist
+    )
   }
   x <- booleanize_logical_as_int(x)
   Fortran(glue("(.not. {x})"), Variable("logical", x@value@dims))
@@ -162,7 +165,10 @@ register_r2f_handler(
     args <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
     args <- lapply(args, function(a) {
       if (a@value@mode != "logical") {
-        stop("`", op, "` requires logical operands", call. = FALSE)
+        stop_static_mode_error(
+          paste0("`", op, "` requires logical operands"),
+          hoist
+        )
       }
       a
     })
@@ -199,7 +205,10 @@ scalarize_andor_operand <- function(
   defer_length_error = FALSE
 ) {
   if (is.null(x@value) || !identical(x@value@mode, "logical")) {
-    stop("`", op, "` requires logical operands", call. = FALSE)
+    stop_static_mode_error(
+      paste0("`", op, "` requires logical operands"),
+      hoist
+    )
   }
 
   message <- paste0(
@@ -311,6 +320,75 @@ is_pure_scalar_condition <- function(e, scope) {
   ))
 }
 
+is_statically_complex_expression <- function(e, scope) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(inherits(var, Variable) && identical(var@mode, "complex"))
+  }
+  if (is.atomic(e)) {
+    return(is.complex(e))
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  args <- as.list(e)[-1L]
+  if (op == "(" && length(args) == 1L) {
+    return(is_statically_complex_expression(args[[1L]], scope))
+  }
+  op %in%
+    c("+", "-", "*") &&
+    any(vapply(
+      args,
+      is_statically_complex_expression,
+      logical(1L),
+      scope = scope
+    ))
+}
+
+is_statically_logical_condition <- function(e, scope) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(inherits(var, Variable) && identical(var@mode, "logical"))
+  }
+  if (is.atomic(e)) {
+    return(is.logical(e) && length(e) == 1L)
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  args <- as.list(e)[-1L]
+  if (op == "(" && length(args) == 1L) {
+    return(is_statically_logical_condition(args[[1L]], scope))
+  }
+  if (op %in% c("==", "!=")) {
+    return(TRUE)
+  }
+  if (op %in% c("<", "<=", ">", ">=")) {
+    return(
+      !any(vapply(
+        args,
+        is_statically_complex_expression,
+        logical(1L),
+        scope = scope
+      ))
+    )
+  }
+  if (op == "!" && length(args) == 1L) {
+    return(is_statically_logical_condition(args[[1L]], scope))
+  }
+  if (op %in% c("&&", "||", "&", "|") && length(args) == 2L) {
+    return(all(vapply(
+      args,
+      is_statically_logical_condition,
+      logical(1L),
+      scope = scope
+    )))
+  }
+  FALSE
+}
+
 lazy_builtin_arities <- list(
   `(` = 1L,
   `!` = 1L,
@@ -405,7 +483,8 @@ compile_andor <- function(
 
   if (
     is.null(rhs_arity_error) &&
-      is_pure_scalar_condition(args[[2L]], scope)
+      is_pure_scalar_condition(args[[2L]], scope) &&
+      is_statically_logical_condition(args[[2L]], scope)
   ) {
     # Fortran may evaluate both operands of .and./.or.; for a pure right
     # operand that is indistinguishable from short-circuiting, so keep
@@ -441,6 +520,7 @@ compile_andor <- function(
   sub <- new_hoist(scope)
   sub$defer_static_shape_error <- TRUE
   sub$defer_builtin_arity_error <- TRUE
+  sub$defer_static_mode_error <- TRUE
   deferred_error <- NULL
   right <- tryCatch(
     r2f(

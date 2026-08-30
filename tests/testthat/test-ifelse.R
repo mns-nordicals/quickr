@@ -196,6 +196,18 @@ test_that("ifelse defers shape errors in unselected branches", {
   )
 })
 
+test_that("ifelse defers mode errors in unselected branches", {
+  skipped <- function() {
+    ifelse(FALSE, 1L & 1L, FALSE)
+  }
+  reached <- function() {
+    ifelse(TRUE, 1L & 1L, FALSE)
+  }
+
+  expect_quick_identical(skipped, list())
+  expect_error(quick(reached)(), "requires logical operands")
+})
+
 test_that("ifelse allocates impure branch temporaries only when selected", {
   fn <- function(test) {
     declare(type(test = logical(NA)))
