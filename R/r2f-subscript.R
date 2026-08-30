@@ -27,7 +27,7 @@ cast_subscript_to_integer <- function(sub) {
 # inline `block ... end block` *expression*, which is invalid Fortran
 # inside an array designator.
 lower_subscript_args <- function(idx_args, base_dims, scope, ..., hoist) {
-  idxs <- whole_doubles_to_ints(idx_args)
+  idxs <- unname(whole_doubles_to_ints(idx_args))
   imap(idxs, function(idx, i) {
     if (is_missing(idx)) {
       Fortran(":", Variable("integer", base_dims[[i]]))
