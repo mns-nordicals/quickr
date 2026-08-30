@@ -333,7 +333,8 @@ snapshot_operand_before_later_effects <- function(
     all.names(arg, functions = FALSE, unique = TRUE)
   }
   operand_code <- trimws(as.character(operand))
-  already_materialized <- !is.null(operand@value@name) &&
+  already_materialized <- inherits(operand@value, Variable) &&
+    !is.null(operand@value@name) &&
     identical(operand_code, operand@value@name) &&
     operand@value@name %in% scope_generated_fortran_names(scope)
   if (
