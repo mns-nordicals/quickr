@@ -183,13 +183,17 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   no <- lower_branch(args[[3L]])
   value <- yes$value %||% no$value
   mode <- if (inherits(value, Fortran)) value@value@mode else "logical"
-  error_placeholder <- atomic2Fortran(switch(
-    mode,
-    logical = FALSE,
-    integer = 0L,
-    double = 0,
-    complex = 0 + 0i
-  ))
+  error_placeholder <- if (identical(mode, "raw")) {
+    Fortran("0_c_int8_t", Variable("raw"))
+  } else {
+    atomic2Fortran(switch(
+      mode,
+      logical = FALSE,
+      integer = 0L,
+      double = 0,
+      complex = 0 + 0i
+    ))
+  }
   if (is.null(yes$value)) {
     yes$value <- error_placeholder
   }
@@ -214,10 +218,18 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
 
   mask <- booleanize_logical_as_int(mask)
 
-  # Assign both branches into one result, promoting them to a common mode.
-  promoted <- promote_operands(list(tsource, fsource), context = "ifelse()")
-  .[tsource, fsource] <- promoted$args
-  mode <- promoted$mode
+  # Assign both branches into one result, promoting numeric modes. Raw values
+  # have no numeric promotion but can be merged with the same raw mode.
+  if (
+    identical(tsource@value@mode, "raw") &&
+      identical(fsource@value@mode, "raw")
+  ) {
+    mode <- "raw"
+  } else {
+    promoted <- promote_operands(list(tsource, fsource), context = "ifelse()")
+    .[tsource, fsource] <- promoted$args
+    mode <- promoted$mode
+  }
   result <- hoist$declare_tmp(mode = mode, dims = mask@value@dims)
 
   if (passes_as_scalar(mask@value)) {

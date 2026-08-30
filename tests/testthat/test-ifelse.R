@@ -284,6 +284,17 @@ test_that("valueless ifelse branches are deferred until selected", {
     "ifelse() branches must produce a value",
     fixed = TRUE
   )
+
+  skipped_raw_yes <- function(x) {
+    declare(type(x = raw(1)))
+    ifelse(FALSE, NULL, x)
+  }
+  skipped_raw_no <- function(x) {
+    declare(type(x = raw(1)))
+    ifelse(TRUE, x, NULL)
+  }
+  expect_quick_identical(skipped_raw_yes, list(as.raw(255)))
+  expect_quick_identical(skipped_raw_no, list(as.raw(255)))
 })
 
 test_that("ifelse defers constructor diagnostics until branch selection", {
