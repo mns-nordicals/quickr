@@ -520,6 +520,27 @@ test_that("omitted fill lengths default to zero", {
   expect_quick_identical(fn, list())
 })
 
+test_that("array() rejects empty fills when the result would contain NA", {
+  fn <- function() {
+    array(numeric(), dim = c(1L, 2L))
+  }
+
+  qfn <- quick(fn)
+  expect_error(
+    qfn(),
+    "NA values, which are not supported",
+    fixed = TRUE
+  )
+})
+
+test_that("array() allows empty fills for empty results", {
+  fn <- function() {
+    array(numeric(), dim = c(0L, 2L))
+  }
+
+  expect_quick_identical(fn, list())
+})
+
 test_that("matrix(scalar, m, n) materializes where an array is required", {
   reduced <- function() {
     sum(matrix(2, 2, 3))
