@@ -976,12 +976,18 @@ check_assignment_compatible <- function(
   invisible()
 }
 
-# Reassignment cannot re-type a Fortran variable the way R promotes an R
-# binding, so a value whose mode sits above the variable's on the lattice
-# would be silently truncated by the assignment. Refuse at compile time
-# instead.
+# Whole-binding reassignment cannot re-type a Fortran variable the way R
+# rebinds a symbol, so require the same mode. Subassignment writes into the
+# existing storage and may coerce a lower-mode replacement, but still refuses
+# a replacement that would promote the R vector and truncate in Fortran.
 # Used by: r2f-assign.R
-check_reassignment_narrowing <- function(name, target, value) {
+check_reassignment_narrowing <- function(
+  name,
+  target,
+  value,
+  whole_binding = TRUE
+) {
+  stopifnot(is_bool(whole_binding))
   if (
     !inherits(target, Variable) ||
       !inherits(value, Variable) ||
@@ -990,8 +996,31 @@ check_reassignment_narrowing <- function(name, target, value) {
   ) {
     return()
   }
+  if (identical(target@mode, value@mode)) {
+    return()
+  }
   target_rank <- mode_rank(target@mode)
   value_rank <- mode_rank(value@mode)
+  if (
+    isTRUE(whole_binding) &&
+      (is.na(target_rank) ||
+        is.na(value_rank) ||
+        value_rank <= target_rank)
+  ) {
+    stop(
+      "cannot reassign `",
+      name,
+      "`: replacement mode ",
+      value@mode,
+      " differs from the declared mode ",
+      target@mode,
+      "; R would rebind `",
+      name,
+      "` to ",
+      value@mode,
+      call. = FALSE
+    )
+  }
   if (is.na(target_rank) || is.na(value_rank) || value_rank <= target_rank) {
     return()
   }

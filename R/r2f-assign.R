@@ -372,7 +372,12 @@ register_r2f_handler(
     # whole-variable reassignment can: `x[1L] <- 2.5` on an integer `x`
     # would silently truncate where R promotes `x` to double.
     base_name <- as.character(target_call[[2L]])
-    check_reassignment_narrowing(base_name, get0(base_name, scope), value@value)
+    check_reassignment_narrowing(
+      base_name,
+      get0(base_name, scope),
+      value@value,
+      whole_binding = FALSE
+    )
 
     Fortran(str_flatten_lines(lhs$pre, glue("{lhs$lhs} = {value}")))
   }
@@ -478,7 +483,12 @@ register_r2f_handler(
       target = "host"
     )
     value <- r2f(args[[2L]], scope, ..., hoist = hoist)
-    check_reassignment_narrowing(name, host_var, value@value)
+    check_reassignment_narrowing(
+      name,
+      host_var,
+      value@value,
+      whole_binding = FALSE
+    )
     Fortran(glue("{lhs$lhs} = {value}"))
   }
 )
