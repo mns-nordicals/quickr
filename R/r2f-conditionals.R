@@ -139,9 +139,10 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
         (!ifelse_branch_is_pure(arg, scope) ||
           !ifelse_branch_shape_is_known(branch, mask))
     ) {
-      # WHERE may evaluate only selected RHS elements. Materialize the complete
-      # branch first to match R, which evaluates the whole branch once selected.
-      branch <- hoist_unless_name(branch, sub)
+      # WHERE may evaluate only selected RHS elements. Materialize a branch
+      # when full evaluation is observable or a runtime shape guard needs its
+      # actual extent.
+      branch <- hoist_unless_name(branch, sub, allocate_at_point = TRUE)
     }
     list(value = branch, hoist = sub)
   }
