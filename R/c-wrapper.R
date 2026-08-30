@@ -434,6 +434,7 @@ c_bridge_hoist <- function() {
   hoist <- new.env(parent = emptyenv())
   hoist$as_int <- new.env(parent = emptyenv())
   hoist$as_int_tmp <- new.env(parent = emptyenv())
+  hoist$checked_size_int <- new.env(parent = emptyenv())
   hoist$used_tmp <- new.env(parent = emptyenv())
   hoist$pending <- character()
   hoist
@@ -501,6 +502,25 @@ c_bridge_hoist_seq_checks <- function(hoist, from, to, by) {
         Rf_error("wrong sign in \'by\' argument");'
     )
   )
+}
+
+c_bridge_hoist_size_int_check <- function(hoist, size) {
+  stopifnot(is.environment(hoist), is_string(size))
+  if (isTRUE(get0(size, envir = hoist$checked_size_int, inherits = FALSE))) {
+    return(invisible())
+  }
+  assign(size, TRUE, envir = hoist$checked_size_int)
+  hoist$pending <- c(
+    hoist$pending,
+    glue(
+      '
+      if (!R_FINITE((double)({size})) ||
+          ((double)({size}) <= -2147483648.0) ||
+          ((double)({size}) >= 2147483648.0))
+        Rf_error("diag() identity size must be representable as an R integer");'
+    )
+  )
+  invisible()
 }
 
 
@@ -694,6 +714,9 @@ dims2c_expr <- function(
       c_hoist = c_hoist,
       preserve_numeric = TRUE
     )
+    if (!is.null(c_hoist)) {
+      c_bridge_hoist_size_int_check(c_hoist, e1)
+    }
     return(glue("((R_xlen_t)({e1}))"))
   }
 

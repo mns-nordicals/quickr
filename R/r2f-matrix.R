@@ -693,6 +693,20 @@ register_r2f_handler(
   dest_infer = infer_dest_chol2inv
 )
 
+guard_diag_identity_double <- function(x, hoist, scope) {
+  stopifnot(inherits(x, Fortran))
+  unsafe <- glue(
+    "(({x} /= {x}) .or. ({x} <= -2147483648.0_c_double) .or. ({x} >= 2147483648.0_c_double))"
+  )
+  emit_quickr_error_if(
+    unsafe,
+    "diag() identity size must be representable as an R integer",
+    hoist,
+    scope
+  )
+  invisible()
+}
+
 register_r2f_handler(
   "diag",
   function(args, scope, ..., hoist = NULL, dest = NULL) {
@@ -754,6 +768,9 @@ register_r2f_handler(
     # length-1 vector takes it too (R: diag(c(3)) is the 3x3 identity).
     # The size comes from x's *value*, and the result is always double.
     if (!has_nrow && !has_ncol && passes_as_scalar(x@value)) {
+      if (identical(x@value@mode, "double")) {
+        guard_diag_identity_double(x, hoist, scope)
+      }
       # R sizes the identity with as.integer(x), so a double or logical `x`
       # is fine and truncates toward zero. Coerce in the size expression
       # rather than requiring an integer, so diag(n) works whatever the

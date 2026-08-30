@@ -1386,7 +1386,9 @@ diag_matrix <- function(
     expected_dims = list(nrow, ncol),
     context = context,
     mode = mode,
-    logical_is_c_int = logical_is_c_int
+    logical_is_c_int = logical_is_c_int,
+    scope = scope,
+    allocate_at_point = TRUE
   )
 
   zero <- switch(

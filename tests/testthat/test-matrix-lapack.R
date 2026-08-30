@@ -363,6 +363,22 @@ test_that("diag size folding rejects shadowed local closures", {
   )
 })
 
+test_that("diag rejects unrepresentable double identity sizes", {
+  dynamic <- function(n) {
+    declare(type(n = double(1)))
+    diag(n)
+  }
+
+  qdynamic <- quick(dynamic)
+  invalid <- c(Inf, -Inf, NaN, 2147483648, -2147483648)
+  for (n in invalid) {
+    expect_error(
+      suppressWarnings(qdynamic(n)),
+      "representable as an R integer"
+    )
+  }
+})
+
 test_that("diag refuses to cycle an empty vector into a nonempty matrix", {
   static_fn <- function() {
     diag(double(0), 2L, 2L)
