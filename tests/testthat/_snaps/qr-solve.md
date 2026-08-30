@@ -333,7 +333,7 @@
           Rf_error("dim(b)[1] must equal dim(a)[1],"
                    " but are %0.f and %0.f",
                     (double)b__dim_1_, (double)a__dim_1_);
-        const R_xlen_t out___len_ = (a__dim_2_) * (b__dim_2_);
+        const R_xlen_t out___len_ = ((R_xlen_t)(a__dim_2_)) * ((R_xlen_t)(b__dim_2_));
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
         {

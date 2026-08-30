@@ -403,10 +403,20 @@ return_var_c_defs <- function(var, scope, c_hoist = NULL) {
     }
   }
   c_len_dims <- c_dims
-  if (var@rank > 1L) {
+  known_len <- known_dims_product(var@dims)
+  if (
+    var@rank > 1L &&
+      (is.na(known_len) || known_len > .Machine$integer.max)
+  ) {
     c_len_dims <- lapply(
       c_len_dims,
-      \(dim) glue("((R_xlen_t)({dim}))")
+      \(dim) {
+        if (grepl("R_xlen_t", dim, fixed = TRUE)) {
+          dim
+        } else {
+          glue("(R_xlen_t)({dim})")
+        }
+      }
     )
   }
   c_len <- c_dims2c_len(c_len_dims)
