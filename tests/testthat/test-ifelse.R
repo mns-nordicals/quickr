@@ -202,10 +202,12 @@ test_that("ifelse allocates impure branch temporaries only when selected", {
     ifelse(test, runif(length(test)), 0)
   }
 
-  code <- as.character(r2f(fn))
-  branch <- regexpr("if (any(btmp1_)) then", code, fixed = TRUE)
-  allocation <- regexpr("allocate(btmp2_", code, fixed = TRUE)
-  expect_lt(branch, allocation)
+  code <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1]]
+  branch <- which(startsWith(code, "  if (any("))[[1]]
+  block <- which(code == "    block")[[1]]
+  allocation <- which(startsWith(code, "      allocate("))[[1]]
+  expect_lt(branch, block)
+  expect_lt(block, allocation)
 
   qfn <- quick(fn)
   for (test in list(rep(FALSE, 32), rep(TRUE, 32))) {
