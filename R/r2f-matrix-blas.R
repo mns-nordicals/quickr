@@ -1015,6 +1015,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   a_dims <- matrix_dims(A)
   assert_square_matrix(a_dims, A, context, hoist, scope)
   n <- a_dims$rows
+  assert_nonempty_blas_output(n, A, 1L, context, hoist, scope)
 
   A_name <- ensure_blas_operand_name(A, hoist)
 
@@ -1094,6 +1095,7 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   a_dims <- matrix_dims(A)
   assert_square_matrix(a_dims, A, context, hoist, scope)
   n <- a_dims$rows
+  assert_nonempty_blas_output(n, A, 1L, context, hoist, scope)
 
   A_name <- ensure_blas_operand_name(A, hoist)
 
@@ -1162,6 +1164,7 @@ lapack_chol2inv <- function(
   r_dims <- matrix_dims(R)
   assert_square_matrix(r_dims, R, context, hoist, scope)
   n <- r_dims$rows
+  assert_nonempty_blas_output(n, R, 1L, context, hoist, scope)
 
   R_name <- ensure_blas_operand_name(R, hoist)
 
