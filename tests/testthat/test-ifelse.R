@@ -195,3 +195,29 @@ test_that("ifelse defers shape errors in unselected branches", {
     fixed = TRUE
   )
 })
+
+test_that("ifelse allocates impure branch temporaries only when selected", {
+  fn <- function(test) {
+    declare(type(test = logical(NA)))
+    ifelse(test, runif(length(test)), 0)
+  }
+
+  code <- as.character(r2f(fn))
+  branch <- regexpr("if (any(btmp1_)) then", code, fixed = TRUE)
+  allocation <- regexpr("allocate(btmp2_", code, fixed = TRUE)
+  expect_lt(branch, allocation)
+
+  qfn <- quick(fn)
+  for (test in list(rep(FALSE, 32), rep(TRUE, 32))) {
+    set.seed(729)
+    expected <- fn(test)
+    expected_seed <- .Random.seed
+
+    set.seed(729)
+    actual <- qfn(test)
+    actual_seed <- .Random.seed
+
+    expect_equal(actual, expected)
+    expect_identical(actual_seed, expected_seed)
+  }
+})

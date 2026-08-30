@@ -145,8 +145,12 @@ new_hoist <- function(scope) {
 # actual arguments before the call, so repeating an expression duplicates
 # its side effects (e.g. RNG state via runif()) -- which names and literals
 # don't have.
-hoist_unless_name <- function(x, hoist) {
-  stopifnot(inherits(x, Fortran), inherits(x@value, Variable))
+hoist_unless_name <- function(x, hoist, allocate_at_point = FALSE) {
+  stopifnot(
+    inherits(x, Fortran),
+    inherits(x@value, Variable),
+    is_bool(allocate_at_point)
+  )
   code <- trimws(as.character(x))
   if (!is.null(x@value@name) && identical(code, x@value@name)) {
     return(x)
@@ -157,7 +161,12 @@ hoist_unless_name <- function(x, hoist) {
   ) {
     return(x)
   }
-  tmp <- hoist$declare_tmp(
+  declare_tmp <- if (allocate_at_point) {
+    hoist$declare_tmp_at_point
+  } else {
+    hoist$declare_tmp
+  }
+  tmp <- declare_tmp(
     mode = x@value@mode,
     dims = x@value@dims,
     logical_as_int = logical_as_int(x@value) &&
