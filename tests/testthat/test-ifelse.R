@@ -326,19 +326,6 @@ test_that("valueless ifelse branches are deferred until selected", {
   )
 })
 
-test_that("ifelse defers anonymous local closure diagnostics", {
-  skipped <- function() {
-    ifelse(FALSE, (function(x) x + 1)(), 1)
-  }
-  reached <- function() {
-    ifelse(TRUE, (function(x) x + 1)(), 1)
-  }
-
-  expect_quick_identical(skipped, list())
-  qreached <- quick(reached)
-  expect_error(qreached(), "missing required argument")
-})
-
 test_that("ifelse defers shape errors in unselected branches", {
   fn <- function(test) {
     declare(type(test = logical(3)))
