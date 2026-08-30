@@ -61,7 +61,6 @@
         UNPROTECT(1);
         return out;
       }
-
 ---
 
     Code
@@ -2084,12 +2083,11 @@
       
         y = (.not. (x/=0))
         tmp1_ = y
+        if (.not. allocated(tmp2_)) allocate(tmp2_(size(tmp1_, 1)))
         if (any(tmp1_)) then
-          if (.not. allocated(tmp2_)) allocate(tmp2_(size(tmp1_, 1)))
           where (tmp1_) tmp2_ = 1_c_int
         end if
         if (any(.not. tmp1_)) then
-          if (.not. allocated(tmp2_)) allocate(tmp2_(size(tmp1_, 1)))
           where (.not. tmp1_) tmp2_ = 0_c_int
         end if
         out = tmp2_
