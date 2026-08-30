@@ -175,6 +175,49 @@ test_that("SYRK point-allocates reused conditional destinations", {
   expect_equal(qfn(TRUE, a, b, x), expected)
 })
 
+test_that("diag point-allocates reused conditional destinations", {
+  extract <- function(flag, a, b, x) {
+    declare(
+      type(flag = logical(1)),
+      type(a = double(n, n)),
+      type(b = double(n)),
+      type(x = double(n, n))
+    )
+    if (flag) {
+      out <- solve(a, b)
+    }
+    out <- diag(x)
+    sum(out)
+  }
+  construct <- function(flag, n, a, b, x) {
+    declare(
+      type(flag = logical(1)),
+      type(n = integer(1)),
+      type(a = double(n, n)),
+      type(b = double(n, n)),
+      type(x = double(n))
+    )
+    if (flag) {
+      out <- a %*% b
+    }
+    out <- diag(x, nrow = n, ncol = n)
+    sum(out)
+  }
+
+  a <- matrix(as.double(1:4), 2, 2)
+  b <- as.double(1:2)
+  x <- matrix(as.double(1:4), 2, 2)
+  qextract <- quick(extract)
+  expected <- sum(diag(x))
+  expect_equal(qextract(FALSE, a, b, x), expected)
+  expect_equal(qextract(TRUE, a, b, x), expected)
+
+  qconstruct <- quick(construct)
+  expected <- sum(diag(b, nrow = 2, ncol = 2))
+  expect_equal(qconstruct(FALSE, 2L, a, a, b), expected)
+  expect_equal(qconstruct(TRUE, 2L, a, a, b), expected)
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))

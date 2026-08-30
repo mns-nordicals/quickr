@@ -1260,6 +1260,7 @@ diag_extract <- function(x, scope, hoist, dest = NULL, context = "diag") {
       logical_is_c_int = logical_is_c_int
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     out_var <- dest
     out_name <- dest@name
     writes_to_dest <- TRUE
@@ -1322,6 +1323,7 @@ diag_matrix <- function(
       logical_is_c_int = logical_is_c_int
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     out_var <- dest
     out_name <- dest@name
     writes_to_dest <- TRUE
