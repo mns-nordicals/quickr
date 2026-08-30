@@ -115,6 +115,14 @@ test_that("empty extrema are rejected explicitly", {
   qmax <- quick(dynamic_max)
   expect_equal(qmax(c(3, -1, 2)), 3)
   expect_error(qmax(numeric()), message, fixed = TRUE)
+
+  masked_scalar <- function(x, mask) {
+    declare(type(x = double(1)), type(mask = logical(1)))
+    min(x[mask])
+  }
+  qmasked <- quick(masked_scalar)
+  expect_equal(qmasked(3, TRUE), 3)
+  expect_error(qmasked(3, FALSE), message, fixed = TRUE)
 })
 
 test_that("multi-argument extrema ignore empty inputs", {
