@@ -33,7 +33,7 @@
       
       
         tmp1_ = (c/=0)
-        if (.not. allocated(tmp2_)) allocate(tmp2_(c__len_))
+        if (.not. allocated(tmp2_)) allocate(tmp2_(size(tmp1_, 1)))
         if (any(tmp1_)) then
           where (tmp1_) tmp2_ = real(1_c_int, kind=c_double)
         end if
@@ -133,7 +133,7 @@
       
       
         tmp1_ = (c/=0)
-        if (.not. allocated(tmp2_)) allocate(tmp2_(c__len_))
+        if (.not. allocated(tmp2_)) allocate(tmp2_(size(tmp1_, 1)))
         if (any(tmp1_)) then
           if (size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
