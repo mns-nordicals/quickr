@@ -1,5 +1,35 @@
 skip_on_cran()
 
+test_that("guarded OpenMP iterations stop when cancellation is disabled", {
+  withr::local_envvar(c(
+    OMP_CANCELLATION = "false",
+    OMP_NUM_THREADS = "1",
+    OMP_THREAD_LIMIT = "1",
+    OMP_DYNAMIC = "false"
+  ))
+  skip_if_no_openmp()
+
+  guarded <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    out <- 0
+    declare(parallel())
+    for (i in seq_len(1L)) {
+      out <- sum(x + y)
+      out <- out + runif(1L)
+    }
+    out
+  }
+
+  qguarded <- quick(guarded)
+  set.seed(900)
+  seed <- .Random.seed
+  expect_error(
+    qguarded(c(1, 2), c(1, 2, 3)),
+    "elementwise vector operations"
+  )
+  expect_identical(.Random.seed, seed)
+})
+
 test_that("stop propagates errors from quickr functions", {
   stop_fn <- function(x) {
     declare(type(x = double(1)))
