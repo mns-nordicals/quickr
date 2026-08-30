@@ -128,7 +128,7 @@ new_scope <- function(closure, parent = emptyenv()) {
         repeat {
           counter$i <- counter$i + 1L
           name <- paste0(prefix, counter$i, "_")
-          if (!name %in% scope_fortran_names(scope)) {
+          if (!tolower(name) %in% tolower(scope_fortran_names(scope))) {
             break
           }
         }
@@ -136,7 +136,7 @@ new_scope <- function(closure, parent = emptyenv()) {
       }
       repeat {
         name <- paste0(prefix, i <<- i + 1L, "_")
-        if (!name %in% scope_fortran_names(scope)) {
+        if (!tolower(name) %in% tolower(scope_fortran_names(scope))) {
           break
         }
       }
