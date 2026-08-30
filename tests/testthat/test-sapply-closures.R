@@ -363,6 +363,25 @@ test_that("local closures can be called directly with multiple arguments", {
   expect_quick_identical(fn, list(10L, 8L, 0.1, 0.01, 3L))
 })
 
+test_that("local closure purity respects shadowed operators", {
+  fn <- function() {
+    state <- 0L
+    abs <- function() {
+      state <<- state + 1L
+      1L
+    }
+    ignore <- function(x) {
+      0L
+    }
+    ignore(abs())
+  }
+
+  expect_error(
+    quick(fn),
+    "local closure calls only support pure argument expressions",
+    fixed = TRUE
+  )
+})
 test_that("sapply errors for insufficient arguments", {
   expect_error(
     quick(function(x) {
