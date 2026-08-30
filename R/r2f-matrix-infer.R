@@ -184,7 +184,7 @@ infer_dest_solve <- function(args, scope) {
 
   b_arg <- args$b %||% if (length(args) >= 2L) args[[2L]] else NULL
   if (is.null(b_arg)) {
-    return(Variable("double", list(n_rows, n_cols)))
+    return(Variable("double", list(n_rows, n_rows)))
   }
   B <- infer_symbol_var(b_arg, scope)
   if (is.null(B)) {
@@ -211,7 +211,7 @@ infer_dest_chol <- function(args, scope) {
     return(NULL)
   }
   x_dims <- matrix_dims_var(X)
-  Variable("double", list(x_dims$rows, x_dims$cols))
+  Variable("double", list(x_dims$rows, x_dims$rows))
 }
 
 infer_dest_chol2inv <- infer_dest_chol
