@@ -67,15 +67,23 @@ check_blas_dims <- function(left, right) {
   check_equal_dims(left, right)
 }
 
-# Return the R symbol name if operand is a bare symbol; otherwise NULL.
+# Return the storage name if the operand is a bare named variable.
 symbol_name_or_null <- function(x) {
   stopifnot(inherits(x, Fortran))
+  code <- trimws(as.character(x))
+  if (
+    inherits(x@value, Variable) &&
+      !is.null(x@value@name) &&
+      identical(code, x@value@name)
+  ) {
+    return(x@value@name)
+  }
   r_expr <- unwrap_parens(x@r)
   if (is.symbol(r_expr)) {
     return(as.character(r_expr))
   }
-  if (length(x) == 1L && grepl("^[A-Za-z][A-Za-z0-9_]*$", x)) {
-    return(as.character(x))
+  if (length(x) == 1L && grepl("^[A-Za-z][A-Za-z0-9_]*$", code)) {
+    return(code)
   }
   NULL
 }
