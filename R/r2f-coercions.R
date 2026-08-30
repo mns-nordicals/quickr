@@ -74,10 +74,11 @@ r2f_handlers[["as.integer"]] <- function(
       # expression preserves that storage (e.g. rev(m)), return it directly.
       if (logical_as_int(arg@value)) {
         src <- arg@value@name %||% as.character(arg)
-        return(Fortran(src, out_val))
+        Fortran(src, out_val)
+      } else {
+        arg <- booleanize_logical_as_int(arg)
+        Fortran(glue("merge(1_c_int, 0_c_int, {arg})"), out_val)
       }
-      arg <- booleanize_logical_as_int(arg)
-      Fortran(glue("merge(1_c_int, 0_c_int, {arg})"), out_val)
     },
     stop("as.integer() only implemented for logical, integer, and double")
   )
