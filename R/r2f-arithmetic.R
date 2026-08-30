@@ -51,9 +51,19 @@ r2f_handlers[["*"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 }
 
 r2f_handlers[["/"]] <- function(args, scope = NULL, ..., hoist = NULL) {
+  literal_zero_divisor <-
+    is_scalar_atomic(args[[2L]]) &&
+    !is.na(args[[2L]]) &&
+    args[[2L]] == 0
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   left <- maybe_cast_double(left)
   right <- maybe_cast_double(right)
+  if (literal_zero_divisor) {
+    # Keep a zero divisor out of a constant Fortran expression. Compilers
+    # reject constant division by zero, while a runtime zero follows the
+    # floating-point behavior used by R.
+    right <- hoist_unless_name(right, hoist)
+  }
   .[left, right] <- maybe_reshape_vector_matrix(left, right, hoist, scope)
   Fortran(glue("({left} / {right})"), conform(left@value, right@value))
 }

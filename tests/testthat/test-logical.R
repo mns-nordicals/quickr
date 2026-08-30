@@ -264,6 +264,26 @@ test_that("short-circuited division is not evaluated eagerly", {
   expect_quick_identical(skipped_or, list(0))
 })
 
+test_that("short-circuited literal division preserves lazy evaluation", {
+  skipped_and <- function() {
+    FALSE && (1 / 0 > 0)
+  }
+  reached_and <- function() {
+    TRUE && (1 / 0 > 0)
+  }
+  skipped_or <- function() {
+    TRUE || (1 / 0 > 0)
+  }
+  reached_or <- function() {
+    FALSE || (1 / 0 > 0)
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_quick_identical(reached_and, list())
+  expect_quick_identical(skipped_or, list())
+  expect_quick_identical(reached_or, list())
+})
+
 test_that("short-circuited calls defer arity errors", {
   unary_intrinsics <- c(
     "sin",

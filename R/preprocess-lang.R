@@ -14,7 +14,10 @@ defuse_numeric_literals <- function(e) {
         valid_arity &&
         all(map_lgl(e[-1L], is.atomic))
     ) {
-      e <- eval(e, baseenv())
+      folded <- eval(e, baseenv())
+      if (all(is.finite(folded))) {
+        e <- folded
+      }
     }
   }
   e
