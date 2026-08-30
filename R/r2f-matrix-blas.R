@@ -820,7 +820,9 @@ triangular_solve <- function(
     expected_dims = B@value@dims,
     context = context,
     allow_alias = setdiff(B_input_name, A_name),
-    mode = B@value@mode %||% "double"
+    mode = B@value@mode %||% "double",
+    scope = scope,
+    allocate_at_point = TRUE
   )
   hoist$emit(glue("{out$name} = {B}"))
   B_name <- out$name
@@ -1049,10 +1051,13 @@ lapack_solve_qr <- function(
     }
   }
 
-  A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
+  A_work <- hoist$declare_tmp_at_point(mode = "double", dims = list(m, n))
   hoist$emit(glue("{A_work@name} = {A_name}"))
 
-  B_work <- hoist$declare_tmp(mode = "double", dims = list(m, nrhs))
+  B_work <- hoist$declare_tmp_at_point(
+    mode = "double",
+    dims = list(m, nrhs)
+  )
   m_f <- dims2f(list(m), scope)
   if (!nzchar(m_f)) {
     m_f <- "1"
@@ -1068,9 +1073,9 @@ lapack_solve_qr <- function(
     hoist$emit(glue("{B_work@name}(1:{m_f}, 1:{nrhs_f}) = {B_input_name}"))
   }
 
-  qraux <- hoist$declare_tmp(mode = "double", dims = list(n))
-  jpvt <- hoist$declare_tmp(mode = "integer", dims = list(n))
-  work <- hoist$declare_tmp(mode = "double", dims = list(n, 2L))
+  qraux <- hoist$declare_tmp_at_point(mode = "double", dims = list(n))
+  jpvt <- hoist$declare_tmp_at_point(mode = "integer", dims = list(n))
+  work <- hoist$declare_tmp_at_point(mode = "double", dims = list(n, 2L))
   rank <- hoist$declare_tmp(mode = "integer", dims = NULL)
   idx <- hoist$declare_tmp(mode = "integer", dims = NULL)
 
@@ -1094,7 +1099,7 @@ end do"
     scope = scope
   )
 
-  coef_work <- hoist$declare_tmp(
+  coef_work <- hoist$declare_tmp_at_point(
     mode = "double",
     dims = list(mn, nrhs)
   )
@@ -1131,7 +1136,9 @@ end do"
     input_names = c(A_name, B_input_name),
     expected_dims = expected_dims,
     context = context,
-    allow_alias = B_input_name
+    allow_alias = B_input_name,
+    scope = scope,
+    allocate_at_point = TRUE
   )
 
   if (passes_as_scalar(out$var)) {
