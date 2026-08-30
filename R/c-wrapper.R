@@ -410,6 +410,7 @@ c_bridge_hoist <- function() {
   hoist <- new.env(parent = emptyenv())
   hoist$as_int <- new.env(parent = emptyenv())
   hoist$as_int_tmp <- new.env(parent = emptyenv())
+  hoist$checked_size_int <- new.env(parent = emptyenv())
   hoist$used_tmp <- new.env(parent = emptyenv())
   hoist$pending <- character()
   hoist
@@ -477,6 +478,23 @@ c_bridge_hoist_seq_checks <- function(hoist, from, to, by) {
         Rf_error("wrong sign in \'by\' argument");'
     )
   )
+}
+
+c_bridge_hoist_size_int_check <- function(hoist, size) {
+  stopifnot(is.environment(hoist), is_string(size))
+  if (isTRUE(get0(size, envir = hoist$checked_size_int, inherits = FALSE))) {
+    return(invisible())
+  }
+  assign(size, TRUE, envir = hoist$checked_size_int)
+  hoist$pending <- c(
+    hoist$pending,
+    glue(
+      '
+      if ({size} == NA_INTEGER)
+        Rf_error("diag() identity size must be representable as an R integer");'
+    )
+  )
+  invisible()
 }
 
 
@@ -620,10 +638,11 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
   }
 
   if (identical(op, "quickr_size_int")) {
-    if (length(args) != 1L) {
-      stop("quickr_size_int() requires one argument")
+    if (length(args) != 1L || is.null(c_hoist)) {
+      stop("quickr_size_int() requires one argument and a C bridge hoist")
     }
     size <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+    c_bridge_hoist_size_int_check(c_hoist, size)
     return(glue("((R_xlen_t)({size}))"))
   }
 

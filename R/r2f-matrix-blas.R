@@ -1267,7 +1267,7 @@ diag_matrix <- function(
     out_name <- dest@name
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(
+    out_var <- hoist$declare_tmp_at_point(
       mode = mode,
       dims = list(nrow, ncol),
       logical_as_int = logical_is_c_int

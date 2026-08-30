@@ -746,6 +746,20 @@ guard_diag_identity_size <- function(size, hoist, scope) {
   invisible()
 }
 
+guard_diag_identity_double <- function(x, hoist, scope) {
+  stopifnot(inherits(x, Fortran))
+  unsafe <- glue(
+    "(({x} /= {x}) .or. ({x} <= -2147483648.0_c_double) .or. ({x} >= 2147483648.0_c_double))"
+  )
+  emit_quickr_error_if(
+    unsafe,
+    "diag() identity size must be representable as an R integer",
+    hoist,
+    scope
+  )
+  invisible()
+}
+
 register_r2f_handler(
   "diag",
   function(args, scope, ..., hoist = NULL, dest = NULL) {
@@ -847,6 +861,9 @@ register_r2f_handler(
         !x_var@modified &&
         is_number(x_var@r) &&
         is.finite(x_var@r)
+      if (identical(x@value@mode, "double") && !local_numeric_value) {
+        guard_diag_identity_double(x, hoist, scope)
+      }
       nrow <- if (local_numeric_value) {
         as.integer(x_var@r)
       } else if (identical(x@value@mode, "integer")) {
