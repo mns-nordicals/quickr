@@ -190,8 +190,8 @@ test_that("short-circuited nested operands defer mode errors", {
 
   expect_quick_identical(skipped_and, list())
   expect_quick_identical(skipped_or, list())
-  expect_error(quick(reached_and)(), "requires logical operands")
-  expect_error(quick(reached_or)(), "requires logical operands")
+  expect_error(quick(reached_and)(), "must be logical")
+  expect_error(quick(reached_or)(), "must be logical")
 })
 
 test_that("short-circuited nested operands defer length errors", {

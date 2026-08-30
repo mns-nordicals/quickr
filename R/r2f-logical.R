@@ -104,11 +104,14 @@ r2f_handlers[["!="]] <- function(args, scope, ..., hoist = NULL) {
 
 # ---- unary logical not ----
 
-r2f_handlers[["!"]] <- function(args, scope, ...) {
+r2f_handlers[["!"]] <- function(args, scope, ..., hoist = NULL) {
   stopifnot(length(args) == 1L)
-  x <- r2f(args[[1L]], scope, ...)
+  x <- r2f(args[[1L]], scope, ..., hoist = hoist)
   if (x@value@mode != "logical") {
-    stop("'!' expects a logical value; numeric coercions not yet supported")
+    stop_static_mode_error(
+      "'!' expects a logical value; numeric coercions not yet supported",
+      hoist
+    )
   }
   x <- booleanize_logical_as_int(x)
   Fortran(glue("(.not. {x})"), Variable("logical", x@value@dims))
@@ -147,7 +150,7 @@ register_r2f_handler(
     args <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
     args <- lapply(args, function(a) {
       if (a@value@mode != "logical") {
-        stop("must be logical")
+        stop_static_mode_error("must be logical", hoist)
       }
       a
     })
@@ -509,6 +512,7 @@ compile_andor <- function(
   sub <- new_hoist(scope)
   sub$defer_static_shape_error <- TRUE
   sub$defer_builtin_arity_error <- TRUE
+  sub$defer_static_mode_error <- TRUE
   deferred_error <- NULL
   right <- tryCatch(
     r2f(
