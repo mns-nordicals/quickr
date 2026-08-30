@@ -58,6 +58,39 @@ test_that("reductions over vectors still use intrinsics", {
   expect_quick_identical(fn, x1, x2)
 })
 
+test_that("empty extrema are rejected explicitly", {
+  static_min <- function() {
+    min(numeric())
+  }
+  static_max <- function() {
+    max(integer())
+  }
+  static_logical <- function() {
+    min(logical())
+  }
+  message <- "min()/max() of empty inputs are not supported"
+
+  expect_error(quick(static_min), message, fixed = TRUE)
+  expect_error(quick(static_max), message, fixed = TRUE)
+  expect_error(quick(static_logical), message, fixed = TRUE)
+
+  dynamic_min <- function(x) {
+    declare(type(x = double(NA)))
+    min(x)
+  }
+  qmin <- quick(dynamic_min)
+  expect_equal(qmin(c(3, -1, 2)), -1)
+  expect_error(qmin(numeric()), message, fixed = TRUE)
+
+  dynamic_max <- function(x) {
+    declare(type(x = double(NA)))
+    max(x)
+  }
+  qmax <- quick(dynamic_max)
+  expect_equal(qmax(c(3, -1, 2)), 3)
+  expect_error(qmax(numeric()), message, fixed = TRUE)
+})
+
 
 test_that("nested scalar min/max compiles and runs", {
   fn <- function(m) {
