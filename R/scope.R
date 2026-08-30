@@ -123,6 +123,23 @@ new_scope <- function(closure, parent = emptyenv()) {
     counter$i <- 0L
     counter
   }
+  state$generated_name_state <- if (
+    is.null(closure) && inherits(parent, "quickr_scope")
+  ) {
+    attr(parent, "state", exact = TRUE)$generated_name_state
+  } else {
+    registry <- new.env(parent = emptyenv())
+    registry$fortran_names <- character()
+    registry
+  }
+
+  register_generated_var <- function(name, ...) {
+    var <- Variable(..., name = name)
+    scope[[name]] <- var
+    registry <- state$generated_name_state
+    registry$fortran_names <- unique(c(registry$fortran_names, name))
+    var
+  }
 
   state$get_unique_var <- local({
     i <- 0L
@@ -143,7 +160,7 @@ new_scope <- function(closure, parent = emptyenv()) {
             break
           }
         }
-        return(scope[[name]] <- Variable(..., name = name))
+        return(register_generated_var(name, ...))
       }
       repeat {
         name <- paste0(prefix, i <<- i + 1L, "_")
@@ -151,7 +168,7 @@ new_scope <- function(closure, parent = emptyenv()) {
           break
         }
       }
-      (scope[[name]] <- Variable(..., name = name))
+      register_generated_var(name, ...)
     }
   })
 
