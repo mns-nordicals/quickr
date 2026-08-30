@@ -416,7 +416,7 @@ If you need R's bounds behavior, validate indices before the loop.
 
 ### `ifelse()` {#ifelse}
 
-Four differences:
+Differences include:
 
 - **Test type.** R coerces numeric `test` values to logical. quickr requires
   `test` to already be logical and refuses other types.
@@ -432,6 +432,7 @@ Four differences:
   quickr requires each branch to be a scalar or match `test`'s length
   (checked at run time when lengths are unknown). A branch known to be
   zero-length is a compile error.
+- **Assignments.** Assignment expressions in `yes` or `no` are not supported.
 
 ```{r}
 quick(function(t, a, b) {
@@ -452,8 +453,8 @@ to already be logical and errors otherwise.
 length 1 (a compile error when the length is known, or a runtime error
 when it is not), and they short-circuit — the right operand is evaluated only
 when the left side does not decide the answer, so a guarded access like
-`i <= n && x[i] > 0` never evaluates `x[i]` out of range. For
-elementwise logic over vectors, use `&` and `|`.
+`i <= n && x[i] > 0` never evaluates `x[i]` out of range. Use `&` and `|`
+for vectors; assignment expressions in `&&` and `||` are not supported.
 
 ### Local closures accept only pure argument expressions
 
