@@ -11,16 +11,13 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(c, a, out_, c__len_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
+      subroutine fn(c, a, out_, c__len_) bind(c)
+        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
         implicit none
       
         ! manifest start
         ! sizes
         integer(c_ptrdiff_t), intent(in), value :: c__len_
-      
-        ! error
-        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
       
         ! args
         integer(c_int), intent(in) :: c(c__len_) ! logical
@@ -40,27 +37,10 @@
             where (btmp1_) btmp2_ = real(1_c_int, kind=c_double)
           end if
           if (any(.not. btmp1_)) then
-            if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
-      call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
-      & supported")
-              return
-            end if
             where (.not. btmp1_) btmp2_ = a
           end if
           out_ = btmp2_
         end block
-      
-        contains
-          subroutine quickr_set_error_msg(msg)
-            character(len=*), intent(in) :: msg
-            integer :: i
-            integer :: n
-            if (quickr_err_msg(1) == c_null_char) then
-              n = min(len(msg), 256 - 1)
-              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
-              quickr_err_msg(n + 1) = c_null_char
-            end if
-          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -74,8 +54,7 @@
         const int* const c__, 
         const double* const a__, 
         double* const out___, 
-        const R_xlen_t c__len_, 
-        char* quickr_err_msg);
+        const R_xlen_t c__len_);
       
       SEXP fn_(SEXP _args) {
         // c
@@ -104,19 +83,11 @@
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
         
-        char quickr_err_msg[256];
-        quickr_err_msg[0] = '\0';
-        
-        
         fn(
           c__,
           a__,
           out___,
-          c__len_,
-          quickr_err_msg);
-        if (quickr_err_msg[0] != '\0') {
-          Rf_error("%s", quickr_err_msg);
-        }
+          c__len_);
         
         UNPROTECT(1);
         return out_;
@@ -164,7 +135,7 @@
           allocate(btmp2_(c__len_))
           btmp1_ = (c/=0)
           if (any(btmp1_)) then
-            if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+            if (size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
               return
@@ -172,7 +143,7 @@
             where (btmp1_) btmp2_ = a
           end if
           if (any(.not. btmp1_)) then
-            if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+            if (size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
               return
