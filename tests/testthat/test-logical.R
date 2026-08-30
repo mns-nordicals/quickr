@@ -472,6 +472,35 @@ test_that("short-circuited local closure diagnostics are deferred", {
   expect_error(qbody(), "is only supported on symbols")
 })
 
+test_that("short-circuited operands defer matrix diagnostics", {
+  skipped <- function() {
+    out <- FALSE && (sum(matrix(1, nrow = 1, ncol = 1, byrow = TRUE)) > 0)
+    out <- FALSE &&
+      {
+        floor(1i) > 0
+      }
+    out
+  }
+  reached <- function() {
+    TRUE && (sum(matrix(1, nrow = 1, ncol = 1, byrow = TRUE)) > 0)
+  }
+  reached_braced <- function() {
+    TRUE &&
+      {
+        floor(1i) > 0
+      }
+  }
+
+  expect_identical(skipped(), FALSE)
+  expect_identical(quick(skipped)(), FALSE)
+  expect_error(
+    quick(reached)(),
+    "matrix(byrow=TRUE) is not supported",
+    fixed = TRUE
+  )
+  expect_error(quick(reached_braced)(), "floor", fixed = TRUE)
+})
+
 test_that("short-circuited operators defer arity errors", {
   bad_calls <- lapply(
     c(
