@@ -68,6 +68,12 @@ r2f_handlers[["c"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   if (length(fill_idx)) {
     spread_var <- NULL
     for (j in fill_idx) {
+      if (
+        !is.null(ff[[j]]@value@name) &&
+          identical(trimws(as.character(ff[[j]])), ff[[j]]@value@name)
+      ) {
+        next
+      }
       len_f <- dims2f(ff[[j]]@value@dims, scope)
       if (!nzchar(len_f)) {
         next # statically length 1: a single spliced scalar is already right

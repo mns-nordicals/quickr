@@ -112,7 +112,11 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
 r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   mask <- lower_r2f_operand_in_order(args[[1L]], scope, ..., hoist = hoist)
   mask_code <- trimws(as.character(mask))
-  if (is.null(mask@value@name) || !identical(mask_code, mask@value@name)) {
+  if (
+    !passes_as_scalar(mask@value) ||
+      is.null(mask@value@name) ||
+      !identical(mask_code, mask@value@name)
+  ) {
     # Branch hoists introduce nested block scopes whose temporary names can
     # repeat. Keep the selector in procedure scope so it cannot be shadowed.
     mask_tmp <- scope_unique_var(
@@ -126,6 +130,10 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     hoist$emit(glue("{mask_tmp@name} = {mask}"))
     mask <- Fortran(mask_tmp@name, mask_tmp)
   }
+  result_allocation_dims <- lapply(
+    seq_len(mask@value@rank),
+    function(axis) call("[", call("dim", as.name(mask@value@name)), axis)
+  )
 
   lower_branch <- function(arg) {
     sub <- new_hoist(scope)
@@ -225,7 +233,8 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
       allocate_reusable_local_output_at_point(
         result,
         scope,
-        branch_hoists[[i]]
+        branch_hoists[[i]],
+        dims = result_allocation_dims
       )
       assignment <- glue(
         "where ({selector}) {result@name} = {branches[[i]]}"

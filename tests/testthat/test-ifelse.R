@@ -153,6 +153,33 @@ test_that("ifelse evaluates earlier branches before later shape errors", {
   expect_identical(actual_seed, .Random.seed)
 })
 
+test_that("ifelse snapshots an array mask before evaluating branches", {
+  fn <- function(x) {
+    declare(type(x = double(3)))
+    test <- x > 0
+    flip <- function() {
+      test[] <<- !test
+      1L
+    }
+    ifelse(test, flip(), 2L)
+  }
+
+  expect_quick_identical(fn, list(c(1, -1, 2)))
+})
+
+test_that("ifelse fixes result extents before evaluating branches", {
+  fn <- function(test, n) {
+    declare(type(test = logical(n)), type(n = integer(1)))
+    grow <- function() {
+      n <<- n + 1L
+      1L
+    }
+    length(ifelse(test, grow(), 2L))
+  }
+
+  expect_quick_identical(fn, list(c(TRUE, FALSE, TRUE), 3L))
+})
+
 test_that("ifelse does not evaluate unselected branches", {
   fn <- function(test) {
     declare(type(test = logical(3)))

@@ -71,3 +71,29 @@ test_that("cbind/rbind evaluate effectful arguments from left to right", {
   set.seed(915)
   expect_identical(quick(rbind_fn)(), rbind_expected)
 })
+
+test_that("later subscript effects cannot change the evaluated base", {
+  fn <- function(x) {
+    declare(type(x = double(2)))
+    first <- function() {
+      x[] <<- x + 1
+      1L
+    }
+    x[first()]
+  }
+
+  expect_quick_identical(fn, list(c(3, 4)))
+})
+
+test_that("later matrix effects cannot change the evaluated left operand", {
+  fn <- function(x) {
+    declare(type(x = double(1, 1)))
+    rhs <- function() {
+      x <<- x + 1
+      matrix(2, 1, 1)
+    }
+    x %*% rhs()
+  }
+
+  expect_quick_identical(fn, list(matrix(3, 1, 1)))
+})
