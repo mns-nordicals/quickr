@@ -314,6 +314,29 @@ finish_captured_operand <- function(operand, captured_hoist, hoist) {
   operand
 }
 
+r2f_expression_may_mutate_scope <- function(e, scope) {
+  if (!is.call(e)) {
+    return(FALSE)
+  }
+  if (!is.symbol(e[[1L]])) {
+    return(TRUE)
+  }
+  op <- as.character(e[[1L]])
+  if (
+    op %in%
+      c("<-", "=", "<<-", "[<-", "[[<-", "$<-") ||
+      inherits(get0(op, scope), LocalClosure)
+  ) {
+    return(TRUE)
+  }
+  any(vapply(
+    as.list(e)[-1L],
+    r2f_expression_may_mutate_scope,
+    logical(1L),
+    scope
+  ))
+}
+
 snapshot_operand_before_later_effects <- function(
   operand,
   arg,
@@ -324,11 +347,11 @@ snapshot_operand_before_later_effects <- function(
   stopifnot(is.list(later_args), inherits(scope, "quickr_scope"))
   if (
     !length(later_args) ||
-      all(vapply(
+      !any(vapply(
         later_args,
-        r2f_expression_is_pure,
+        r2f_expression_may_mutate_scope,
         logical(1L),
-        scope = scope
+        scope
       )) ||
       is.null(arg) ||
       is_scalar_atomic(arg) ||
