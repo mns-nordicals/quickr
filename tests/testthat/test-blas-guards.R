@@ -169,6 +169,30 @@ test_that("reused BLAS locals are allocated on every reachable path", {
   expect_equal(qfn(a, b, TRUE), fn(a, b, TRUE))
 })
 
+test_that("BLAS destinations are not reused across unproven shapes", {
+  local <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(k, p)))
+    out <- a + 0
+    out <- a %*% b
+    sum(out)
+  }
+  external <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(k, p)))
+    out <- a + 0
+    out <- a %*% b
+    out
+  }
+
+  a <- matrix(as.double(1:6), 2, 3)
+  b <- matrix(as.double(1:3), 3, 1)
+  expect_quick_equal(local, list(a, b))
+  expect_error(
+    quick(external),
+    "cannot change the shape of an external assignment target",
+    fixed = TRUE
+  )
+})
+
 test_that("renamed BLAS return destinations remain output arguments", {
   fn <- function(a, b, n) {
     declare(
@@ -320,6 +344,30 @@ test_that("triangular solve guards squareness and RHS length", {
     qfn(matrix(as.double(1:6), 2, 3), c(1, 5)),
     "triangular solve requires a square matrix"
   )
+})
+
+test_that("LAPACK solves reject zero-sized outputs before library calls", {
+  solve_fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(n)))
+    solve(a, b)
+  }
+  forward_fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(n)))
+    forwardsolve(a, b)
+  }
+  back_fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(n)))
+    backsolve(a, b)
+  }
+
+  a <- matrix(numeric(), 0, 0)
+  for (fn in list(solve_fn, forward_fn, back_fn)) {
+    expect_error(
+      quick(fn)(a, numeric()),
+      "zero-sized outputs are not supported",
+      fixed = TRUE
+    )
+  }
 })
 
 test_that("vector %*% vector guards unknown lengths as whole sizes", {
