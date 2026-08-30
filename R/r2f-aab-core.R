@@ -399,6 +399,8 @@ r2f_expression_host_mutations <- function(e, scope, seen = character()) {
     return(character())
   }
 
+  # Direct `<-` / `=` calls are statement-only in the supported translator
+  # contract, so host mutation here comes from local-closure `<<-` calls.
   mutations <- character()
   if (identical(op, "<<-")) {
     target <- e[[2L]]
