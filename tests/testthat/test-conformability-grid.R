@@ -1,33 +1,5 @@
-# Combinatorial enforcement of the conformability contract: every cell of
-#   mode(left) x mode(right) x shape(left) x shape(right) x op
-# is checked against plain R as the oracle.
-
-# Valid cells must match R exactly
-# (values, typeof(), shape); statically invalid cells must fail to compile
-# with the documented message; statically undecidable cells must compile a
-# runtime guard that matches R on conformable inputs and raises the
-# documented error on nonconformable ones.
-#
-# Compile-cost control: cells sharing a shape pair are packed into one
-# compiled function with one statement per (op, mode pair, operand order),
-# so one gfortran invocation covers up to ~90 cells. Ops split into two
-# packed families because both operand orders appear in one function, so
-# every operand is also a divisor/exponent somewhere:
-#   gen: + - * < == & |   -- safe for any values (zeros, FALSE, negatives)
-#   div: / ^ %% %/%       -- operands chosen zero-free and pow-safe, since
-#        R answers the unsafe cells with NA/NaN (documented not-supported)
-#        or traps SIGFPE in Fortran integer division
-# Value edges ride along as input choices: negative dividends/divisors and
-# bases (%% sign semantics, integer-exponent ^), magnitudes past 2^24 and
-# 2^31 (%/% in the real domain), descending ranges, TRUE/FALSE arithmetic,
-# and equal positions so == has TRUE cells.
-#
-# Every intended shape pair runs in the standard non-CRAN suite.
-
-# --- Axes ---------------------------------------------------------------
-
+# Every mode x shape x operator cell is checked against plain R.
 grid_modes <- c(l = "logical", i = "integer", d = "double")
-
 grid_shapes <- list(
   scl = list(decl = "1", kind = "scalar", n = 1L),
   vec3 = list(decl = "3", kind = "vec", len = 3L, n = 3L),
@@ -50,8 +22,6 @@ grid_op_families <- list(
   div = c(div = "/", pow = "^", mod = "%%", idv = "%/%")
 )
 
-# quickr requires logical operands for & and | (R would coerce numerics);
-# an error divergence, pinned in its own test below.
 grid_logical_only_ops <- c("and", "or")
 
 grid_mode_pairs <- function(opname) {
@@ -66,10 +36,6 @@ grid_mode_pairs <- function(opname) {
   lapply(seq_len(nrow(pairs)), function(i) c(pairs[i, 2L], pairs[i, 1L]))
 }
 
-# --- Values -------------------------------------------------------------
-
-# Six values per (family, set, role, mode); shapes take a prefix (scalars
-# and 1x1 matrices position 1, vec3/sym positions 1:3, mat32 all six).
 grid_value_pool <- list(
   gen = list(
     primary = list(
@@ -84,7 +50,6 @@ grid_value_pool <- list(
         d = c(1.5, -2, 3, 0, -2, 8)
       )
     ),
-    # extremes (products stay inside int32), descending runs, equal positions
     edge = list(
       a = list(
         l = c(FALSE, TRUE, TRUE, FALSE, FALSE, TRUE),
@@ -99,9 +64,6 @@ grid_value_pool <- list(
     )
   ),
   div = list(
-    # No zeros anywhere (either operand may be a divisor); doubles paired so
-    # a negative base only ever meets a whole-valued exponent (R answers the
-    # fractional case NaN, which is out of scope).
     primary = list(
       a = list(
         l = rep(TRUE, 6L),
@@ -114,8 +76,6 @@ grid_value_pool <- list(
         d = c(2, 3, 2, 4, 2, 3)
       )
     ),
-    # 1e10: %/% quotient past both 2^24 and 2^31, exact in doubles, so the
-    # old FLOOR()-to-int32 overflow would surface without float noise.
     edge = list(
       a = list(
         l = rep(TRUE, 6L),
@@ -158,9 +118,6 @@ grid_pair_args <- function(
   args
 }
 
-# Length a `sym` operand must have to conform with its partner shape.
-# For a matrix partner that is the vector-matrix rule's nrow -- including
-# the 1x1 matrix, whose symbolic-vector cells guard on length 1.
 grid_sym_ok_len <- function(partner) {
   p <- grid_shapes[[partner]]
   if (p$kind == "vec" && !is.na(p$len)) {
@@ -172,10 +129,6 @@ grid_sym_ok_len <- function(partner) {
   }
 }
 
-# --- Generators ---------------------------------------------------------
-
-# One function per (shape pair, op family): one statement per
-# (op, mode pair, operand order), returning every result in a named list.
 make_grid_pair_fn <- function(sa, sb, family) {
   decls <- c(
     vapply(
@@ -257,7 +210,6 @@ make_grid_pair_fn <- function(sa, sb, family) {
   fn
 }
 
-# A one-cell function, for cells whose expected outcome is a compile error.
 make_grid_cell_fn <- function(sa, sb, op, ma, mb) {
   src <- paste0(
     "function(a, b) {\n",
@@ -278,23 +230,6 @@ make_grid_cell_fn <- function(sa, sb, op, ma, mb) {
   )
   eval(parse(text = src)[[1L]])
 }
-
-# --- The expected-outcome function --------------------------------------
-# Direct transcription of the shape-contract table, per cell:
-#   1. scalar op anything                    -> allow, no guard
-#   2. identical known shapes                -> allow, no guard
-#   3. vec(n) op mat(n, k)                   -> allow (column-major recycling)
-#   4. known mismatch (incl. length 0)       -> compile error
-#   5. not statically decidable (NA dims)    -> runtime guard
-# One op-class split, mirroring R: *arithmetic* recycles a 1x1 matrix
-# against a vector of statically known length != 1 (deprecated in R but
-# still its answer, so quickr scalarizes), while comparisons and & | error
-# there -- for those the 1x1 is an ordinary one-row matrix and the
-# vector-matrix rule applies. A *symbolic* vector length takes the
-# vector-matrix rule for every op class: the result's shape depends on the
-# runtime length (R keeps the 1x1 dims only for a length-1 vector), so a
-# runtime guard requires length 1 and longer vectors error where R would
-# recycle (both flavors are pinned in test-recycling.R).
 
 grid_strict_ops <- c("lt", "eq", "and", "or")
 
@@ -337,7 +272,6 @@ grid_cell_verdict <- function(sa, sb, opname) {
     }
     return(err("matching dimensions"))
   }
-  # vector op matrix: vector length against nrow
   vec <- if (A$kind == "vec") A else B
   mat <- if (A$kind == "mat") A else B
   if (is.na(vec$len)) {
@@ -349,17 +283,10 @@ grid_cell_verdict <- function(sa, sb, opname) {
   err("matrix first dimension")
 }
 
-# Shape-pair verdict for packing: the arithmetic-class verdict. Cells whose
-# own verdict differs (the strict-op 1x1 rows) are excluded from the packed
-# function and land in the compile-error sweep instead.
 grid_pair_verdict <- function(sa, sb) {
   grid_cell_verdict(sa, sb, "add")
 }
 
-# --- Oracle comparison --------------------------------------------------
-
-# suppressWarnings: R deprecation-warns on 1x1-array-vs-vector recycling
-# (mat11 pairs); values still match, which is what the contract pins.
 expect_grid_cells_match <- function(qfn, fn, args, context) {
   r_res <- suppressWarnings(do.call(fn, args))
   q_res <- do.call(qfn, args)
@@ -379,8 +306,6 @@ expect_grid_cells_match <- function(qfn, fn, args, context) {
     )
   }
 }
-
-# --- Elementwise grid: valid and guarded shape pairs ---------------------
 
 grid_pair_names <- names(grid_shapes)
 for (i in seq_along(grid_pair_names)) {
@@ -415,9 +340,6 @@ for (i in seq_along(grid_pair_names)) {
           }
 
           if (identical(verdict$outcome, "guard")) {
-            # bump one symbolic operand's length; the guard must raise the
-            # documented error where R errors and BLAS-free Fortran would
-            # read or write out of bounds
             bad_b <- if (identical(sb, "sym")) sym_b + 1L else sym_b
             bad_a <- if (identical(sb, "sym")) sym_a else sym_a + 1L
             args_bad <- grid_pair_args(sa, sb, family, "primary", bad_a, bad_b)
@@ -436,10 +358,6 @@ for (i in seq_along(grid_pair_names)) {
     })
   }
 }
-
-# --- Elementwise grid: statically rejected shape pairs -------------------
-# Compile errors never reach gfortran, so every op and both operand orders
-# are cheap enough to always run.
 
 test_that("statically nonconformable cells are compile errors for every op", {
   for (i in seq_along(grid_pair_names)) {
@@ -523,8 +441,6 @@ test_that("& and | require logical operands (R would coerce: error divergence)",
   }
 })
 
-# --- c(): mode join over all elements, constructive lengths --------------
-
 test_that("c() grid: lattice join across modes, known and mixed lengths", {
   ids <- character()
   stmts <- character()
@@ -589,7 +505,6 @@ test_that("c() grid: symbolic lengths are constructive (no guard)", {
   dll_paths_before <- loaded_dll_paths()
   on.exit(cleanup_new_quick_dlls(dll_paths_before), add = TRUE)
   qfn <- quick(fn)
-  # unequal lengths are fine for c(): lengths add, nothing to conform
   args <- grid_pair_args(
     "sym",
     "sym",
@@ -611,8 +526,6 @@ test_that("c() rejects rank-2 args (R would flatten: error divergence)", {
   )[[1L]])
   expect_error(quick(fn), "scalars or 1-d arrays", fixed = TRUE)
 })
-
-# --- Multi-arg min()/max()/sum(): join across args, shapes independent ----
 
 test_that("multi-arg min/max/sum grid: modes join, arg shapes independent", {
   ids <- character()
@@ -665,8 +578,6 @@ test_that("multi-arg min/max/sum grid: modes join, arg shapes independent", {
   }
 })
 
-# --- ifelse(): branch-mode join, shape from `test` ------------------------
-
 test_that("ifelse grid: branch mode pairs join; scalars broadcast against vector test", {
   ids <- character()
   stmts <- character()
@@ -711,9 +622,6 @@ test_that("ifelse grid: branch mode pairs join; scalars broadcast against vector
   on.exit(cleanup_new_quick_dlls(dll_paths_before), add = TRUE)
   qfn <- quick(fn)
   for (set in c("primary", "edge")) {
-    # `test` must stay mixed TRUE/FALSE: with a one-sided test R's ifelse
-    # never materializes the untaken branch, so its result type becomes
-    # value-dependent -- not representable statically (step-9 divergence)
     args <- list(t3 = c(TRUE, FALSE, TRUE))
     for (m in names(grid_modes)) {
       args[[paste0("y", m)]] <- grid_operand("a", "gen", set, m, "vec3")
@@ -779,7 +687,6 @@ test_that("ifelse grid: symbolic branch lengths get a runtime guard", {
   }
   args_ok <- make_args(3L)
   expect_grid_cells_match(qfn, fn, args_ok, context = "ifelse/sym")
-  # was: unguarded merge() reading past the shorter branch
   expect_error(
     do.call(qfn, make_args(4L)),
     "must be scalars or match the shape",
