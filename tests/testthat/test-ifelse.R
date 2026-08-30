@@ -73,29 +73,46 @@ test_that("ifelse with scalar test and array branch errors cleanly", {
   expect_error(quick(fn), "shape of `test`")
 })
 
-test_that("ifelse with statically mismatched branch lengths is a compile error", {
+test_that("ifelse defers statically mismatched branch lengths", {
   fn <- function(c, a) {
     declare(type(c = logical(3)), type(a = double(2)))
     ifelse(c, a, 0)
   }
-  expect_error(quick(fn), "R-style recycling is not supported")
+
+  qfn <- quick(fn)
+  expect_equal(qfn(rep(FALSE, 3), c(1, 2)), rep(0, 3))
+  expect_error(
+    qfn(c(TRUE, FALSE, FALSE), c(1, 2)),
+    "R-style recycling is not supported"
+  )
 })
 
-test_that("ifelse with a branch of different rank than test is a compile error", {
+test_that("ifelse defers branch rank mismatches", {
   # merge() requires conformable arguments: a matrix branch under a vector
   # `test` is R recycling, not broadcasting.
   fn <- function(c, m) {
     declare(type(c = logical(3)), type(m = double(3, 3)))
     ifelse(c, m, 0)
   }
-  expect_error(quick(fn), "R-style recycling is not supported")
+  qfn <- quick(fn)
+  expect_equal(qfn(rep(FALSE, 3), matrix(1, 3, 3)), rep(0, 3))
+  expect_error(
+    qfn(c(TRUE, FALSE, FALSE), matrix(1, 3, 3)),
+    "R-style recycling is not supported"
+  )
 
   # the mirror image, and in `no` position: a vector branch under a matrix test
   fn2 <- function(c, a) {
     declare(type(c = logical(2, 2)), type(a = double(4)))
     ifelse(c, 0, a)
   }
-  expect_error(quick(fn2), "R-style recycling is not supported")
+  qfn2 <- quick(fn2)
+  values <- c(1, 2, 3, 4)
+  expect_equal(qfn2(matrix(TRUE, 2, 2), values), matrix(0, 2, 2))
+  expect_error(
+    qfn2(matrix(c(FALSE, TRUE, TRUE, TRUE), 2, 2), values),
+    "R-style recycling is not supported"
+  )
 })
 
 test_that("ifelse guards unknown branch lengths at runtime", {
