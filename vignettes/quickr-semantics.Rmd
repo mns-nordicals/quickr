@@ -439,11 +439,12 @@ when the left side does not decide the answer, so a guarded access like
 `i <= n && x[i] > 0` never evaluates `x[i]` out of range. For
 elementwise logic over vectors, use `&` and `|`.
 
-quickr still translates and statically validates the complete right operand.
-A nested operation that is unsupported from its declared types or shapes is a
-compile-time error even when a constant left operand would skip it. Only work
-and errors that depend on runtime values are deferred behind the short-circuit
-branch.
+quickr still translates complete lazy branches. Recognized static elementwise
+shape mismatches in a `&&` or `||` right operand, and wrong-arity calls to
+supported built-ins in those operands or an `ifelse()` branch, are deferred with
+the branch. A skipped path does not error; reaching it raises a runtime error.
+Other unsupported expressions may still be rejected when `quick()` translates
+the function.
 
 ### Closure arguments are evaluated eagerly
 
