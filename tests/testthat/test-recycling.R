@@ -592,6 +592,26 @@ test_that("matrix() rejects empty fills when the result would contain NA", {
   )
 })
 
+test_that("matrix() rejects every empty array-valued source", {
+  direct <- function(x) {
+    declare(type(x = double(NA)))
+    matrix(x, nrow = 2L, ncol = 2L)
+  }
+  computed <- function(x) {
+    declare(type(x = double(NA)))
+    matrix(x[x > 0], nrow = 2L, ncol = 2L)
+  }
+  message <- "NA values, which are not supported"
+
+  qdirect <- quick(direct)
+  expect_equal(qdirect(as.double(1:4)), direct(as.double(1:4)))
+  expect_error(qdirect(double()), message, fixed = TRUE)
+
+  qcomputed <- quick(computed)
+  expect_equal(qcomputed(as.double(1:4)), computed(as.double(1:4)))
+  expect_error(qcomputed(as.double(-4:-1)), message, fixed = TRUE)
+})
+
 test_that("array() allows empty fills for empty results", {
   fn <- function() {
     array(numeric(), dim = c(0L, 2L))
