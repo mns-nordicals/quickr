@@ -855,12 +855,12 @@ match_closure_call_args <- function(
     r2f_expression_is_pure,
     scope = scope
   )
+  promise_error <- paste0(
+    closure_name,
+    " call: local closure calls only support pure argument expressions"
+  )
   if (any(!pure_args)) {
-    stop(
-      closure_name,
-      " call: local closure calls only support pure argument expressions",
-      call. = FALSE
-    )
+    stop(promise_error, call. = FALSE)
   }
 
   args_f <- lapply(formal_names, function(nm) {
@@ -871,7 +871,9 @@ match_closure_call_args <- function(
       args_expr[[nm]],
       scope,
       ...,
-      hoist = hoist
+      hoist = hoist,
+      reject_runtime_guard = TRUE,
+      runtime_guard_message = promise_error
     )
   })
   names(args_f) <- formal_names
