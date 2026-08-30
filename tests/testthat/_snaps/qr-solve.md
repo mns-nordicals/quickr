@@ -49,11 +49,11 @@
           integer(c_int) :: btmp9_
           integer(c_int) :: btmp10_
       
-          if (size(a, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
-            call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
+          if (size(a, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve zero-sized outputs are not supported")
             return
           end if
-          if (size(a, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+          if (size(a, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
             call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
             return
           end if
@@ -221,11 +221,11 @@
           integer(c_int) :: btmp10_
           integer(c_int) :: btmp11_
       
-          if (size(a, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
-            call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
+          if (size(a, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            call quickr_set_error_msg("qr.solve zero-sized outputs are not supported")
             return
           end if
-          if (size(a, 2, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+          if (size(a, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
             call quickr_set_error_msg("qr.solve coefficient matrices with zero extents are not supported")
             return
           end if
@@ -359,3 +359,4 @@
         UNPROTECT(2);
         return out_;
       }
+

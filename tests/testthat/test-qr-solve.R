@@ -92,8 +92,9 @@ test_that("qr.solve still rejects rank deficiency with a zero-width RHS", {
   expect_error(qfn(a, b), "rank deficient matrix in qr.solve", fixed = TRUE)
 })
 
-test_that("qr.solve rejects coefficient matrices with zero extents", {
-  message <- "qr.solve coefficient matrices with zero extents are not supported"
+test_that("qr.solve rejects zero coefficient and output extents", {
+  coefficient_message <- "qr.solve coefficient matrices with zero extents are not supported"
+  output_message <- "qr.solve zero-sized outputs are not supported"
   known_zero_rows <- function(a, b) {
     declare(type(a = double(0, 2)), type(b = double(0, 0)))
     qr.solve(a, b)
@@ -107,20 +108,21 @@ test_that("qr.solve rejects coefficient matrices with zero extents", {
     qr.solve(a, b)
   }
 
-  expect_error(quick(known_zero_rows), message, fixed = TRUE)
-  expect_error(quick(known_zero_cols), message, fixed = TRUE)
+  expect_error(quick(known_zero_rows), coefficient_message, fixed = TRUE)
+  expect_error(quick(known_zero_cols), output_message, fixed = TRUE)
 
   code <- r2f(dynamic)
-  expect_match(as.character(code), message, fixed = TRUE)
+  expect_match(as.character(code), coefficient_message, fixed = TRUE)
+  expect_match(as.character(code), output_message, fixed = TRUE)
   qfn <- expect_no_warning(quick(dynamic))
   expect_error(
     qfn(matrix(double(), 0, 2), matrix(double(), 0, 0)),
-    message,
+    coefficient_message,
     fixed = TRUE
   )
   expect_error(
     qfn(matrix(double(), 2, 0), matrix(double(), 2, 0)),
-    message,
+    output_message,
     fixed = TRUE
   )
 })

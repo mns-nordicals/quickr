@@ -1066,22 +1066,19 @@ lapack_solve_qr <- function(
   scope
 ) {
   design_message <- "qr.solve coefficient matrices with zero extents are not supported"
-  for (axis in 1:2) {
-    dim <- list(m, n)[[axis]]
-    if (is_wholenumber(dim)) {
-      if (as.integer(dim) == 0L) {
-        stop(design_message, call. = FALSE)
-      }
-    } else {
-      emit_quickr_error_if(
-        condition = glue(
-          "size({A_name}, {axis}, kind=c_ptrdiff_t) == 0_c_ptrdiff_t"
-        ),
-        message = design_message,
-        hoist = hoist,
-        scope = scope
-      )
+  if (is_wholenumber(m)) {
+    if (as.integer(m) == 0L) {
+      stop(design_message, call. = FALSE)
     }
+  } else {
+    emit_quickr_error_if(
+      condition = glue(
+        "size({A_name}, 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t"
+      ),
+      message = design_message,
+      hoist = hoist,
+      scope = scope
+    )
   }
 
   A_work <- hoist$declare_tmp_at_point(mode = "double", dims = list(m, n))
