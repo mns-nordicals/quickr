@@ -125,13 +125,15 @@ register_r2f_handler(
         Fortran(s, Variable(x@value@mode))
       }
 
-      out <- snapshot_operand_before_later_effects(
-        out,
-        arg,
-        later_args,
-        scope,
-        captured_hoist
-      )
+      if (!allow_empty || identical(nonempty, TRUE)) {
+        out <- snapshot_operand_before_later_effects(
+          out,
+          arg,
+          later_args,
+          scope,
+          captured_hoist
+        )
+      }
       if (allow_empty) {
         return(list(
           value = out,
