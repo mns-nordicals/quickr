@@ -23,6 +23,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-ifelse.R",
     "test-logical.R",
     "test-loops.R",
+    "test-matrix-inference.R",
     "test-matrix-lapack.R",
     "test-matrix-mul.R",
     "test-reduction-scalars.R",
