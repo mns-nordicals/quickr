@@ -76,7 +76,12 @@ new_scope <- function(closure, parent = emptyenv()) {
         subroutine = "tmp",
         "tmp"
       )
-      name <- paste0(prefix, i <<- i + 1L, "_")
+      repeat {
+        name <- paste0(prefix, i <<- i + 1L, "_")
+        if (!name %in% scope_fortran_names(scope)) {
+          break
+        }
+      }
       (scope[[name]] <- Variable(..., name = name))
     }
   })
