@@ -51,10 +51,9 @@ test_that("guarded OpenMP iterations stop when cancellation is disabled", {
     declare(parallel())
     for (i in seq_len(1L)) {
       for (j in seq_len(1L)) {
-        k <- 0L
-        while (k < 1L) {
-          k <- k + 1L
+        while (TRUE) {
           out <- sum(x + y)
+          break
         }
       }
       out <- out + 1
@@ -74,6 +73,8 @@ test_that("guarded OpenMP iterations stop when cancellation is disabled", {
   expect_length(cycles, 3L)
   expect_lt(guard, cycles[[1L]])
   expect_lt(cycles[[3L]], later_statement)
+  exits <- gregexpr("c_null_char) exit", code, fixed = TRUE)[[1L]]
+  expect_length(exits, 2L)
 
   qguarded <- quick(guarded)
   expect_error(

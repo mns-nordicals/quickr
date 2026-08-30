@@ -46,10 +46,13 @@ r2f_handlers[["repeat"]] <- function(args, scope, ..., hoist = NULL) {
   # per iteration. (`{` bodies already isolate each statement.)
   body <- r2f(args[[1]], scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
+  checks <- quickr_error_serial_loop_checks(scope)
   Fortran(glue(
     "do
+    {indent(checks$before)}
     {indent(body)}
     end do
+    {checks$after}
     "
   ))
 }
@@ -82,24 +85,25 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
   # (`{` bodies already isolate each statement.)
   body <- r2f(args[[2]], scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
-  error_check_after <- quickr_error_after_serial_loop(scope)
-  if (cond_hoist$is_empty()) {
+  checks <- quickr_error_serial_loop_checks(scope)
+  if (cond_hoist$is_empty() && !nzchar(checks$before)) {
     # nothing hoisted: keep the plain do-while form
     return(Fortran(glue(
       "do while ({cond})
       {indent(body)}
       end do
-      {error_check_after}
+      {checks$after}
       "
     )))
   }
   cond_code <- cond_hoist$render(glue("if (.not. ({cond})) exit"))
   Fortran(glue(
     "do
+    {indent(checks$before)}
     {indent(cond_code)}
     {indent(body)}
     end do
-    {error_check_after}
+    {checks$after}
     "
   ))
 }
@@ -208,7 +212,12 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
     if (!is.null(parallel) && openmp_scope_uses_rng(scope)) {
       stop("runif() is not supported inside parallel loops", call. = FALSE)
     }
-    loop_stmts <- str_flatten_lines(glue("{var_name} = {element_expr}"), body)
+    checks <- quickr_error_serial_loop_checks(scope, parallel)
+    loop_stmts <- str_flatten_lines(
+      checks$before,
+      glue("{var_name} = {element_expr}"),
+      body
+    )
 
     loop_header <- if (iterable_reversed) {
       glue("do {idx@name} = {end}, 1_c_int, -1_c_int")
@@ -229,7 +238,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
         openmp_depth = scope_openmp_depth(scope) - 1L
       )
     } else {
-      quickr_error_after_serial_loop(scope)
+      checks$after
     }
     return(Fortran(glue(
       "
@@ -261,6 +270,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   if (!is.null(parallel) && openmp_scope_uses_rng(scope)) {
     stop("runif() is not supported inside parallel loops", call. = FALSE)
   }
+  checks <- quickr_error_serial_loop_checks(scope, parallel)
 
   directives <- openmp_directives(
     parallel,
@@ -275,12 +285,12 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
       openmp_depth = scope_openmp_depth(scope) - 1L
     )
   } else {
-    quickr_error_after_serial_loop(scope)
+    checks$after
   }
   loop_header <- glue("do {var_name} = {iterable}")
   Fortran(glue(
     "{str_flatten_lines(directives$prefix, loop_header)}
-    {indent(body)}
+    {indent(str_flatten_lines(checks$before, body))}
     end do
     {str_flatten_lines(directives$suffix, error_check_after)}
     "
