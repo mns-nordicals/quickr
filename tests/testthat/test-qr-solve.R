@@ -57,19 +57,20 @@ test_that("qr.solve quick matches base R", {
   expect_quick_equal(qr_solve_vec, list(a_wide, b_wide))
 })
 
-test_that("qr.solve supports a known zero-width matrix right-hand side", {
+test_that("qr.solve rejects a known zero-width matrix right-hand side", {
   fn <- function(a, b) {
     declare(type(a = double(3, 2)), type(b = double(3, 0)))
     qr.solve(a, b)
   }
-  a <- rbind(c(1, 0), c(0, 1), c(1, 1))
-  b <- matrix(double(), 3, 0)
 
-  expect_false(grepl("call dqrcf", as.character(r2f(fn)), fixed = TRUE))
-  expect_quick_equal(fn, list(a, b))
+  expect_error(
+    quick(fn),
+    "qr.solve zero-sized outputs are not supported",
+    fixed = TRUE
+  )
 })
 
-test_that("qr.solve supports a dynamic zero-width matrix right-hand side", {
+test_that("qr.solve rejects a dynamic zero-width matrix right-hand side", {
   fn <- function(a, b) {
     declare(type(a = double(3, 2)), type(b = double(3, NA)))
     qr.solve(a, b)
@@ -77,30 +78,38 @@ test_that("qr.solve supports a dynamic zero-width matrix right-hand side", {
   a <- rbind(c(1, 0), c(0, 1), c(1, 1))
   b <- matrix(double(), 3, 0)
 
-  expect_quick_equal(fn, list(a, b))
+  expect_error(
+    quick(fn)(a, b),
+    "qr.solve zero-sized outputs are not supported",
+    fixed = TRUE
+  )
 })
 
-test_that("qr.solve still rejects rank deficiency with a zero-width RHS", {
+test_that("qr.solve rejects zero-width output before rank deficiency", {
   fn <- function(a, b) {
-    declare(type(a = double(3, 2)), type(b = double(3, 0)))
+    declare(type(a = double(3, 2)), type(b = double(3, NA)))
     qr.solve(a, b)
   }
   a <- cbind(as.double(1:3), as.double(1:3))
   b <- matrix(double(), 3, 0)
   qfn <- expect_no_warning(quick(fn))
 
-  expect_error(qfn(a, b), "rank deficient matrix in qr.solve", fixed = TRUE)
+  expect_error(
+    qfn(a, b),
+    "qr.solve zero-sized outputs are not supported",
+    fixed = TRUE
+  )
 })
 
 test_that("qr.solve rejects zero coefficient and output extents", {
   coefficient_message <- "qr.solve coefficient matrices with zero extents are not supported"
   output_message <- "qr.solve zero-sized outputs are not supported"
   known_zero_rows <- function(a, b) {
-    declare(type(a = double(0, 2)), type(b = double(0, 0)))
+    declare(type(a = double(0, 2)), type(b = double(0, 1)))
     qr.solve(a, b)
   }
   known_zero_cols <- function(a, b) {
-    declare(type(a = double(2, 0)), type(b = double(2, 0)))
+    declare(type(a = double(2, 0)), type(b = double(2, 1)))
     qr.solve(a, b)
   }
   dynamic <- function(a, b) {
@@ -116,12 +125,12 @@ test_that("qr.solve rejects zero coefficient and output extents", {
   expect_match(as.character(code), output_message, fixed = TRUE)
   qfn <- expect_no_warning(quick(dynamic))
   expect_error(
-    qfn(matrix(double(), 0, 2), matrix(double(), 0, 0)),
+    qfn(matrix(double(), 0, 2), matrix(double(), 0, 1)),
     coefficient_message,
     fixed = TRUE
   )
   expect_error(
-    qfn(matrix(double(), 2, 0), matrix(double(), 2, 0)),
+    qfn(matrix(double(), 2, 0), matrix(double(), 2, 1)),
     output_message,
     fixed = TRUE
   )

@@ -479,9 +479,10 @@ test_that("solve() rejects a zero-width matrix right-hand side", {
   a <- diag(2)
   b <- matrix(double(), 2, 0)
 
-  expect_error(quick(known), "no right-hand side in 'b'", fixed = TRUE)
+  message <- "solve zero-sized outputs are not supported"
+  expect_error(quick(known), message, fixed = TRUE)
   q_dynamic <- expect_no_warning(quick(dynamic))
-  expect_error(q_dynamic(a, b), "no right-hand side in 'b'", fixed = TRUE)
+  expect_error(q_dynamic(a, b), message, fixed = TRUE)
 })
 
 
