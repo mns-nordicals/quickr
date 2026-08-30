@@ -239,6 +239,26 @@ test_that("ifelse defers unresolved names in unselected branches", {
   expect_error(quick(reached_no)(), "missing_name", fixed = TRUE)
 })
 
+test_that("ifelse defers unresolved names inside branch expressions", {
+  skipped_yes <- function() {
+    ifelse(FALSE, missing_name + 1, 1)
+  }
+  skipped_no <- function() {
+    ifelse(TRUE, 1, (missing_name))
+  }
+  reached_yes <- function() {
+    ifelse(TRUE, missing_name + 1, 1)
+  }
+  reached_no <- function() {
+    ifelse(FALSE, 1, (missing_name))
+  }
+
+  expect_quick_identical(skipped_yes, list())
+  expect_quick_identical(skipped_no, list())
+  expect_error(quick(reached_yes)(), "missing_name", fixed = TRUE)
+  expect_error(quick(reached_no)(), "missing_name", fixed = TRUE)
+})
+
 test_that("ifelse defers anonymous local closure diagnostics", {
   skipped <- function() {
     ifelse(FALSE, (function(x) x + 1)(), 1)
