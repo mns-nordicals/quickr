@@ -128,7 +128,7 @@
       & supported")
           return
         end if
-        if (size(x, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+        if (.not. (any((x >= 0_c_int)))) then
           call quickr_set_error_msg("min()/max() of empty inputs are not supported")
           return
         end if
