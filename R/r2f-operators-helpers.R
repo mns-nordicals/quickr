@@ -413,7 +413,7 @@ guard_conformable_dims <- function(
   left_f = NULL,
   right_f = NULL,
   checker = check_elementwise_lengths,
-  defer_static_error = FALSE
+  defer_static_error = isTRUE(hoist$defer_static_shape_error)
 ) {
   stopifnot(
     is_string(message),
@@ -507,7 +507,7 @@ maybe_reshape_vector_matrix <- function(
   scope,
   scalarize_one_by_one = TRUE
 ) {
-  defer_static_error <- isTRUE(hoist$defer_static_elementwise_error)
+  defer_static_error <- isTRUE(hoist$defer_static_shape_error)
   stop_static_error <- function(message) {
     if (defer_static_error) {
       stop_deferred_branch_error(message)

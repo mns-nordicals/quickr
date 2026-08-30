@@ -180,3 +180,18 @@ test_that("ifelse defers malformed calls in unselected branches", {
   runif(1)
   expect_identical(actual_seed, .Random.seed)
 })
+
+test_that("ifelse defers shape errors in unselected branches", {
+  fn <- function(test) {
+    declare(type(test = logical(3)))
+    ifelse(test, logical(2) & logical(3), logical(3))
+  }
+
+  expect_quick_identical(fn, list(rep(FALSE, 3)))
+  qfn <- quick(fn)
+  expect_error(
+    qfn(c(TRUE, FALSE, FALSE)),
+    "elementwise vector operations",
+    fixed = TRUE
+  )
+})
