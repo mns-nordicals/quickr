@@ -99,6 +99,34 @@ test_that("matrix-vector %*% guards before allocating a reusable local", {
   )
 })
 
+test_that("renamed BLAS return destinations remain output arguments", {
+  fn <- function(a, b, n) {
+    declare(
+      type(a = double(m, k)),
+      type(b = double(k, p)),
+      type(n = integer(1))
+    )
+    x <- runif(n)
+    Tmp1. <- a %*% b
+    Tmp1.
+  }
+
+  qfn <- quick(fn)
+  a <- matrix(as.double(1:6), 2, 3)
+  b <- matrix(as.double(1:6), 3, 2)
+
+  set.seed(823)
+  expected <- fn(a, b, 2L)
+  expected_seed <- .Random.seed
+
+  set.seed(823)
+  actual <- qfn(a, b, 2L)
+  actual_seed <- .Random.seed
+
+  expect_equal(actual, expected)
+  expect_identical(actual_seed, expected_seed)
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))
