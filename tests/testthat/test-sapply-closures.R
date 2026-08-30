@@ -380,6 +380,22 @@ test_that("local closure purity respects shadowed operators", {
     fixed = TRUE
   )
 })
+test_that("local closure calls reject guarded argument promises", {
+  fn <- function(a, b) {
+    declare(type(a = double(n)), type(b = double(m)))
+    ignore <- function(x) {
+      1L
+    }
+    ignore(a + b)
+  }
+
+  expect_error(
+    quick(fn),
+    "local closure calls only support pure argument expressions",
+    fixed = TRUE
+  )
+})
+
 test_that("sapply errors for insufficient arguments", {
   expect_error(
     quick(function(x) {
