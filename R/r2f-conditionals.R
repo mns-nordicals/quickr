@@ -145,7 +145,7 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
       # WHERE may evaluate only selected RHS elements. Materialize a branch
       # when full evaluation is observable or a runtime shape guard needs its
       # actual extent.
-      branch <- hoist_unless_name(branch, sub)
+      branch <- hoist_unless_name(branch, sub, allocate_at_point = TRUE)
     }
     list(value = branch, hoist = sub)
   }
