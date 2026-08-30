@@ -324,6 +324,8 @@ vector whose length is only known at run time: the compiled function
 requires length 1 (returning a `1x1` matrix, as R does) and errors on a
 longer vector, where R would recycle with a deprecation warning.
 
+Non-fill `array(data, dim)` calls also refuse to recycle `data` when it is shorter than `prod(dim)`.
+
 ### Zero-length operands do not recycle to zero-length results
 
 R arithmetic with a zero-length operand returns a zero-length result
@@ -448,6 +450,8 @@ quick(function(t, a, b) {
 R coerces numeric operands to logical (`1 & 2` is `TRUE` and `!1` is
 `FALSE`); quickr requires the operands of `!`, `&`, `|`, `&&`, and `||`
 to already be logical and errors otherwise.
+
+`any()` and `all()` likewise require logical operands instead of coercing numeric inputs as R does.
 
 `&&` and `||` otherwise follow R's scalar semantics: operands must be
 length 1 (a compile error when the length is known, or a runtime error
