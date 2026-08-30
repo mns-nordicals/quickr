@@ -205,9 +205,8 @@ r2f_handlers[["c"]] <- function(args, scope = NULL, ..., hoist = NULL) {
         )
       }
       spread_var <- spread_var %||%
-        scope_unique_var(
+        scope_unique_implied_do_var(
           scope,
-          "integer",
           integer_kind = "c_ptrdiff_t"
         )
       ff[[j]] <- Fortran(
@@ -318,7 +317,7 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
     )
   }
 
-  i <- scope_unique_var(scope, "integer")
+  i <- scope_unique_implied_do_var(scope)
   out_val <- Variable("integer", list(len_expr))
   Fortran(glue("[({x}, {i}=1, int({times}, kind=c_int))]"), out_val)
 }
@@ -596,9 +595,8 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       shape <- glue("int([{dims_f}])")
 
       source <- if (is_fill_constructor) {
-        i <- scope_unique_var(
+        i <- scope_unique_implied_do_var(
           scope,
-          "integer",
           integer_kind = "c_ptrdiff_t"
         )
         glue("[({out}, {i}=1_c_ptrdiff_t, {n_expr_ptrdiff})]")

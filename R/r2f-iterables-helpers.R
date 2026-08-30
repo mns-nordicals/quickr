@@ -405,9 +405,8 @@ seq_like_r2f <- function(
       glue("{start}:{end}:{step}")
     }
   } else {
-    i <- scope_unique_var(
+    i <- scope_unique_implied_do_var(
       scope,
-      "integer",
       integer_kind = "c_ptrdiff_t"
     )
     fr <- if (omit_step) {

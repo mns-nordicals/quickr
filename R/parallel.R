@@ -67,6 +67,16 @@ register_openmp_private <- function(scope, name) {
   invisible(scope)
 }
 
+scope_unique_implied_do_var <- function(scope, integer_kind = "c_int") {
+  iterator <- scope_unique_var(
+    scope,
+    "integer",
+    integer_kind = integer_kind
+  )
+  register_openmp_private(scope, iterator@name)
+  iterator
+}
+
 enter_openmp_scope <- function(scope) {
   if (!inherits(scope, "quickr_scope")) {
     return(NULL)

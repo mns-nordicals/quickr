@@ -1526,7 +1526,7 @@ compile_subset_designator <- function(
           hoist,
           scope
         )
-        it <- scope_unique_var(scope, "integer")
+        it <- scope_unique_implied_do_var(scope)
         f <- glue("pack([({it}, {it}=1, size({mask}))], {mask})")
         Fortran(f, Variable("integer", NA))
       },

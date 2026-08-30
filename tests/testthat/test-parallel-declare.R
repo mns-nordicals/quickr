@@ -27,6 +27,29 @@ test_that("declare(parallel()) and declare(omp()) parallelize loops", {
   expect_quick_identical(parallel_sapply, list(x))
 })
 
+test_that("parallel array constructors privatize implied-do iterators", {
+  skip_if_no_openmp()
+
+  fn <- function(out, n) {
+    declare(type(out = double(n)), type(n = integer(1)))
+    declare(parallel())
+    for (k in seq_len(n)) {
+      out[k] <-
+        sum(c(double(4L), 1)) +
+        sum(array(double(4L), dim = c(2L, 2L)))
+    }
+    out
+  }
+
+  code <- as.character(r2f(fn))
+  expect_match(
+    code,
+    "!$omp parallel do private(tmp1_, tmp2_)",
+    fixed = TRUE
+  )
+  expect_quick_identical(fn, list(double(128), 128L))
+})
+
 test_that("parallel quick avoids unsupported R CMD config probes", {
   skip_if_no_openmp()
   withr::local_options(quickr.fortran_compiler = "gfortran")
