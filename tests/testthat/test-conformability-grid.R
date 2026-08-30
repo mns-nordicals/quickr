@@ -815,7 +815,7 @@ test_that("ifelse grid: matrix test shapes the result", {
   expect_grid_cells_match(qfn, fn, args, context = "ifelse/mat")
 })
 
-test_that("ifelse contract violations are compile errors", {
+test_that("ifelse contract violations respect lazy branches", {
   scalar_test <- eval(parse(
     text = paste0(
       "function(t1, y, n) {\n",
@@ -832,8 +832,12 @@ test_that("ifelse contract violations are compile errors", {
       "  ifelse(t3, y, n)\n}"
     )
   )[[1L]])
+  known_qfn <- quick(known_mismatch)
+  known_y <- as.double(1:4)
+  known_n <- as.double(5:7)
+  expect_identical(known_qfn(rep(FALSE, 3), known_y, known_n), known_n)
   expect_error(
-    quick(known_mismatch),
+    known_qfn(c(TRUE, FALSE, FALSE), known_y, known_n),
     "must be scalars or match the shape",
     fixed = TRUE
   )
@@ -845,8 +849,12 @@ test_that("ifelse contract violations are compile errors", {
       "  ifelse(t3, y, n)\n}"
     )
   )[[1L]])
+  rank_qfn <- quick(rank_mismatch)
+  rank_y <- matrix(as.double(1:6), 3, 2)
+  rank_n <- as.double(7:9)
+  expect_identical(rank_qfn(rep(FALSE, 3), rank_y, rank_n), rank_n)
   expect_error(
-    quick(rank_mismatch),
+    rank_qfn(c(TRUE, FALSE, FALSE), rank_y, rank_n),
     "must be scalars or match the shape",
     fixed = TRUE
   )
