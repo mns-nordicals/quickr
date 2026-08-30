@@ -107,13 +107,10 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   stopifnot(is.symbol(var))
   var <- as.character(var)
   existing <- get0(var, scope, inherits = FALSE)
-  base_fortran <- fortranize_name(var)
   var_name <- if (inherits(existing, Variable) && !is.null(existing@name)) {
     existing@name
-  } else if (scope_is_closure(scope) && inherits(get0(var, scope), Variable)) {
-    make_shadow_fortran_name(scope, base_fortran)
   } else {
-    base_fortran
+    assignment_fortran_name(var, scope)
   }
 
   iterable_info <- r2f_unwrap_for_iterable(iterable)
