@@ -11,11 +11,21 @@ register_unary_intrinsic <- function(
   mode_fun,
   expr_fun
 ) {
-  handler <- function(args, scope, ...) {
+  handler <- function(args, scope, ..., hoist = NULL) {
     stopifnot(length(args) == 1L)
-    arg <- r2f(args[[1L]], scope, ...)
+    arg <- r2f(args[[1L]], scope, ..., hoist = hoist)
+    intrinsic <- last(list(...)$calls)
+    if (
+      intrinsic %in%
+        c("asin", "acos", "sqrt", "log") &&
+        isTRUE(hoist$defer_static_mode_error)
+    ) {
+      # Prevent the compiler from evaluating a domain-invalid constant in a
+      # branch that may not run.
+      arg <- hoist_unless_name(arg, hoist)
+    }
     val <- Variable(mode = mode_fun(arg), dims = arg@value@dims)
-    Fortran(expr_fun(arg, last(list(...)$calls)), val)
+    Fortran(expr_fun(arg, intrinsic), val)
   }
   register_r2f_handler(name, handler)
   invisible(handler)
@@ -106,9 +116,12 @@ r2f_handlers[["trunc"]] <- function(args, scope, ..., hoist = NULL) {
   )
 }
 
-r2f_handlers[["log10"]] <- function(args, scope, ...) {
+r2f_handlers[["log10"]] <- function(args, scope, ..., hoist = NULL) {
   stopifnot(length(args) == 1L)
-  arg <- r2f(args[[1]], scope, ...)
+  arg <- r2f(args[[1]], scope, ..., hoist = hoist)
+  if (isTRUE(hoist$defer_static_mode_error)) {
+    arg <- hoist_unless_name(arg, hoist)
+  }
   f <- if (arg@value@mode == "complex") {
     glue("(log({arg}) / log(10.0_c_double))")
   } else {

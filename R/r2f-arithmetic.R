@@ -3,6 +3,10 @@
 
 # --- Handlers ---
 
+is_literal_zero_divisor <- function(x) {
+  is_scalar_atomic(x) && !is.na(x) && x == 0
+}
+
 r2f_handlers[["+"]] <- function(args, scope, ..., hoist = NULL) {
   # Support both binary and unary plus
   if (length(args) == 1L) {
@@ -51,10 +55,7 @@ r2f_handlers[["*"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 }
 
 r2f_handlers[["/"]] <- function(args, scope = NULL, ..., hoist = NULL) {
-  literal_zero_divisor <-
-    is_scalar_atomic(args[[2L]]) &&
-    !is.na(args[[2L]]) &&
-    args[[2L]] == 0
+  literal_zero_divisor <- is_literal_zero_divisor(args[[2L]])
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   left <- maybe_cast_double(left)
   right <- maybe_cast_double(right)
@@ -77,6 +78,11 @@ r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
   left <- maybe_cast_double(left)
   if (identical(right@value@mode, "logical")) {
     right <- cast_to_mode(right, "integer", "^")
+  }
+  if (isTRUE(hoist$defer_static_mode_error)) {
+    # Keep compile-time domain errors inside a branch that may not run.
+    left <- hoist_unless_name(left, hoist)
+    right <- hoist_unless_name(right, hoist)
   }
   .[left, right] <- maybe_reshape_vector_matrix(left, right, hoist, scope)
   mode <- reduce_promoted_mode(left, right)
@@ -104,6 +110,7 @@ r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
 #   - AINT(x)       : truncation toward 0       (real)
 
 r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
+  literal_zero_divisor <- is_literal_zero_divisor(args[[2L]])
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # `modulo` requires same-typed arguments, so cast both operands to the
   # join (logical joins as integer: R's TRUE %% TRUE is 0L).
@@ -114,6 +121,9 @@ r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
   }
   left <- cast_to_mode(left, mode, "%%")
   right <- cast_to_mode(right, mode, "%%")
+  if (literal_zero_divisor) {
+    right <- hoist_unless_name(right, hoist)
+  }
   .[left, right] <- maybe_reshape_vector_matrix(left, right, hoist, scope)
   out_val <- conform(left@value, right@value)
   # MODULO gives result with sign(right) - matches R %% behaviour
@@ -121,8 +131,12 @@ r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["%/%"]] <- function(args, scope, ..., hoist = NULL) {
+  literal_zero_divisor <- is_literal_zero_divisor(args[[2L]])
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "%/%")
+  if (literal_zero_divisor) {
+    right <- hoist_unless_name(right, hoist)
+  }
   .[left, right] <- maybe_reshape_vector_matrix(left, right, hoist, scope)
   out_val <- conform(left@value, right@value)
 

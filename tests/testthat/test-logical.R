@@ -284,7 +284,7 @@ test_that("short-circuited division is not evaluated eagerly", {
   expect_quick_identical(skipped_or, list(0))
 })
 
-test_that("short-circuited literal division preserves lazy evaluation", {
+test_that("short-circuited literal traps preserve lazy evaluation", {
   skipped_and <- function() {
     FALSE && (1 / 0 > 0)
   }
@@ -302,6 +302,23 @@ test_that("short-circuited literal division preserves lazy evaluation", {
   expect_quick_identical(reached_and, list())
   expect_quick_identical(skipped_or, list())
   expect_quick_identical(reached_or, list())
+
+  traps <- list(
+    quote(1L %% 0L > 0L),
+    quote(1L %/% 0L > 0L),
+    quote(sqrt(-1) > 0),
+    quote(log(-1) > 0),
+    quote(asin(2) > 0),
+    quote(acos(2) > 0),
+    quote((-1)^0.5 > 0)
+  )
+  for (trap in traps) {
+    skipped_and <- skipped_ifelse <- function() NULL
+    body(skipped_and) <- call("{", call("&&", FALSE, trap))
+    body(skipped_ifelse) <- call("{", call("ifelse", FALSE, trap, TRUE))
+    expect_identical(quick(skipped_and)(), FALSE)
+    expect_identical(quick(skipped_ifelse)(), TRUE)
+  }
 })
 
 test_that("short-circuited calls defer arity errors", {
@@ -501,6 +518,15 @@ test_that("short-circuit operands reject assignment expressions", {
     "does not support assignment expressions",
     fixed = TRUE
   )
+
+  closure_local <- function() {
+    FALSE &&
+      (function() {
+        x <- TRUE
+        x
+      })()
+  }
+  expect_quick_identical(closure_local, list())
 })
 
 test_that("short-circuited operators defer arity errors", {
@@ -635,6 +661,21 @@ test_that("short-circuited complex refusals are deferred", {
     quick(reached_matmul)(z),
     "linear algebra in quickr is double-only"
   )
+
+  for (op in c("<", "<=", ">", ">=")) {
+    comparison <- call(op, 1i, 0)
+    skipped_and <- reached_and <- skipped_ifelse <- reached_ifelse <-
+      function() NULL
+    body(skipped_and) <- call("{", call("&&", FALSE, comparison))
+    body(reached_and) <- call("{", call("&&", TRUE, comparison))
+    body(skipped_ifelse) <- call("{", call("ifelse", FALSE, comparison, TRUE))
+    body(reached_ifelse) <- call("{", call("ifelse", TRUE, comparison, TRUE))
+
+    expect_identical(quick(skipped_and)(), FALSE)
+    expect_error(quick(reached_and)(), "complex operands", fixed = TRUE)
+    expect_identical(quick(skipped_ifelse)(), TRUE)
+    expect_error(quick(reached_ifelse)(), "complex operands", fixed = TRUE)
+  }
 })
 
 test_that("short-circuited real-only math calls defer mode errors", {

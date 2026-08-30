@@ -6,10 +6,21 @@
 
 # ---- comparison operators ----
 
+reject_complex_ordering <- function(x, hoist) {
+  if (identical(x@value@mode, "complex")) {
+    stop_static_mode_error(
+      "ordering comparisons do not support complex operands",
+      hoist
+    )
+  }
+  invisible()
+}
+
 r2f_handlers[[">="]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
+  reject_complex_ordering(left, hoist)
   .[left, right] <- maybe_reshape_vector_matrix(
     left,
     right,
@@ -26,6 +37,7 @@ r2f_handlers[[">"]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
+  reject_complex_ordering(left, hoist)
   .[left, right] <- maybe_reshape_vector_matrix(
     left,
     right,
@@ -42,6 +54,7 @@ r2f_handlers[["<"]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
+  reject_complex_ordering(left, hoist)
   .[left, right] <- maybe_reshape_vector_matrix(
     left,
     right,
@@ -58,6 +71,7 @@ r2f_handlers[["<="]] <- function(args, scope, ..., hoist = NULL) {
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # R compares logicals as integers; Fortran has no logical comparison.
   .[left, right] <- promote_arith_pair(left, right, "comparison")
+  reject_complex_ordering(left, hoist)
   .[left, right] <- maybe_reshape_vector_matrix(
     left,
     right,
@@ -527,6 +541,16 @@ lazy_builtin_arity_error <- function(e, scope, recursive = TRUE) {
   NULL
 }
 
+has_current_scope_assignment <- function(e) {
+  if (!is.call(e) || is_function_call(e)) {
+    return(FALSE)
+  }
+  if (is.symbol(e[[1L]]) && as.character(e[[1L]]) %in% c("<-", "=")) {
+    return(TRUE)
+  }
+  any(vapply(as.list(e), has_current_scope_assignment, logical(1L)))
+}
+
 compile_andor <- function(
   args,
   scope,
@@ -536,13 +560,7 @@ compile_andor <- function(
 ) {
   op <- last(list(...)$calls)
   stopifnot(length(args) == 2L, op %in% c("&&", "||"))
-  has_assignment <- vapply(
-    args,
-    function(arg) {
-      any(c("<-", "=") %in% all.names(arg, functions = TRUE))
-    },
-    logical(1L)
-  )
+  has_assignment <- vapply(args, has_current_scope_assignment, logical(1L))
   if (any(has_assignment)) {
     stop(
       "`",
