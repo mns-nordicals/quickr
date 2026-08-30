@@ -15,6 +15,16 @@ test_that("as.integer(double) truncates toward zero", {
   expect_quick_identical(fn, x)
 })
 
+test_that("as.integer(logical matrix) drops dimensions", {
+  fn <- function(x) {
+    declare(type(x = logical(2, 2)))
+    as.integer(x)
+  }
+
+  x <- matrix(c(TRUE, FALSE, TRUE, FALSE), nrow = 2L)
+  expect_quick_identical(fn, list(x))
+})
+
 test_that("trunc() returns double and truncates toward zero", {
   fn_d <- function(x) {
     declare(type(x = double(NA)))
