@@ -254,7 +254,8 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
           value,
           value@value@mode,
           value@value@dims,
-          hoist
+          hoist,
+          allocate_at_point = TRUE
         )
       }
       value <- lower_arg(fill_args$data)
@@ -308,7 +309,8 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
         fill$value,
         fill$value@value@mode,
         fill_dims,
-        hoist
+        hoist,
+        allocate_at_point = TRUE
       )
     } else {
       lower_one(args[[j]])

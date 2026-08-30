@@ -529,6 +529,9 @@ dims2f_eval_base_env[["%%"]] <- function(e1, e2) {
   )
 }
 dims2f_eval_base_env[["^"]] <- function(e1, e2) {
+  if (!grepl("^[A-Za-z][A-Za-z0-9_]*$|^-?[0-9]+(_c_int)?$", e2)) {
+    e2 <- glue("int(({e2}), kind=c_ptrdiff_t)")
+  }
   glue("(real({e1}, kind=c_double))**({e2})")
 }
 dims2f_eval_base_env[["abs"]] <- function(x) glue("abs({x})")
@@ -622,20 +625,48 @@ dims2f_needs_final_size_cast <- function(e) {
 }
 
 size_expr_needs_r_integer_guard <- function(e, scope) {
-  if (dims2f_needs_final_size_cast(e)) {
+  e <- unwrap_parens(e)
+  if (is.atomic(e) || is_size_name(e)) {
+    return(FALSE)
+  }
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    if (!inherits(var, Variable)) {
+      var <- scope_var_by_fortran_name(scope, as.character(e))
+    }
+    return(inherits(var, Variable) && identical(var@mode, "double"))
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  args <- as.list(e)[-1L]
+  if (op %in% c("length", "nrow", "ncol", "quickr_seq_length")) {
+    return(FALSE)
+  }
+  if (
+    identical(op, "[") &&
+      length(args) == 2L &&
+      is_call(args[[1L]], quote(dim))
+  ) {
+    return(FALSE)
+  }
+  if (op %in% c("/", "%/%", "%%", "^")) {
     return(TRUE)
   }
-  syms <- if (is.language(e)) all.vars(e) else character()
+  if (op %in% c("abs", "as.integer", "min", "max")) {
+    return(any(vapply(
+      args,
+      size_expr_needs_r_integer_guard,
+      logical(1L),
+      scope = scope
+    )))
+  }
   any(vapply(
-    syms,
-    function(name) {
-      var <- get0(name, scope)
-      if (!inherits(var, Variable)) {
-        var <- scope_var_by_fortran_name(scope, name)
-      }
-      inherits(var, Variable) && identical(var@mode, "double")
-    },
-    logical(1L)
+    args,
+    size_expr_needs_r_integer_guard,
+    logical(1L),
+    scope = scope
   ))
 }
 
@@ -688,7 +719,11 @@ dims2f <- function(
       }
       stop("unexpected axis size value")
     }
-    if (final_size_cast && dims2f_needs_final_size_cast(original)) {
+    if (
+      final_size_cast &&
+        (size_expr_needs_r_integer_guard(original, scope) ||
+          dims2f_needs_final_size_cast(original))
+    ) {
       d <- glue("int(({d}), kind=c_ptrdiff_t)")
     }
     d

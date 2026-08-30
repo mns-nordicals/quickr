@@ -385,7 +385,31 @@ return_var_c_defs <- function(var, scope, c_hoist = NULL) {
   len_name <- get_size_name(var)
   c_dims <- dims2c(var@dims, scope, c_hoist = c_hoist)
   names(c_dims) <- NULL
-  c_len <- c_dims2c_len(c_dims)
+  guarded <- vapply(
+    var@dims,
+    size_expr_needs_c_integer_guard,
+    logical(1L),
+    scope = scope
+  )
+  if (!is.null(c_hoist)) {
+    for (i in seq_along(var@dims)) {
+      if (guarded[[i]]) {
+        c_bridge_hoist_size_int_check(c_hoist, c_dims[[i]])
+        c_dims[[i]] <- glue("((R_xlen_t)({c_dims[[i]]}))")
+      }
+      if (!size_expr_is_known_nonnegative(var@dims[[i]])) {
+        c_bridge_hoist_size_nonnegative_check(c_hoist, c_dims[[i]])
+      }
+    }
+  }
+  c_len_dims <- c_dims
+  if (var@rank > 1L) {
+    c_len_dims <- lapply(
+      c_len_dims,
+      \(dim) glue("((R_xlen_t)({dim}))")
+    )
+  }
+  c_len <- c_dims2c_len(c_len_dims)
   decls <- if (!is.null(c_hoist)) {
     c_bridge_hoist_take_pending(c_hoist)
   } else {
@@ -435,6 +459,7 @@ c_bridge_hoist <- function() {
   hoist$as_int <- new.env(parent = emptyenv())
   hoist$as_int_tmp <- new.env(parent = emptyenv())
   hoist$checked_size_int <- new.env(parent = emptyenv())
+  hoist$checked_size_nonnegative <- new.env(parent = emptyenv())
   hoist$used_tmp <- new.env(parent = emptyenv())
   hoist$pending <- character()
   hoist
@@ -517,7 +542,30 @@ c_bridge_hoist_size_int_check <- function(hoist, size) {
       if (!R_FINITE((double)({size})) ||
           ((double)({size}) <= -2147483648.0) ||
           ((double)({size}) >= 2147483648.0))
-        Rf_error("diag() identity size must be representable as an R integer");'
+        Rf_error("size must be finite and representable as an R integer");'
+    )
+  )
+  invisible()
+}
+
+c_bridge_hoist_size_nonnegative_check <- function(hoist, size) {
+  stopifnot(is.environment(hoist), is_string(size))
+  if (
+    isTRUE(get0(
+      size,
+      envir = hoist$checked_size_nonnegative,
+      inherits = FALSE
+    ))
+  ) {
+    return(invisible())
+  }
+  assign(size, TRUE, envir = hoist$checked_size_nonnegative)
+  hoist$pending <- c(
+    hoist$pending,
+    glue(
+      '
+      if ((double)({size}) < 0)
+        Rf_error("return dimensions must be non-negative");'
     )
   )
   invisible()
@@ -539,6 +587,53 @@ as_c_name <- function(var, c_hoist = NULL, preserve_numeric = FALSE) {
     return(expr)
   }
   c_bridge_hoist_as_int(c_hoist, var@name, expr)
+}
+
+size_expr_needs_c_integer_guard <- function(e, scope) {
+  e <- unwrap_parens(e)
+  if (is.atomic(e) || is_size_name(e)) {
+    return(FALSE)
+  }
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    if (!inherits(var, Variable)) {
+      var <- scope_var_by_fortran_name(scope, as.character(e))
+    }
+    return(inherits(var, Variable) && identical(var@mode, "double"))
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  args <- as.list(e)[-1L]
+  if (
+    op %in%
+      c(
+        "length",
+        "nrow",
+        "ncol",
+        "quickr_seq_length",
+        "as.integer"
+      )
+  ) {
+    return(FALSE)
+  }
+  if (
+    identical(op, "[") &&
+      length(args) == 2L &&
+      is_call(args[[1L]], quote(dim))
+  ) {
+    return(FALSE)
+  }
+  if (op %in% c("/", "%/%", "%%", "^")) {
+    return(TRUE)
+  }
+  any(vapply(
+    args,
+    size_expr_needs_c_integer_guard,
+    logical(1L),
+    scope = scope
+  ))
 }
 
 dims2c_length_expr <- function(arg, scope) {

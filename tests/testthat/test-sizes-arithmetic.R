@@ -288,6 +288,11 @@ test_that("size powers retain integer exponent type", {
     )
     double(as.integer(x^(exponent %/% 1L)) + 10L)
   }
+  expect_match(
+    as.character(r2f(compound)),
+    "**(int(",
+    fixed = TRUE
+  )
   expect_quick_identical(compound, list(-2L, 3L))
 })
 

@@ -234,6 +234,24 @@ size_power_exponent_is_integer <- function(x, scope) {
   FALSE
 }
 
+validate_static_size_integer_range <- function(x) {
+  stopifnot(is.numeric(x), length(x) == 1L)
+  if (is.nan(x) || is.infinite(x)) {
+    stop("size must be finite, found: ", x, call. = FALSE)
+  }
+  if (is.na(x)) {
+    return(invisible(TRUE))
+  }
+  if (x <= -2147483648 || x >= 2147483648) {
+    stop(
+      "size must be representable as an R integer, found: ",
+      x,
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 r2size <- function(r, scope, preserve_numeric = FALSE) {
   r <- unwrap_scalar_size_expr(r, scope)
 
@@ -259,6 +277,7 @@ r2size <- function(r, scope, preserve_numeric = FALSE) {
     switch(
       integer = r,
       double = {
+        validate_static_size_integer_range(r)
         if (is_wholenumber(r)) {
           as.integer(r)
         } else if (isTRUE(preserve_numeric)) {
@@ -353,6 +372,9 @@ r2size <- function(r, scope, preserve_numeric = FALSE) {
                 typeof(inner_expr) %in% c("logical", "integer", "double") &&
                 length(inner_expr) == 1L
             ) {
+              if (is.double(inner_expr)) {
+                validate_static_size_integer_range(inner_expr)
+              }
               return(as.integer(inner_expr))
             }
             # An explicit coercion is exactly what the "not an integer"
@@ -437,13 +459,33 @@ r2dims <- function(r, scope) {
 }
 
 size_expr_is_known_nonnegative <- function(x) {
+  x <- unwrap_parens(x)
   if (is_scalar_integerish(x)) {
     return(as.integer(x) >= 0L)
   }
   if (is_size_name(x)) {
     return(TRUE)
   }
-  if (!is.call(x) || !identical(x[[1L]], quote(`*`))) {
+  if (
+    is.call(x) &&
+      is.symbol(x[[1L]]) &&
+      as.character(x[[1L]]) %in%
+        c("length", "nrow", "ncol", "quickr_seq_length")
+  ) {
+    return(TRUE)
+  }
+  if (
+    is_call(x, quote(`[`)) &&
+      length(x) == 3L &&
+      is_call(x[[2L]], quote(dim))
+  ) {
+    return(TRUE)
+  }
+  if (
+    !is.call(x) ||
+      !is.symbol(x[[1L]]) ||
+      !as.character(x[[1L]]) %in% c("+", "*", "min", "max")
+  ) {
     return(FALSE)
   }
   all(vapply(

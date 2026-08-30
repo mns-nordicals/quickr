@@ -146,6 +146,8 @@
                      " but are %0.f and %0.f",
                       (double)b__len_, (double)expected);
         }
+        if ((double)(((_as_int_n) < (_as_int_m) ? (_as_int_n) : (_as_int_m))) < 0)
+          Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = ((_as_int_n) < (_as_int_m) ? (_as_int_n) : (_as_int_m));
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);

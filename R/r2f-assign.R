@@ -79,6 +79,43 @@ materialize_unknown_reassignment_value <- function(target, value, hoist) {
   )
 }
 
+assignment_expression_has_constructor <- function(e) {
+  e <- unwrap_parens(e)
+  if (!is.call(e)) {
+    return(FALSE)
+  }
+  callable <- unwrap_parens(e[[1L]])
+  if (is.symbol(callable)) {
+    name <- as.character(callable)
+    if (
+      name %in%
+        c(
+          "logical",
+          "integer",
+          "double",
+          "numeric",
+          "matrix",
+          "array"
+        )
+    ) {
+      return(TRUE)
+    }
+    if (identical(name, "function")) {
+      return(FALSE)
+    }
+  }
+  children <- as.list(e)[-1L]
+  for (i in seq_along(children)) {
+    if (is_missing(children[[i]])) {
+      next
+    }
+    if (assignment_expression_has_constructor(children[[i]])) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
 allocate_new_guarded_constructor_local_at_point <- function(
   name,
   var,
@@ -220,9 +257,16 @@ register_r2f_handler(
 
     if (existing_binding) {
       value <- if (dest_allowed) {
-        r2f(rhs, scope, ..., hoist = hoist, dest = var)
+        r2f(
+          rhs,
+          scope,
+          ...,
+          hoist = hoist,
+          dest = var,
+          assignment_name = name
+        )
       } else {
-        r2f(rhs, scope, ..., hoist = hoist)
+        r2f(rhs, scope, ..., hoist = hoist, assignment_name = name)
       }
     } else if (inherits(inferred_var, Variable)) {
       var <- inferred_var
@@ -236,10 +280,24 @@ register_r2f_handler(
           var@logical_as_int <- TRUE
         }
       }
-      value <- r2f(rhs, scope, ..., hoist = hoist, dest = var)
+      value <- r2f(
+        rhs,
+        scope,
+        ...,
+        hoist = hoist,
+        dest = var,
+        assignment_name = name
+      )
     } else {
-      value <- r2f(rhs, scope, ..., hoist = hoist)
+      value <- r2f(rhs, scope, ..., hoist = hoist, assignment_name = name)
     }
+
+    guarded_constructor <- assignment_expression_has_constructor(rhs_unwrapped)
+    initialized_local_names <- scope_get(
+      scope,
+      "initialized_local_names",
+      character()
+    )
 
     # immutable / copy-on-modify usage of Variable()
     if (!existing_binding) {
@@ -280,20 +338,6 @@ register_r2f_handler(
       )
       scope[[name]] <- var
       register_openmp_private(scope, var@name)
-      guarded_constructor <- is.call(rhs_unwrapped) &&
-        is.symbol(rhs_unwrapped[[1L]]) &&
-        as.character(rhs_unwrapped[[1L]]) %in% c("matrix", "array")
-      if (
-        guarded_constructor &&
-          (!inherits(value, Fortran) || !isTRUE(value@writes_to_dest))
-      ) {
-        allocate_new_guarded_constructor_local_at_point(
-          name,
-          var,
-          scope,
-          hoist
-        )
-      }
     } else {
       # The var already exists, this assignment is a modification / reassignment
       if (is.null(var@r_name)) {
@@ -328,11 +372,25 @@ register_r2f_handler(
       assign(name, var, scope)
     }
 
-    initialized_local_names <- scope_get(
-      scope,
-      "initialized_local_names",
-      character()
-    )
+    if (
+      !var@name %in% initialized_local_names &&
+        guarded_constructor &&
+        any(
+          !vapply(
+            var@dims,
+            size_expr_is_known_nonnegative,
+            logical(1L)
+          )
+        ) &&
+        (!inherits(value, Fortran) || !isTRUE(value@writes_to_dest))
+    ) {
+      allocate_new_guarded_constructor_local_at_point(
+        name,
+        var,
+        scope,
+        hoist
+      )
+    }
     scope_set(
       scope,
       "initialized_local_names",

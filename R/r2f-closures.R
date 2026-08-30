@@ -1046,8 +1046,34 @@ compile_closure_call <- function(
   if (is.null(res_var@mode)) {
     stop("internal error: could not infer closure return type")
   }
+  if (any(vapply(res_var@dims, is_scalar_na, logical(1L)))) {
+    stop(
+      "local closure result size cannot depend on closure formals",
+      call. = FALSE
+    )
+  }
 
-  tmp <- hoist$declare_tmp(mode = res_var@mode, dims = res_var@dims)
+  guarded_result <- any(
+    !vapply(
+      res_var@dims,
+      size_expr_is_known_nonnegative,
+      logical(1L)
+    )
+  )
+  if (guarded_result) {
+    validate_constructor_dims(
+      res_var@dims,
+      "local closure result",
+      scope,
+      hoist
+    )
+  }
+  declare_tmp <- if (guarded_result) {
+    hoist$declare_tmp_at_point
+  } else {
+    hoist$declare_tmp
+  }
+  tmp <- declare_tmp(mode = res_var@mode, dims = res_var@dims)
   inputs <- closure_call_inputs(args_f, args_present, formal_vars)
   call_args <- inputs$args
   res_arg <- if (inputs$use_keywords) {
@@ -1137,6 +1163,12 @@ compile_closure_call_assignment <- function(
     if (is.null(inferred_res_var@mode)) {
       stop("internal error: could not infer closure return type")
     }
+    if (any(vapply(inferred_res_var@dims, is_scalar_na, logical(1L)))) {
+      stop(
+        "local closure result size cannot depend on closure formals",
+        call. = FALSE
+      )
+    }
     target_var <- Variable(
       mode = inferred_res_var@mode,
       dims = inferred_res_var@dims
@@ -1164,6 +1196,40 @@ compile_closure_call_assignment <- function(
     }
     scope[[target_name]] <- target_var
   }
+  initialized_local_names <- scope_get(
+    scope,
+    "initialized_local_names",
+    character()
+  )
+  if (!target_var@name %in% initialized_local_names) {
+    if (
+      any(
+        !vapply(
+          target_var@dims,
+          size_expr_is_known_nonnegative,
+          logical(1L)
+        )
+      )
+    ) {
+      validate_constructor_dims(
+        target_var@dims,
+        "local closure result",
+        scope,
+        hoist
+      )
+    }
+    allocate_new_guarded_constructor_local_at_point(
+      target_name,
+      target_var,
+      scope,
+      hoist
+    )
+  }
+  scope_set(
+    scope,
+    "initialized_local_names",
+    unique(c(initialized_local_names, target_var@name))
+  )
   scope_add_internal_proc(scope_root(scope), proc)
 
   arg_reads_target <- any(map_lgl(args_expr, function(e) {
@@ -1173,7 +1239,7 @@ compile_closure_call_assignment <- function(
   res_target <- target_fortran_name
   post <- character()
   if (arg_reads_target) {
-    tmp <- hoist$declare_tmp(
+    tmp <- hoist$declare_tmp_at_point(
       mode = target_var@mode,
       dims = target_var@dims,
       logical_as_int = logical_as_int(target_var)
@@ -1304,6 +1370,28 @@ compile_sapply_assignment <- function(
       mode = iterable_value@mode,
       dims = iterable_value@dims
     )
+    if (
+      any(
+        !vapply(
+          iterable_tmp@dims,
+          size_expr_is_known_nonnegative,
+          logical(1L)
+        )
+      )
+    ) {
+      validate_constructor_dims(
+        iterable_tmp@dims,
+        "sapply() iterable",
+        scope,
+        hoist
+      )
+    }
+    allocate_new_guarded_constructor_local_at_point(
+      iterable_tmp@name,
+      iterable_tmp,
+      scope,
+      hoist
+    )
     iterable_tmp_assign <- glue("{iterable_tmp@name} = {iterable_val}")
 
     formal_vars <- list(
@@ -1340,6 +1428,12 @@ compile_sapply_assignment <- function(
     if (is.null(inferred@mode)) {
       stop("internal error: could not infer sapply() output type")
     }
+    if (any(vapply(inferred@dims, is_scalar_na, logical(1L)))) {
+      stop(
+        "sapply() result size cannot depend on its FUN argument",
+        call. = FALSE
+      )
+    }
     res_var <- inferred
 
     return_names <- scope_get(scope, "return_names", default = character()) %||%
@@ -1375,6 +1469,40 @@ compile_sapply_assignment <- function(
     }
     scope[[out_name]] <- out_var
   }
+  initialized_local_names <- scope_get(
+    scope,
+    "initialized_local_names",
+    character()
+  )
+  if (!out_var@name %in% initialized_local_names) {
+    if (
+      any(
+        !vapply(
+          out_var@dims,
+          size_expr_is_known_nonnegative,
+          logical(1L)
+        )
+      )
+    ) {
+      validate_constructor_dims(
+        out_var@dims,
+        "sapply() output",
+        scope,
+        hoist
+      )
+    }
+    allocate_new_guarded_constructor_local_at_point(
+      out_name,
+      out_var,
+      scope,
+      hoist
+    )
+  }
+  scope_set(
+    scope,
+    "initialized_local_names",
+    unique(c(initialized_local_names, out_var@name))
+  )
 
   if (!is.null(parallel) && isTRUE(proc$uses_rng)) {
     stop("runif() is not supported inside parallel loops", call. = FALSE)
@@ -1384,7 +1512,7 @@ compile_sapply_assignment <- function(
   out_target <- out_name
   post_stmts <- character()
   if (out_name %in% all.vars(body(closure_obj@fun), functions = FALSE)) {
-    tmp_out <- hoist$declare_tmp(
+    tmp_out <- hoist$declare_tmp_at_point(
       mode = out_var@mode,
       dims = out_var@dims,
       logical_as_int = logical_as_int(out_var)

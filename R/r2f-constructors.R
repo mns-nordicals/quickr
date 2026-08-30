@@ -132,6 +132,9 @@ validate_static_constructor_dims <- function(dims, context) {
   stopifnot(is.list(dims), is_string(context))
   message <- paste0(context, " dimensions must be non-negative")
   for (dim in dims) {
+    if (is_scalar_na(dim)) {
+      stop(context, " dimensions must not be NA", call. = FALSE)
+    }
     if (
       is.numeric(dim) &&
         length(dim) == 1L &&
@@ -185,6 +188,27 @@ validate_constructor_dim_integer_ranges <- function(
   invisible(TRUE)
 }
 
+validate_guarded_constructor_dims <- function(dims, context, scope, hoist) {
+  validate_constructor_dim_integer_ranges(dims, context, scope, hoist)
+  message <- paste0(context, " dimensions must be non-negative")
+  for (dim in dims) {
+    if (!size_expr_needs_r_integer_guard(dim, scope)) {
+      next
+    }
+    dim_f <- dims2f(list(dim), scope)
+    if (!nzchar(dim_f) || grepl(":", dim_f, fixed = TRUE)) {
+      next
+    }
+    emit_quickr_error_if(
+      glue("{dim_f} < 0"),
+      message,
+      hoist,
+      scope
+    )
+  }
+  invisible(TRUE)
+}
+
 validate_constructor_dims <- function(dims, context, scope, hoist) {
   stopifnot(is.list(dims), is_string(context), !is.null(hoist))
   validate_static_constructor_dims(dims, context)
@@ -200,10 +224,7 @@ validate_constructor_dims <- function(dims, context, scope, hoist) {
     if (is_scalar_na(dim)) {
       next
     }
-    if (
-      identical(context, "array") &&
-        size_expr_is_known_nonnegative(dim)
-    ) {
+    if (size_expr_is_known_nonnegative(dim)) {
       next
     }
     dim_f <- dims2f(list(dim), scope)
@@ -389,6 +410,12 @@ fill_constructor_value <- function(literal, mode, args, scope, ..., hoist) {
   dims <- if (length(args)) r2dims(args, scope) else list(0L)
   var <- Variable(mode = mode, dims = dims)
   length_dim <- var@dims[[1L]]
+  validate_constructor_dim_integer_ranges(
+    var@dims,
+    "fill constructor",
+    scope,
+    hoist
+  )
   if (is_wholenumber(length_dim)) {
     if (as.integer(length_dim) < 0L) {
       stop("invalid 'length' argument", call. = FALSE)
@@ -410,7 +437,13 @@ fill_constructor_value <- function(literal, mode, args, scope, ..., hoist) {
   if (parent_call %in% c("<-", "=", "<<-", "c", "array")) {
     return(out)
   }
-  materialize_via_hoist(literal, mode, var@dims, hoist)
+  materialize_via_hoist(
+    literal,
+    mode,
+    var@dims,
+    hoist,
+    allocate_at_point = TRUE
+  )
 }
 
 register_r2f_handler(
@@ -508,12 +541,14 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   # must be a real rank-2 array, so materialize it into a hoisted temporary.
   if (passes_as_scalar(src@value)) {
     if (parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")) {
-      validate_constructor_dim_integer_ranges(
-        dims,
-        "matrix()",
-        scope,
-        hoist
-      )
+      assignment_name <- list(...)$assignment_name
+      return_names <- scope_get(scope, "return_names", character()) %||%
+        character()
+      if (!is_string(assignment_name) || !assignment_name %in% return_names) {
+        validate_constructor_dims(dims, "matrix()", scope, hoist)
+      } else {
+        validate_guarded_constructor_dims(dims, "matrix()", scope, hoist)
+      }
       src@value <- out_val
       return(src)
     }
@@ -557,7 +592,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   }
 
   reshape_vector_for_matrix(
-    hoist_unless_name(src, hoist),
+    hoist_unless_name(src, hoist, allocate_at_point = TRUE),
     rows,
     cols
   )
@@ -704,12 +739,19 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       !passes_as_scalar(out@value)
   ) {
     if (parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")) {
-      validate_constructor_dim_integer_ranges(
-        target_dims,
-        "array()",
-        scope,
-        hoist
-      )
+      assignment_name <- list(...)$assignment_name
+      return_names <- scope_get(scope, "return_names", character()) %||%
+        character()
+      if (!is_string(assignment_name) || !assignment_name %in% return_names) {
+        validate_constructor_dims(target_dims, "array()", scope, hoist)
+      } else {
+        validate_guarded_constructor_dims(
+          target_dims,
+          "array()",
+          scope,
+          hoist
+        )
+      }
       return(out)
     }
     validate_constructor_dims(target_dims, "array()", scope, hoist)
