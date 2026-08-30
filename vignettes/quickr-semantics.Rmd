@@ -363,9 +363,9 @@ Elementwise arithmetic and equality comparisons handle complex values
 natively, including mixed integer, double, and complex operands:
 `complex + double` promotes to complex, as in R. Everything else refuses:
 
-- **Logical-complex pairs.** Elementwise operations do not promote a
-  logical operand to complex. A logical-complex pair is a compile error
-  where R returns a complex arithmetic result or a logical comparison.
+- **Logical-complex pairs.** `+`, `-`, `*`, `==`, and `!=` do not promote
+  a logical operand to complex, so those pairs are compile errors where R
+  returns a complex arithmetic or logical equality result. `/` and `^` do support logical-complex pairs.
 - **Type joins.** `c()`, `ifelse()`, and `cbind()`/`rbind()` do not mix
   complex with other types — `c(x, y)` with a complex `x` and a double
   `y` is a compile error where R returns a complex vector.
