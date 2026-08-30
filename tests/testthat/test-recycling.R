@@ -844,7 +844,8 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
   # A vector operand keeps the vector-matrix reshape rule.
   vec_operand <- function(v) {
     declare(type(v = double(2)))
-    v + matrix(1, 2, 3)
+    rows <- function() 2L
+    matrix(1, rows(), 3) + v
   }
   expect_quick_identical(vec_operand, list(c(1, 2)))
 })

@@ -233,7 +233,19 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
   if (length(fill_idx) == 1L && !is.null(hoist)) {
     j <- fill_idx
     fill_args <- fills[[j]]
+    # Keep provable local-closure sizes available to C return allocation while
+    # Fortran allocation below uses the evaluated dimension temporaries.
     fill_dims <- lapply(list(fill_args$nrow, fill_args$ncol), function(dim) {
+      if (is.call(dim) && length(dim) == 1L && is.symbol(dim[[1L]])) {
+        closure <- scope[[as.character(dim[[1L]])]]
+        if (
+          inherits(closure, LocalClosure) &&
+            !length(formals(closure@fun)) &&
+            is_scalar_integerish(body(closure@fun))
+        ) {
+          dim <- body(closure@fun)
+        }
+      }
       if (is.numeric(dim) && length(dim) == 1L && is.finite(dim)) {
         as.integer(dim)
       } else {
@@ -258,6 +270,7 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       dims <- lapply(list(fill_args$nrow, fill_args$ncol), lower_arg)
       list(
         value = value,
+        dims = lapply(dims, \(dim) as.symbol(trimws(as.character(dim)))),
         dims_f = map_chr(dims, \(dim) glue("int({dim})"))
       )
     }
@@ -308,12 +321,15 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       return(if (j == 1L) out else rev(out))
     }
     fallback <- if (j == 1L) {
-      materialize_via_hoist(
+      out <- materialize_via_hoist(
         fill$value,
         fill$value@value@mode,
-        fill_dims,
-        hoist
+        fill$dims,
+        hoist,
+        allocate_at_point = TRUE
       )
+      out@value@dims <- fill_dims
+      out
     } else {
       lower_one(args[[j]])
     }
