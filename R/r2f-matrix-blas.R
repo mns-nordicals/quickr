@@ -238,25 +238,30 @@ assert_nonempty_blas_output <- function(
   invisible(TRUE)
 }
 
-# TRUE when the destination's declared shape is *proven* to match the
-# expected output shape: rank equal and every extent proven equal
-# (dims_proven_equal()). Anything unproven -- symbolic dims that merely
-# fail to be refuted, NA dims -- is FALSE: the emitter then routes
-# through a hoisted temporary and the assignment shape check guards (or
-# refuses) the copy. Accepting an unproven dest passed wrong leading
-# dimensions to the BLAS call and could write past the allocation.
-dest_dims_proven_equal <- function(dest, expected_dims) {
-  if (is.null(expected_dims)) {
-    return(FALSE)
+# Check that destination dimensions match expected output dimensions.
+assert_dest_dims_compatible <- function(dest, expected_dims, context) {
+  if (is.null(dest) || is.null(expected_dims)) {
+    return(TRUE)
   }
-  if (dest@rank != length(expected_dims)) {
-    return(FALSE)
+  expected_rank <- length(expected_dims)
+  if (dest@rank != expected_rank) {
+    stop("assignment target has incompatible rank for ", context, call. = FALSE)
   }
-  all(vapply(
-    seq_along(expected_dims),
-    function(i) dims_proven_equal(dest@dims[[i]], expected_dims[[i]]),
-    logical(1)
-  ))
+  proven <- TRUE
+  for (i in seq_len(expected_rank)) {
+    dest_dim <- dest@dims[[i]]
+    expected_dim <- expected_dims[[i]]
+    verdict <- check_equal_dims(dest_dim, expected_dim)
+    if (!verdict$ok) {
+      stop(
+        "assignment target has incompatible dimensions for ",
+        context,
+        call. = FALSE
+      )
+    }
+    proven <- proven && !verdict$unknown
+  }
+  proven
 }
 
 # Determine if output can safely write into dest without aliasing.
@@ -282,7 +287,18 @@ can_use_output <- function(
   if (!identical(logical_as_int(dest), logical_is_c_int)) {
     return(FALSE)
   }
-  if (!dest_dims_proven_equal(dest, expected_dims)) {
+  dims_proven <- assert_dest_dims_compatible(dest, expected_dims, context)
+  if (!dims_proven && isTRUE(dest@is_external)) {
+    stop(
+      "cannot change the shape of an external assignment target in ",
+      context,
+      call. = FALSE
+    )
+  }
+  if (!dims_proven) {
+    # Local allocatables fall back to intrinsic assignment, which reallocates
+    # them to the temporary result's shape. External arrays have fixed ABI
+    # extents and are rejected above.
     return(FALSE)
   }
   output_name <- dest@name
@@ -821,6 +837,7 @@ triangular_solve <- function(
     right_axis = if (b_rank == 1L) NULL else 1L,
     checker = check_blas_dims
   )
+  assert_nonempty_blas_output(n, A, 1L, context, hoist, scope)
 
   A_name <- ensure_blas_operand_name(A, hoist, scope, context)
   assert_blas_dimensions_stable(B, scope, context)
@@ -908,6 +925,7 @@ lapack_solve <- function(
     right_axis = if (b_rank == 1L) NULL else 1L,
     checker = check_blas_dims
   )
+  assert_nonempty_blas_output(n, A, 2L, context, hoist, scope)
 
   A_name <- ensure_blas_operand_name(A, hoist, scope, context)
   B_input_name <- ensure_blas_operand_name(B, hoist, scope, context)
