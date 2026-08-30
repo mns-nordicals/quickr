@@ -1,7 +1,6 @@
 # Runtime conformability guards in BLAS/LAPACK lowerings: dims that cannot
 # be verified at compile time get a size() check before the BLAS call
 # (never a compile-time warning, never an unchecked call).
-
 test_that("matrix-vector %*% guards an unknown vector length", {
   fn <- function(m, x) {
     declare(type(m = double(3, 3)), type(x = double(NA)))
@@ -16,7 +15,6 @@ test_that("matrix-vector %*% guards an unknown vector length", {
     fixed = TRUE
   )
 })
-
 test_that("matrix-matrix %*% guards before allocating its result", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, p)))
@@ -36,7 +34,6 @@ test_that("matrix-matrix %*% guards before allocating its result", {
     fixed = TRUE
   )
 })
-
 test_that("matrix-vector %*% guards before allocating its result", {
   fn <- function(a, x) {
     declare(type(a = double(m, k)), type(x = double(n)))
@@ -56,7 +53,6 @@ test_that("matrix-vector %*% guards before allocating its result", {
     fixed = TRUE
   )
 })
-
 test_that("matrix-matrix %*% guards before allocating a reusable local", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, p)))
@@ -77,7 +73,6 @@ test_that("matrix-matrix %*% guards before allocating a reusable local", {
     fixed = TRUE
   )
 })
-
 test_that("matrix-vector %*% guards before allocating a reusable local", {
   fn <- function(a, x) {
     declare(type(a = double(m, k)), type(x = double(n)))
@@ -98,7 +93,6 @@ test_that("matrix-vector %*% guards before allocating a reusable local", {
     fixed = TRUE
   )
 })
-
 test_that("reused BLAS locals retain their earlier allocation", {
   gemm <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, k)))
@@ -139,7 +133,6 @@ test_that("reused BLAS locals retain their earlier allocation", {
     fixed = TRUE
   )
 })
-
 test_that("reused BLAS locals are allocated on every reachable path", {
   fn <- function(a, b, flag) {
     declare(
@@ -174,7 +167,6 @@ test_that("reused BLAS locals are allocated on every reachable path", {
   expect_equal(qfn(a, b, FALSE), fn(a, b, FALSE))
   expect_equal(qfn(a, b, TRUE), fn(a, b, TRUE))
 })
-
 test_that("BLAS destinations are not reused across unproven shapes", {
   local <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(k, p)))
@@ -198,7 +190,6 @@ test_that("BLAS destinations are not reused across unproven shapes", {
     fixed = TRUE
   )
 })
-
 test_that("renamed BLAS return destinations remain output arguments", {
   fn <- function(a, b, n) {
     declare(
@@ -226,7 +217,6 @@ test_that("renamed BLAS return destinations remain output arguments", {
   expect_equal(actual, expected)
   expect_identical(actual_seed, expected_seed)
 })
-
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))
@@ -273,7 +263,6 @@ test_that("%*% evaluates effectful operands before a runtime shape error", {
     "non-conformable arguments in solve"
   )
 })
-
 test_that("qr.solve evaluates tol before a runtime shape error", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m)))
@@ -292,7 +281,6 @@ test_that("qr.solve evaluates tol before a runtime shape error", {
   runif(1)
   expect_identical(actual_seed, .Random.seed)
 })
-
 test_that("nested %*% operands preserve left-to-right evaluation", {
   fn <- function() {
     runif(2) %*% matrix(runif(4), 2, 2)
@@ -302,7 +290,6 @@ test_that("nested %*% operands preserve left-to-right evaluation", {
   set.seed(124)
   expect_identical(quick(fn)(), expected)
 })
-
 test_that("double BLAS entry points reject raw storage", {
   fn <- function(a, b) {
     declare(type(a = raw(2)), type(b = raw(2)))
@@ -310,7 +297,6 @@ test_that("double BLAS entry points reject raw storage", {
   }
   expect_error(quick(fn), "does not support raw")
 })
-
 test_that("tcrossprod materializes scalar-backed array operands", {
   fn <- function(n) {
     declare(type(n = integer(1)))
@@ -319,7 +305,6 @@ test_that("tcrossprod materializes scalar-backed array operands", {
 
   expect_quick_identical(fn, list(3L))
 })
-
 test_that("vector-matrix %*% guards an unknown vector length", {
   fn <- function(x, m) {
     declare(type(x = double(NA)), type(m = double(3, 3)))
@@ -333,7 +318,6 @@ test_that("vector-matrix %*% guards an unknown vector length", {
     fixed = TRUE
   )
 })
-
 test_that("triangular solve guards squareness and RHS length", {
   fn <- function(l, x) {
     declare(type(l = double(n, k)), type(x = double(NA)))
@@ -351,7 +335,6 @@ test_that("triangular solve guards squareness and RHS length", {
     "triangular solve requires a square matrix"
   )
 })
-
 test_that("LAPACK solves reject zero-sized outputs before library calls", {
   solve_fn <- function(a, b) {
     declare(type(a = double(n, n)), type(b = double(n, p)))
@@ -381,7 +364,6 @@ test_that("LAPACK solves reject zero-sized outputs before library calls", {
     )
   }
 })
-
 test_that("vector %*% vector guards unknown lengths as whole sizes", {
   fn <- function(x, y) {
     declare(type(x = double(NA)), type(y = double(NA)))
@@ -398,7 +380,6 @@ test_that("vector %*% vector guards unknown lengths as whole sizes", {
     fixed = TRUE
   )
 })
-
 test_that("solve() guards an unknown RHS length", {
   fn <- function(a, b) {
     declare(type(a = double(2, 2)), type(b = double(NA)))
@@ -408,7 +389,6 @@ test_that("solve() guards an unknown RHS length", {
   expect_equal(qfn(diag(2), c(1, 2)), c(1, 2))
   expect_error(qfn(diag(2), c(1, 2, 3)), "non-conformable arguments in solve")
 })
-
 
 test_that("solve(a) and chol() guard squareness", {
   solve_rhs <- function(a, b) {
@@ -443,7 +423,6 @@ test_that("solve(a) and chol() guard squareness", {
     "chol requires a square matrix"
   )
 })
-
 test_that("square guards precede symbolic inverse and Cholesky allocations", {
   inverse <- function(a) {
     declare(type(a = double(n, k)))
@@ -499,7 +478,6 @@ test_that("square guards precede symbolic inverse and Cholesky allocations", {
     )
   }
 })
-
 test_that("solve guards squareness before allocating system workspaces", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(NA)))
@@ -521,7 +499,6 @@ test_that("solve guards squareness before allocating system workspaces", {
     fixed = TRUE
   )
 })
-
 test_that("inverse solve guards before allocating all workspaces", {
   fn <- function(a) {
     declare(type(a = double(n, k)))
@@ -543,7 +520,6 @@ test_that("inverse solve guards before allocating all workspaces", {
     fixed = TRUE
   )
 })
-
 test_that("triangular solve guards before allocating a nested result", {
   fn <- function(a, b) {
     declare(type(a = double(n, n)), type(b = double(NA)))
@@ -569,7 +545,6 @@ test_that("triangular solve guards before allocating a nested result", {
     fixed = TRUE
   )
 })
-
 test_that("qr.solve guards before allocating nested workspaces", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, p)))
@@ -597,7 +572,6 @@ test_that("qr.solve guards before allocating nested workspaces", {
     fixed = TRUE
   )
 })
-
 test_that("matrix-matrix %*% returns zeros for a known empty contraction", {
   fn <- function(a, b) {
     declare(type(a = double(2, 0)), type(b = double(0, 3)))
@@ -608,7 +582,6 @@ test_that("matrix-matrix %*% returns zeros for a known empty contraction", {
     list(matrix(double(), 2, 0), matrix(double(), 0, 3))
   )
 })
-
 test_that("matrix-vector %*% returns zeros for a known empty contraction", {
   fn <- function(a, x) {
     declare(type(a = double(2, 0)), type(x = double(0)))
@@ -616,7 +589,6 @@ test_that("matrix-vector %*% returns zeros for a known empty contraction", {
   }
   expect_quick_identical(fn, list(matrix(double(), 2, 0), double()))
 })
-
 test_that("%*% returns zeros for a symbolic empty contracted dimension", {
   fn <- function(a, b, k) {
     declare(
@@ -631,7 +603,6 @@ test_that("%*% returns zeros for a symbolic empty contracted dimension", {
     list(matrix(double(), 2, 0), matrix(double(), 0, 3), 0L)
   )
 })
-
 test_that("symmetric products return zeros for known empty contractions", {
   cross_vec <- function(x) {
     declare(type(x = double(0)))
@@ -660,7 +631,6 @@ test_that("symmetric products return zeros for known empty contractions", {
   expect_quick_identical(cross_symbolic, list(matrix(double(), 0, 2), 0L))
   expect_quick_identical(tcross_symbolic, list(matrix(double(), 2, 0), 0L))
 })
-
 test_that("matrix BLAS rejects known zero-sized outputs", {
   matrix_matrix <- function(a, b) {
     declare(type(a = double(0, 2)), type(b = double(2, 3)))
@@ -694,7 +664,6 @@ test_that("matrix BLAS rejects known zero-sized outputs", {
   expect_error(quick(outer_left), "zero-sized outputs are not supported")
   expect_error(quick(outer_right), "zero-sized outputs are not supported")
 })
-
 test_that("matrix BLAS guards unknown output extents at runtime", {
   matrix_matrix <- function(a, b) {
     declare(type(a = double(NA, 2)), type(b = double(2, 3)))
@@ -735,7 +704,6 @@ test_that("matrix BLAS guards unknown output extents at runtime", {
   expect_error(q_outer(double(), as.double(1:2)), message)
   expect_error(q_outer(as.double(1:2), double()), message)
 })
-
 test_that("NA dims are never treated as equal", {
   fn <- function(a, b) {
     declare(type(a = double(NA, NA)), type(b = double(NA, NA)))
@@ -751,7 +719,6 @@ test_that("NA dims are never treated as equal", {
     fixed = TRUE
   )
 })
-
 test_that("crossprod with unverifiable dims compiles and guards at runtime", {
   fn <- function(x, y, n, p, m, k) {
     declare(
@@ -774,7 +741,6 @@ test_that("crossprod with unverifiable dims compiles and guards at runtime", {
     "non-conformable arguments in crossprod"
   )
 })
-
 test_that("unverifiable %*% dims compile and guard at runtime", {
   fn <- function(A, B, n, m, k) {
     declare(
