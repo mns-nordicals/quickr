@@ -105,6 +105,9 @@ infer_dest_crossprod_like <- function(args, scope, trans) {
   }
   y_arg <- args$y %||% if (length(args) > 1L) args[[2L]] else NULL
   y <- if (!is.null(y_arg)) infer_symbol_var(y_arg, scope) else NULL
+  if (!is.null(y_arg) && is.null(y)) {
+    return(NULL)
+  }
   x_dims <- matrix_dims_var(
     x,
     orientation = if (
