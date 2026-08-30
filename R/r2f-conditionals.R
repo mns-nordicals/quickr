@@ -122,7 +122,7 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   lower_branch <- function(arg) {
-    sub <- hoist$capture()
+    sub <- hoist$capture_block()
     branch <- r2f(arg, scope, ..., hoist = sub)
     if (
       !passes_as_scalar(mask@value) &&
