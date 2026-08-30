@@ -291,6 +291,10 @@ is_pure_scalar_condition <- function(e, scope) {
   if (inherits(scope[[op]], LocalClosure)) {
     return(FALSE)
   }
+  allowed <- lazy_builtin_arities[[op]]
+  if (!((length(e) - 1L) %in% allowed)) {
+    return(FALSE)
+  }
   all(vapply(
     as.list(e)[-1L],
     is_pure_scalar_condition,
