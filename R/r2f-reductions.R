@@ -125,10 +125,14 @@ register_r2f_handler(
         )
         Fortran(s, Variable(x@value@mode))
       }
+      later_args <- tail(args, -index)
+      if (allow_empty && !identical(nonempty, TRUE)) {
+        later_args <- list()
+      }
       out <- snapshot_operand_before_later_effects(
         out,
         arg,
-        tail(args, -index),
+        later_args,
         scope,
         arg_hoist
       )
