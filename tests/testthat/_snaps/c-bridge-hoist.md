@@ -46,9 +46,18 @@
           return
         end if
         out = 0.0_c_double
-        do i = 1, size(out)
-          out(i) = (a(i) + b(i))
-        end do
+        block
+          integer(c_int) :: btmp1_
+      
+          btmp1_ = size(out)
+          if (btmp1_ < 0) then
+            call quickr_set_error_msg("seq_len() bound must be non-negative")
+            return
+          end if
+          do i = 1, btmp1_
+            out(i) = (a(i) + b(i))
+          end do
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)
