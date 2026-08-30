@@ -292,16 +292,27 @@ test_that("nested short-circuits own their right-operand diagnostics", {
 })
 
 test_that("short-circuited elementwise shape errors are deferred", {
-  skipped <- function() {
+  skipped_and <- function() {
     FALSE && (logical(2) & logical(3))
   }
-  reached <- function() {
+  skipped_or <- function() {
+    TRUE || (logical(2) & logical(3))
+  }
+  reached_and <- function() {
     TRUE && (logical(2) & logical(3))
   }
+  reached_or <- function() {
+    FALSE || (logical(2) & logical(3))
+  }
+  evaluated <- function() {
+    logical(2) & logical(3)
+  }
 
-  expect_quick_identical(skipped, list())
-  qfn <- quick(reached)
-  expect_error(qfn(), "elementwise vector operations")
+  expect_quick_identical(skipped_and, list())
+  expect_quick_identical(skipped_or, list())
+  expect_error(quick(reached_and)(), "elementwise vector operations")
+  expect_error(quick(reached_or)(), "elementwise vector operations")
+  expect_error(quick(evaluated), "elementwise vector operations")
 
   reached_with_effects <- function() {
     TRUE && ((runif(2) > 0) & (runif(3) > 0))
