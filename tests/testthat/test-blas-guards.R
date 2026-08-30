@@ -753,6 +753,10 @@ test_that("unverifiable %*% dims compile and guard at runtime", {
     A %*% B
   }
 
+  c_code <- as.character(r2f(fn)@c_bridge)
+  guard <- regexpr("non-conformable arguments in %*%", c_code, fixed = TRUE)
+  allocation <- regexpr("Rf_allocVector(REALSXP", c_code, fixed = TRUE)
+  expect_true(guard > 0L && guard < allocation)
   qfn <- expect_no_warning(quick(fn))
   A <- matrix(as.double(1:6), 2, 3)
   B <- matrix(as.double(6:1), 3, 2)

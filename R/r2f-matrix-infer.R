@@ -93,7 +93,15 @@ infer_dest_matmul <- function(args, scope) {
     return(Variable("double", list(1L, out_len)))
   }
 
-  Variable("double", list(left_eff$rows, right_eff$cols))
+  out <- Variable("double", list(left_eff$rows, right_eff$cols))
+  if (isTRUE(check_blas_dims(left_eff$cols, right_eff$rows)$unknown)) {
+    out@c_bridge_dim_check <- list(
+      left = left_eff$cols,
+      right = right_eff$rows,
+      message = "non-conformable arguments in %*%"
+    )
+  }
+  out
 }
 
 # Shared inference for crossprod/tcrossprod destination sizes.

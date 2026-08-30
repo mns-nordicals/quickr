@@ -276,6 +276,8 @@ Variable := new_class(
       } # dims$setter
     ), # dims = new_property()
 
+    c_bridge_dim_check = new_property(NULL | class_list),
+
     name = prop_string(
       allow_null = TRUE,
       coerce = quote(switch(

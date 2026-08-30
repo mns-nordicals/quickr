@@ -362,6 +362,12 @@ return_var_c_defs <- function(var, scope, c_hoist = NULL) {
   c_dims <- dims2c(var@dims, scope, c_hoist = c_hoist)
   names(c_dims) <- NULL
   c_len <- c_dims2c_len(c_dims)
+  check <- var@c_bridge_dim_check
+  check_code <- if (!is.null(check)) {
+    left <- dims2c_expr(check$left, scope, c_hoist = c_hoist)
+    right <- dims2c_expr(check$right, scope, c_hoist = c_hoist)
+    glue('if ({left} != {right}) Rf_error("%s", "{check$message}");')
+  }
   decls <- if (!is.null(c_hoist)) {
     c_bridge_hoist_take_pending(c_hoist)
   } else {
@@ -370,6 +376,7 @@ return_var_c_defs <- function(var, scope, c_hoist = NULL) {
 
   c_code <- c(
     decls,
+    check_code,
     glue("const R_xlen_t {len_name} = {c_len};"),
     glue(switch(
       var@mode,
