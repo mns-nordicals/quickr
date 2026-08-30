@@ -9,6 +9,7 @@
 # array dims, so splicing contexts must spread them explicitly.
 # Used by: c(), array()
 is_fill_constructor_call <- function(e, scope) {
+  e <- unwrap_parens(e)
   if (!is.call(e)) {
     return(FALSE)
   }
