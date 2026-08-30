@@ -235,6 +235,30 @@ test_that("renamed BLAS return destinations remain output arguments", {
   expect_identical(actual_seed, expected_seed)
 })
 
+test_that("SYRK point-allocates reused conditional destinations", {
+  fn <- function(flag, a, b, x) {
+    declare(
+      type(flag = logical(1)),
+      type(a = double(n, k)),
+      type(b = double(k, n)),
+      type(x = double(m, n))
+    )
+    if (flag) {
+      out <- a %*% b
+    }
+    out <- crossprod(x)
+    sum(out)
+  }
+
+  a <- matrix(as.double(1:6), 2, 3)
+  b <- matrix(as.double(1:6), 3, 2)
+  x <- matrix(as.double(1:6), 3, 2)
+  qfn <- quick(fn)
+  expected <- sum(crossprod(x))
+  expect_equal(qfn(FALSE, a, b, x), expected)
+  expect_equal(qfn(TRUE, a, b, x), expected)
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))
@@ -378,6 +402,38 @@ test_that("LAPACK solves reject zero-sized outputs before library calls", {
   for (fn in list(solve_fn, forward_fn, back_fn)) {
     expect_error(
       quick(fn)(a, numeric()),
+      "zero-sized outputs are not supported",
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("matrix solve right-hand sides reject zero output widths", {
+  solve_fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(n, p)))
+    sum(solve(a, b))
+  }
+  qr_fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(n, p)))
+    sum(qr.solve(a, b))
+  }
+  forward_fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(n, p)))
+    sum(forwardsolve(a, b))
+  }
+  back_fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(n, p)))
+    sum(backsolve(a, b))
+  }
+
+  a <- diag(2)
+  b <- matrix(as.double(1:4), 2, 2)
+  empty_b <- matrix(numeric(), 2, 0)
+  for (fn in list(solve_fn, qr_fn, forward_fn, back_fn)) {
+    qfn <- quick(fn)
+    expect_equal(qfn(a, b), fn(a, b), tolerance = 1e-10)
+    expect_error(
+      qfn(a, empty_b),
       "zero-sized outputs are not supported",
       fixed = TRUE
     )

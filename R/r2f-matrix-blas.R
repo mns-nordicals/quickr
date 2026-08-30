@@ -737,7 +737,9 @@ syrk <- function(
     hoist,
     input_names = X_name,
     expected_dims = list(n, n),
-    context = context
+    context = context,
+    scope = scope,
+    allocate_at_point = TRUE
   )
 
   blas_call <- glue(
@@ -838,6 +840,16 @@ triangular_solve <- function(
     checker = check_blas_dims
   )
   assert_nonempty_blas_output(n, A, 1L, context, hoist, scope)
+  if (b_rank == 2L) {
+    assert_nonempty_blas_output(
+      dim_or_one(B, 2L),
+      B,
+      2L,
+      context,
+      hoist,
+      scope
+    )
+  }
 
   A_name <- ensure_blas_operand_name(A, hoist, scope, context)
   assert_blas_dimensions_stable(B, scope, context)
@@ -926,11 +938,13 @@ lapack_solve <- function(
     checker = check_blas_dims
   )
   assert_nonempty_blas_output(n, A, 2L, context, hoist, scope)
+  nrhs <- if (b_rank == 1L) 1L else dim_or_one(B, 2L)
+  if (b_rank == 2L) {
+    assert_nonempty_blas_output(nrhs, B, 2L, context, hoist, scope)
+  }
 
   A_name <- ensure_blas_operand_name(A, hoist, scope, context)
   B_input_name <- ensure_blas_operand_name(B, hoist, scope, context)
-
-  nrhs <- if (b_rank == 1L) 1L else dim_or_one(B, 2L)
 
   # Both lowerings write a solution shaped by R's contract: length follows
   # ncol(a), width follows the right-hand side. Each lowering resolves the
