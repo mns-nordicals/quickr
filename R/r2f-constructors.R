@@ -393,6 +393,43 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
     # We implement this as Fortran `reshape()`. Recycling (i.e. expanding a
     # shorter SOURCE to a larger target shape) is not supported.
     dims_f <- dims2f(target_dims, scope)
+    if (grepl(":", dims_f, fixed = TRUE)) {
+      stop("array(dim=) must be known", call. = FALSE)
+    }
+
+    axis_terms <- vapply(
+      target_dims,
+      function(d) {
+        axis <- dims2f(list(d), scope)
+        if (!nzchar(axis)) "1" else axis
+      },
+      character(1L)
+    )
+    n_expr <- if (length(axis_terms) == 1L) {
+      axis_terms[[1L]]
+    } else {
+      paste0("(", paste0("(", axis_terms, ")", collapse = " * "), ")")
+    }
+
+    is_fill_constructor <- is_fill_constructor_call(args$data, scope)
+    if (is_fill_constructor) {
+      source_len <- out@value@dims[[1L]]
+      source_may_be_empty <- !is_wholenumber(source_len) || source_len == 0
+      if (source_may_be_empty) {
+        # Base R pads an empty source with NA; quickr does not support NA values.
+        source_len_f <- dims2f(list(source_len), scope)
+        if (!nzchar(source_len_f) || grepl(":", source_len_f, fixed = TRUE)) {
+          stop("array() fill length must be known", call. = FALSE)
+        }
+        emit_quickr_error_if(
+          glue("({source_len_f}) == 0 .and. ({n_expr}) > 0"),
+          "array() with empty data would produce NA values, which are not supported",
+          hoist,
+          scope
+        )
+      }
+    }
+
     scalar_target <- !nzchar(dims_f) && length(target_dims) == 1L
     if (scalar_target) {
       # `dim = 1` is scalar-like in quickr (rank-1 length-1 is declared scalar).
@@ -412,30 +449,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       if (!nzchar(dims_f)) {
         dims_f <- "1"
       }
-      if (grepl(":", dims_f, fixed = TRUE)) {
-        stop("array(dim=) must be known", call. = FALSE)
-      }
       shape <- glue("int([{dims_f}])")
-
-      is_fill_constructor <- is_fill_constructor_call(args$data, scope)
-
-      axis_terms <- vapply(
-        target_dims,
-        function(d) {
-          axis <- dims2f(list(d), scope)
-          if (!nzchar(axis)) {
-            "1"
-          } else {
-            axis
-          }
-        },
-        character(1L)
-      )
-      n_expr <- if (length(axis_terms) == 1L) {
-        axis_terms[[1L]]
-      } else {
-        paste0("(", paste0("(", axis_terms, ")", collapse = " * "), ")")
-      }
 
       known_prod <- function(dims) {
         if (is.null(dims) || !length(dims)) {
