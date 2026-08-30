@@ -32,8 +32,22 @@ lower_subscript_args <- function(idx_args, base_dims, scope, ..., hoist) {
     if (is_missing(idx)) {
       Fortran(":", Variable("integer", base_dims[[i]]))
     } else {
+      later_idx_args <- if (i < length(idxs)) {
+        idxs[seq.int(i + 1L, length(idxs))]
+      } else {
+        list()
+      }
+      later_idx_args <- later_idx_args[
+        !vapply(later_idx_args, is_missing, logical(1L))
+      ]
       cast_subscript_to_integer(
-        lower_r2f_operand_in_order(idx, scope, ..., hoist = hoist)
+        lower_r2f_operand_in_order(
+          idx,
+          scope,
+          ...,
+          hoist = hoist,
+          later_args = later_idx_args
+        )
       )
     }
   })
@@ -119,12 +133,18 @@ r2f_handlers[["["]] <- function(
   #   or 1 (a logical vector becomes integer positions, as R's which();
   #   double subscripts coerce to integer).
 
-  var <- args[[1]]
-  var <- lower_r2f_operand_in_order(var, scope, ..., hoist = hoist)
-
+  var_arg <- args[[1L]]
   idx_args <- args[-1]
   drop <- idx_args$drop %||% TRUE
   idx_args$drop <- NULL
+  later_idx_args <- idx_args[!vapply(idx_args, is_missing, logical(1L))]
+  var <- lower_r2f_operand_in_order(
+    var_arg,
+    scope,
+    ...,
+    hoist = hoist,
+    later_args = later_idx_args
+  )
 
   check_subscript_exprs(var@value, idx_args)
 

@@ -183,6 +183,42 @@ test_that("nested elementwise operands preserve left-to-right evaluation", {
   expect_identical(quick(conformable)(), expected)
 })
 
+test_that("later effects cannot change earlier elementwise operands", {
+  bare <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 1
+      2
+    }
+    x + bump()
+  }
+
+  expression <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 1
+      2
+    }
+    (x * 2) + bump()
+  }
+
+  expect_quick_identical(bare, list(3))
+  expect_quick_identical(expression, list(3))
+})
+
+test_that("c() fixes fill lengths before evaluating later arguments", {
+  fn <- function(n) {
+    declare(type(n = integer(1)))
+    bump <- function() {
+      n <<- n + 1L
+      7L
+    }
+    c(integer(n), bump())
+  }
+
+  expect_quick_identical(fn, list(2L))
+})
+
 test_that("subscript operands preserve left-to-right evaluation", {
   fn <- function(x) {
     declare(type(x = double(2, 2)))
