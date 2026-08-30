@@ -85,6 +85,9 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
     return(invisible())
   }
   if (branch@value@rank != mask@value@rank) {
+    if (isTRUE(hoist$defer_static_shape_error)) {
+      stop_deferred_branch_error(ifelse_branch_shape_msg)
+    }
     stop(ifelse_branch_shape_msg, call. = FALSE)
   }
   for (axis in seq_len(mask@value@rank)) {
@@ -219,6 +222,11 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     for (i in seq_along(branches)) {
       selector <- selectors[[i]]
       hoist$emit(glue("if (any({selector})) then"))
+      allocate_reusable_local_output_at_point(
+        result,
+        scope,
+        branch_hoists[[i]]
+      )
       assignment <- glue(
         "where ({selector}) {result@name} = {branches[[i]]}"
       )

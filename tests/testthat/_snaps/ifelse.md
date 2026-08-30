@@ -30,14 +30,15 @@
         ! manifest end
       
         allocate(tmp1_(c__len_))
-        allocate(tmp2_(c__len_))
       
       
         tmp1_ = (c/=0)
         if (any(tmp1_)) then
+          if (.not. allocated(tmp2_)) allocate(tmp2_(c__len_))
           where (tmp1_) tmp2_ = real(1_c_int, kind=c_double)
         end if
         if (any(.not. tmp1_)) then
+          if (.not. allocated(tmp2_)) allocate(tmp2_(c__len_))
           where (.not. tmp1_) tmp2_ = a
         end if
         out_ = tmp2_
@@ -130,7 +131,6 @@
         ! manifest end
       
         allocate(tmp1_(c__len_))
-        allocate(tmp2_(c__len_))
       
       
         tmp1_ = (c/=0)
@@ -140,6 +140,7 @@
       & supported")
             return
           end if
+          if (.not. allocated(tmp2_)) allocate(tmp2_(c__len_))
           where (tmp1_) tmp2_ = a
         end if
         if (any(.not. tmp1_)) then
@@ -148,6 +149,7 @@
       & supported")
             return
           end if
+          if (.not. allocated(tmp2_)) allocate(tmp2_(c__len_))
           where (.not. tmp1_) tmp2_ = b
         end if
         out_ = tmp2_
