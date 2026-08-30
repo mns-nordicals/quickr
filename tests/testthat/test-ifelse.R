@@ -155,3 +155,28 @@ test_that("ifelse does not evaluate unselected branches", {
     expect_identical(actual_seed, expected_seed)
   }
 })
+
+test_that("ifelse defers malformed calls in unselected branches", {
+  skipped <- function() {
+    ifelse(FALSE, abs(), 1)
+  }
+  reached <- function() {
+    ifelse(TRUE, abs(), 1)
+  }
+
+  expect_quick_identical(skipped, list())
+  qfn <- quick(reached)
+  expect_error(qfn(), "abs")
+
+  reached_with_effects <- function() {
+    ifelse(TRUE, runif(1) + abs(), 1)
+  }
+  qfn <- quick(reached_with_effects)
+  set.seed(818)
+  expect_error(qfn(), "abs")
+  actual_seed <- .Random.seed
+
+  set.seed(818)
+  runif(1)
+  expect_identical(actual_seed, .Random.seed)
+})
