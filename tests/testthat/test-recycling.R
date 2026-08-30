@@ -533,9 +533,30 @@ test_that("array() rejects empty fills when the result would contain NA", {
   )
 })
 
+test_that("matrix() rejects empty fills when the result would contain NA", {
+  fn <- function() {
+    matrix(numeric(), nrow = 2L, ncol = 2L)
+  }
+
+  qfn <- quick(fn)
+  expect_error(
+    qfn(),
+    "NA values, which are not supported",
+    fixed = TRUE
+  )
+})
+
 test_that("array() allows empty fills for empty results", {
   fn <- function() {
     array(numeric(), dim = c(0L, 2L))
+  }
+
+  expect_quick_identical(fn, list())
+})
+
+test_that("matrix() allows empty fills for empty results", {
+  fn <- function() {
+    matrix(numeric(), nrow = 0L, ncol = 2L)
   }
 
   expect_quick_identical(fn, list())
