@@ -202,6 +202,9 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
     # target and emits loop-dependent setup before the loop.
     body <- r2f(body, scope, ..., hoist = NULL)
     check_pending_parallel_consumed(scope)
+    if (!is.null(parallel) && openmp_scope_uses_rng(scope)) {
+      stop("runif() is not supported inside parallel loops", call. = FALSE)
+    }
     loop_stmts <- str_flatten_lines(glue("{var_name} = {element_expr}"), body)
 
     loop_header <- if (iterable_reversed) {
@@ -252,6 +255,9 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   # loop even when the R body is not wrapped in braces.
   body <- r2f(body, scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
+  if (!is.null(parallel) && openmp_scope_uses_rng(scope)) {
+    stop("runif() is not supported inside parallel loops", call. = FALSE)
+  }
 
   directives <- openmp_directives(
     parallel,

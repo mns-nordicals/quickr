@@ -147,6 +147,51 @@ test_that("runif refuses negative runtime sample counts", {
   expect_error(qfn(-1L), "sample count must be non-negative")
 })
 
+test_that("seq_len refuses negative bounds", {
+  static <- function() {
+    out <- 0L
+    for (i in seq_len(-1L)) {
+      out <- out + i
+    }
+    out
+  }
+  dynamic <- function(n) {
+    declare(type(n = integer(1)))
+    out <- 0L
+    for (i in seq_len(n)) {
+      out <- out + i
+    }
+    out
+  }
+
+  message <- "seq_len() bound must be non-negative"
+  expect_error(quick(static), message, fixed = TRUE)
+
+  qdynamic <- quick(dynamic)
+  expect_identical(qdynamic(3L), dynamic(3L))
+  expect_error(qdynamic(-1L), message, fixed = TRUE)
+})
+
+test_that("parallel loops refuse RNG calls", {
+  parallel_for <- function(n, out) {
+    declare(type(n = integer(1)), type(out = double(n)))
+    declare(parallel())
+    for (i in seq_len(n)) {
+      out[i] <- runif(1L)
+    }
+    out
+  }
+  parallel_sapply <- function(n) {
+    declare(type(n = integer(1)))
+    declare(parallel())
+    sapply(seq_len(n), function(i) runif(1L))
+  }
+
+  message <- "runif() is not supported inside parallel loops"
+  expect_error(quick(parallel_for), message, fixed = TRUE)
+  expect_error(quick(parallel_sapply), message, fixed = TRUE)
+})
+
 test_that("rep.int refuses negative repetition counts in subscripts", {
   static <- function(x) {
     declare(type(x = double(2)))
