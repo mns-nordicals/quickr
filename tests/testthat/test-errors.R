@@ -75,6 +75,22 @@ test_that("guarded OpenMP iterations stop when cancellation is disabled", {
   )
 })
 
+test_that("nested guarded loops cycle the OpenMP worksharing loop", {
+  guarded <- function(x) {
+    declare(type(x = double(1)))
+    declare(parallel())
+    for (i in seq_len(1L)) {
+      while (TRUE) {
+        stop("boom")
+      }
+    }
+    x
+  }
+
+  code <- as.character(r2f(guarded))
+  expect_match(code, "cycle quickr_omp_loop", fixed = TRUE)
+})
+
 test_that("value-returning local closures can be called as statements", {
   fn <- function(x) {
     declare(type(x = double(1)))

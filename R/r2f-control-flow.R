@@ -111,8 +111,10 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
 # post-loop error check, which must be computed while the OpenMP scope is
 # still entered.
 compile_for_body <- function(body, scope, ..., parallel, private = NULL) {
+  loop_label <- NULL
   if (!is.null(parallel)) {
-    previous_openmp <- enter_openmp_scope(scope)
+    loop_label <- new_openmp_loop_label(scope)
+    previous_openmp <- enter_openmp_scope(scope, loop_label)
     on.exit(exit_openmp_scope(scope, previous_openmp), add = TRUE)
   }
   body <- r2f(body, scope, ..., hoist = NULL)
@@ -139,7 +141,8 @@ compile_for_body <- function(body, scope, ..., parallel, private = NULL) {
   list(
     body = body,
     directives = directives,
-    error_check_after = error_check_after
+    error_check_after = error_check_after,
+    loop_label = loop_label
   )
 }
 
@@ -266,13 +269,14 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
     } else {
       glue("do {idx@name} = 1_c_int, {end}")
     }
+    loop_header <- openmp_loop_header(loop_header, compiled$loop_label)
 
     return(Fortran(glue(
       "
       {iterable_tmp_assign}
       {str_flatten_lines(compiled$directives$prefix, loop_header)}
       {indent(loop_stmts)}
-      end do
+      {openmp_loop_end(compiled$loop_label)}
       {str_flatten_lines(compiled$directives$suffix, compiled$error_check_after)}
       "
     )))
@@ -288,11 +292,14 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   iterable <- r2f_for_iterable(iterable, scope, ..., hoist = hoist)
   compiled <- compile_for_body(body, scope, ..., parallel = parallel)
 
-  loop_header <- glue("do {var_name} = {iterable}")
+  loop_header <- openmp_loop_header(
+    glue("do {var_name} = {iterable}"),
+    compiled$loop_label
+  )
   Fortran(glue(
     "{str_flatten_lines(compiled$directives$prefix, loop_header)}
     {indent(compiled$body)}
-    end do
+    {openmp_loop_end(compiled$loop_label)}
     {str_flatten_lines(compiled$directives$suffix, compiled$error_check_after)}
     "
   ))

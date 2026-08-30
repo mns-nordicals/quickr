@@ -25,6 +25,29 @@ test_that("declare(parallel()) and declare(omp()) parallelize loops", {
   expect_quick_identical(parallel_sapply, list(x))
 })
 
+test_that("parallel nested guarded loops report errors without cancellation", {
+  withr::local_envvar(c(
+    OMP_CANCELLATION = "false",
+    OMP_NUM_THREADS = "1",
+    OMP_THREAD_LIMIT = "1",
+    OMP_DYNAMIC = "false"
+  ))
+  skip_if_no_openmp()
+
+  guarded <- function(x) {
+    declare(type(x = double(1)))
+    declare(parallel())
+    for (i in seq_len(1L)) {
+      while (TRUE) {
+        stop("boom")
+      }
+    }
+    x
+  }
+
+  expect_error(quick(guarded)(-1), "boom", fixed = TRUE)
+})
+
 test_that("parallel array constructors privatize implied-do iterators", {
   skip_if_no_openmp()
 

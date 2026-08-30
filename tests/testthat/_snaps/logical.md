@@ -892,13 +892,13 @@
         out = .false.
       
         !$omp parallel do private(tmp1_)
-        do i = 1, size(x)
+        quickr_omp_loop1_: do i = 1, size(x)
           tmp1_ = (x(i) > 0.0_c_double)
           if (tmp1_) then
             tmp1_ = (y(i) > 0.0_c_double)
           end if
           out(i) = tmp1_
-        end do
+        end do quickr_omp_loop1_
         !$omp end parallel do
         if (quickr_err_msg(1) /= c_null_char) return
       

@@ -1442,27 +1442,31 @@ compile_sapply_assignment <- function(
   out_var@modified <- TRUE
   scope[[out_name]] <- out_var
 
-  directives <- openmp_directives(parallel)
+  loop_label <- NULL
   if (!is.null(parallel)) {
+    loop_label <- new_openmp_loop_label(scope)
+    previous_openmp <- enter_openmp_scope(scope, loop_label)
+    on.exit(exit_openmp_scope(scope, previous_openmp), add = TRUE)
     mark_openmp_used(scope)
   }
+  directives <- openmp_directives(parallel)
   error_check_inner <- if (is.null(parallel)) {
     quickr_error_return_if_set(scope)
   } else {
-    quickr_error_return_if_set(
-      scope,
-      openmp_depth = scope_openmp_depth(scope) + 1L
-    )
+    quickr_error_return_if_set(scope)
   }
   error_check_after <- if (!is.null(parallel)) {
     quickr_error_return_if_set(
       scope,
-      openmp_depth = scope_openmp_depth(scope)
+      openmp_depth = scope_openmp_depth(scope) - 1L
     )
   } else {
     ""
   }
-  loop_header <- glue("do {idx@name} = 1_c_int, {last_i}")
+  loop_header <- openmp_loop_header(
+    glue("do {idx@name} = 1_c_int, {last_i}"),
+    loop_label
+  )
   prefix <- str_flatten_lines(
     if (!index_iterable) iterable_tmp_assign else NULL,
     str_flatten_lines(directives$prefix, loop_header)
@@ -1472,7 +1476,7 @@ compile_sapply_assignment <- function(
     {prefix}
       call {proc_name}({call_args})
       {error_check_inner}
-    end do
+    {openmp_loop_end(loop_label)}
     {str_flatten_lines(directives$suffix)}
     {error_check_after}
     {str_flatten_lines(post_stmts)}

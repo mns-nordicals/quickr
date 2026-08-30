@@ -47,6 +47,30 @@ scope_in_openmp <- function(scope) {
   scope_openmp_depth(scope) > 0L
 }
 
+scope_openmp_loop_labels <- function(scope) {
+  if (!inherits(scope, "quickr_scope")) {
+    return(character())
+  }
+  scope_get(scope, "openmp_loop_labels", character())
+}
+
+scope_openmp_loop_label <- function(
+  scope,
+  depth = scope_openmp_depth(scope)
+) {
+  depth <- as.integer(depth)
+  if (depth <= 0L) {
+    return(NULL)
+  }
+  labels <- scope_openmp_loop_labels(scope)
+  stopifnot(length(labels) >= depth)
+  labels[[depth]]
+}
+
+new_openmp_loop_label <- function(scope) {
+  scope_unique_proc(scope_root(scope), prefix = "quickr_omp_loop")
+}
+
 openmp_private_vars <- function(scope) {
   if (!inherits(scope, "quickr_scope")) {
     return(character())
@@ -92,19 +116,26 @@ scope_unique_implied_do_var <- function(scope, integer_kind = "c_int") {
   iterator
 }
 
-enter_openmp_scope <- function(scope) {
+enter_openmp_scope <- function(scope, loop_label) {
   if (!inherits(scope, "quickr_scope")) {
     return(NULL)
   }
+  stopifnot(is_string(loop_label))
   previous <- list(
     depth = scope_get(scope, "openmp_depth"),
     private_vars = scope_get(scope, "openmp_private_vars"),
-    uses_rng = scope_get(scope, "openmp_uses_rng")
+    uses_rng = scope_get(scope, "openmp_uses_rng"),
+    loop_labels = scope_get(scope, "openmp_loop_labels")
   )
   depth <- scope_openmp_depth(scope)
   scope_set(scope, "openmp_depth", depth + 1L)
   scope_set(scope, "openmp_private_vars", character())
   scope_set(scope, "openmp_uses_rng", FALSE)
+  scope_set(
+    scope,
+    "openmp_loop_labels",
+    c(scope_openmp_loop_labels(scope), loop_label)
+  )
   previous
 }
 
@@ -120,6 +151,7 @@ exit_openmp_scope <- function(scope, previous) {
   }
   scope_set(scope, "openmp_private_vars", previous$private_vars)
   scope_set(scope, "openmp_uses_rng", previous$uses_rng)
+  scope_set(scope, "openmp_loop_labels", previous$loop_labels)
   invisible(TRUE)
 }
 
@@ -213,6 +245,16 @@ openmp_parallel_do <- function(private = NULL) {
 }
 
 openmp_parallel_end <- function() "!$omp end parallel do"
+
+openmp_loop_header <- function(header, label = NULL) {
+  stopifnot(is_string(header), is.null(label) || is_string(label))
+  if (is.null(label)) header else glue("{label}: {header}")
+}
+
+openmp_loop_end <- function(label = NULL) {
+  stopifnot(is.null(label) || is_string(label))
+  if (is.null(label)) "end do" else glue("end do {label}")
+}
 
 openmp_directives <- function(parallel, private = NULL) {
   if (is.null(parallel)) {
