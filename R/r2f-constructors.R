@@ -297,6 +297,29 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   rows <- dims[[1L]]
   cols <- dims[[2L]]
 
+  if (is_fill_constructor_call(args$data, scope)) {
+    source_len <- src@value@dims[[1L]]
+    source_may_be_empty <- !is_wholenumber(source_len) || source_len == 0
+    if (source_may_be_empty) {
+      source_len_f <- dims2f(list(source_len), scope)
+      if (!nzchar(source_len_f) || grepl(":", source_len_f, fixed = TRUE)) {
+        stop("matrix() fill length must be known", call. = FALSE)
+      }
+      row_count <- dims2f(list(rows), scope)
+      col_count <- dims2f(list(cols), scope)
+      row_count <- if (nzchar(row_count)) row_count else "1"
+      col_count <- if (nzchar(col_count)) col_count else "1"
+      emit_quickr_error_if(
+        glue(
+          "({source_len_f}) == 0 .and. ({row_count}) > 0 .and. ({col_count}) > 0"
+        ),
+        "matrix() with empty data would produce NA values, which are not supported",
+        hoist,
+        scope
+      )
+    }
+  }
+
   # Avoid double-evaluating non-trivial expressions when used in both the
   # `source` and `pad` args.
   source <- glue("{hoist_unless_name(src, hoist)}")
@@ -393,6 +416,42 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
     # We implement this as Fortran `reshape()`. Recycling (i.e. expanding a
     # shorter SOURCE to a larger target shape) is not supported.
     dims_f <- dims2f(target_dims, scope)
+    if (grepl(":", dims_f, fixed = TRUE)) {
+      stop("array(dim=) must be known", call. = FALSE)
+    }
+
+    is_fill_constructor <- is_fill_constructor_call(args$data, scope)
+    axis_terms <- vapply(
+      target_dims,
+      function(d) {
+        axis <- dims2f(list(d), scope)
+        if (!nzchar(axis)) "1" else axis
+      },
+      character(1L)
+    )
+    if (is_fill_constructor) {
+      source_len <- out@value@dims[[1L]]
+      source_may_be_empty <- !is_wholenumber(source_len) || source_len == 0
+      if (source_may_be_empty) {
+        source_len_f <- dims2f(list(source_len), scope)
+        if (!nzchar(source_len_f) || grepl(":", source_len_f, fixed = TRUE)) {
+          stop("array() fill length must be known", call. = FALSE)
+        }
+        target_nonempty <- paste0(
+          "(",
+          axis_terms,
+          ") > 0",
+          collapse = " .and. "
+        )
+        emit_quickr_error_if(
+          glue("({source_len_f}) == 0 .and. {target_nonempty}"),
+          "array() with empty data would produce NA values, which are not supported",
+          hoist,
+          scope
+        )
+      }
+    }
+
     scalar_target <- !nzchar(dims_f) && length(target_dims) == 1L
     if (scalar_target) {
       # `dim = 1` is scalar-like in quickr (rank-1 length-1 is declared scalar).
@@ -412,25 +471,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       if (!nzchar(dims_f)) {
         dims_f <- "1"
       }
-      if (grepl(":", dims_f, fixed = TRUE)) {
-        stop("array(dim=) must be known", call. = FALSE)
-      }
       shape <- glue("int([{dims_f}])")
-
-      is_fill_constructor <- is_fill_constructor_call(args$data, scope)
-
-      axis_terms <- vapply(
-        target_dims,
-        function(d) {
-          axis <- dims2f(list(d), scope)
-          if (!nzchar(axis)) {
-            "1"
-          } else {
-            axis
-          }
-        },
-        character(1L)
-      )
       n_expr <- if (length(axis_terms) == 1L) {
         axis_terms[[1L]]
       } else {
