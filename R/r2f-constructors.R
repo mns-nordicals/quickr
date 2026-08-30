@@ -452,8 +452,14 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
         if (!nzchar(source_len_f) || grepl(":", source_len_f, fixed = TRUE)) {
           stop("array() fill length must be known", call. = FALSE)
         }
+        target_nonempty <- paste0(
+          "(",
+          axis_terms,
+          ") > 0",
+          collapse = " .and. "
+        )
         emit_quickr_error_if(
-          glue("({source_len_f}) == 0 .and. ({n_expr_ptrdiff}) > 0"),
+          glue("({source_len_f}) == 0 .and. {target_nonempty}"),
           "array() with empty data would produce NA values, which are not supported",
           hoist,
           scope
