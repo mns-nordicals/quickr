@@ -88,6 +88,15 @@ new_hoist <- function(scope) {
     var
   }
 
+  allocate_existing_tmp_at_point <- function(var) {
+    line <- tmp_allocation_line(var)
+    if (length(line)) {
+      first_use <- which(grepl(var@name, hoisted, fixed = TRUE))[[1L]]
+      hoisted <<- append(hoisted, line, after = first_use - 1L)
+    }
+    var
+  }
+
   declare_tmp_at_point <- function(mode, dims, logical_as_int = FALSE) {
     var <- declare_tmp(mode, dims, logical_as_int)
     allocate_tmp_at_point(var, emit)
@@ -166,6 +175,7 @@ new_hoist <- function(scope) {
       declare_tmp = declare_tmp,
       is_empty = is_empty,
       declare_tmp_at_point = declare_tmp_at_point,
+      allocate_tmp_at_point = allocate_existing_tmp_at_point,
       render = render,
       capture = capture
     ),
