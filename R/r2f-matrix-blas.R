@@ -1027,9 +1027,13 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
@@ -1102,9 +1106,13 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
@@ -1166,9 +1174,13 @@ lapack_chol2inv <- function(
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
