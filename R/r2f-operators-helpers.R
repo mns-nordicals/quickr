@@ -271,7 +271,8 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       list(
         value = value,
         dims = lapply(dims, \(dim) as.symbol(trimws(as.character(dim)))),
-        dims_f = map_chr(dims, \(dim) glue("int({dim})"))
+        dims_f = map_chr(dims, \(dim) glue("int({dim})")),
+        dbl = map_lgl(dims, \(dim) identical(dim@value@mode, "double"))
       )
     }
 
@@ -323,8 +324,9 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
     fallback <- if (j == 1L) {
       static_dims <- map_lgl(fill_dims, is_scalar_integerish)
       guard_constructor_dims(fill_dims[static_dims], "matrix", hoist, scope)
-      dynamic_dims <- as.list(fill$dims_f[!static_dims])
-      guard_constructor_dims(dynamic_dims, "matrix", hoist, scope)
+      dynamic_dims <- lapply(fill$dims[!static_dims], as.character)
+      dbl <- fill$dbl[!static_dims]
+      guard_constructor_dims(dynamic_dims, "matrix", hoist, scope, dbl)
       out <- materialize_via_hoist(
         fill$value,
         fill$value@value@mode,

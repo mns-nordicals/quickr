@@ -165,11 +165,13 @@ r2size <- function(r, scope) {
     switch(
       integer = r,
       double = {
-        if (is_wholenumber(r)) {
-          as.integer(r)
-        } else {
-          stop("size must be an integer, found: ", r)
+        invalid <- !is.finite(r) ||
+          !is_wholenumber(r) ||
+          abs(r) > .Machine$integer.max
+        if (invalid) {
+          stop("size must be an integer in R's supported range, found: ", r)
         }
+        as.integer(r)
       },
       symbol = {
         if (is_size_name(r)) {
@@ -180,7 +182,7 @@ r2size <- function(r, scope) {
           stop("could not resolve size: ", as.character(r))
         }
         # !identical(): @mode can be NULL (deferred-mode binding)
-        if (!identical(var@mode, "integer") || !passes_as_scalar(var)) {
+        if (!var@mode %in% c("integer", "double") || !passes_as_scalar(var)) {
           warning("size is not an integer:", as.character(r))
         }
         if (var@is_arg && !var@modified) {

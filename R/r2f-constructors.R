@@ -63,10 +63,19 @@ materialize_via_hoist <- function(
   Fortran(tmp@name, tmp)
 }
 
-guard_constructor_dims <- function(dims, constructor, hoist, scope) {
+guard_constructor_dims <- function(
+  dims,
+  constructor,
+  hoist,
+  scope,
+  dbl = NULL
+) {
   stopifnot(is.list(dims), is_string(constructor))
+  dbl <- dbl %||% rep(FALSE, length(dims))
+  stopifnot(length(dbl) == length(dims))
   message <- paste0(constructor, "() dimensions must be non-negative")
-  for (dim in dims) {
+  for (i in seq_along(dims)) {
+    dim <- dims[[i]]
     if (is_scalar_integerish(dim)) {
       if (dim < 0) {
         stop(message, call. = FALSE)
@@ -84,9 +93,29 @@ guard_constructor_dims <- function(dims, constructor, hoist, scope) {
     }
     dim_f <- dims2f(list(dim), scope)
     if (nzchar(dim_f) && !grepl(":", dim_f, fixed = TRUE)) {
+      dim_vars <- c(
+        lapply(all.vars(dim), get0, envir = scope),
+        list(scope_var_by_fortran_name(scope, dim_f))
+      )
+      is_double <- dbl[[i]] ||
+        any(map_lgl(
+          dim_vars,
+          \(var) inherits(var, Variable) && identical(var@mode, "double")
+        ))
+      condition <- if (is_double) {
+        glue(
+          "{dim_f} < 0 .or. {dim_f} > 2147483647 .or. {dim_f} /= {dim_f}"
+        )
+      } else {
+        glue("{dim_f} < 0")
+      }
       emit_quickr_error_if(
-        glue("{dim_f} < 0"),
-        message,
+        condition,
+        if (is_double) {
+          glue("{message}, finite, and within integer range")
+        } else {
+          message
+        },
         hoist,
         scope
       )
@@ -633,7 +662,13 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       !passes_as_scalar(out@value) &&
       !parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")
   ) {
-    return(materialize_via_hoist(out, out@value@mode, target_dims, hoist))
+    return(materialize_via_hoist(
+      out,
+      out@value@mode,
+      target_dims,
+      hoist,
+      allocate_at_point = TRUE
+    ))
   }
   out
 }

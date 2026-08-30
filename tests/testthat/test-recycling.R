@@ -699,50 +699,41 @@ test_that("matrix(scalar, m, n) materializes where an array is required", {
   expect_quick_identical(transposed, list())
 })
 
-test_that("matrix() rejects negative extents before materializing", {
-  static <- function() {
-    sum(matrix(1, -1L, 2L) + 1)
-  }
-  dynamic <- function(n, k) {
-    declare(type(n = integer(1)), type(k = integer(1)))
-    sum(matrix(1, n, k) + 1)
-  }
-
-  expect_error(
-    quick(static),
-    "matrix() dimensions must be non-negative",
-    fixed = TRUE
+test_that("constructors reject invalid extents before materializing", {
+  static <- list(
+    matrix = function() {
+      sum(matrix(1, -1L, 2L) + 1)
+    },
+    array = function() {
+      sum(array(0, dim = c(-1L, 2L)))
+    }
   )
-  qdynamic <- quick(dynamic)
-  expect_error(
-    qdynamic(-1L, 2L),
-    "matrix() dimensions must be non-negative",
-    fixed = TRUE
+  dynamic <- list(
+    matrix = function(n, k) {
+      declare(type(n = double(1)), type(k = double(1)))
+      sum(matrix(1, n, k) + 1)
+    },
+    array = function(n, k) {
+      declare(type(n = double(1)), type(k = double(1)))
+      sum(array(0, dim = c(n, k)))
+    }
   )
-  expect_error(
-    qdynamic(2L, -1L),
-    "matrix() dimensions must be non-negative",
-    fixed = TRUE
-  )
-  expect_quick_identical(dynamic, list(2L, 3L))
-})
+  bad_dims <- list(c(-1, 2), c(2, -1), c(Inf, 2), c(2147483648, 2))
 
-test_that("array() rejects negative extents before materializing", {
-  static <- function() {
-    sum(array(0, dim = c(-1L, 2L)))
+  for (constructor in names(dynamic)) {
+    message <- paste0(constructor, "() dimensions must be non-negative")
+    expect_error(quick(static[[constructor]]), message, fixed = TRUE)
+    qdynamic <- quick(dynamic[[constructor]])
+    for (dims in bad_dims) {
+      expected <- if (any(!is.finite(dims) | dims > .Machine$integer.max)) {
+        "finite"
+      } else {
+        message
+      }
+      expect_error(do.call(qdynamic, as.list(dims)), expected, fixed = TRUE)
+    }
+    expect_identical(qdynamic(2, 3), dynamic[[constructor]](2, 3))
   }
-  dynamic <- function(n, k) {
-    declare(type(n = integer(1)), type(k = integer(1)))
-    sum(array(0, dim = c(n, k)))
-  }
-
-  message <- "array() dimensions must be non-negative"
-  expect_error(quick(static), message, fixed = TRUE)
-
-  qdynamic <- quick(dynamic)
-  expect_error(qdynamic(-1L, 2L), message, fixed = TRUE)
-  expect_error(qdynamic(2L, -1L), message, fixed = TRUE)
-  expect_quick_identical(dynamic, list(2L, 3L))
 })
 
 test_that("matrix() materializes direct non-scalar fill constructors", {
