@@ -142,3 +142,20 @@ test_that("impure runif() bounds are evaluated exactly once", {
   r_next <- runif(1L)
   expect_identical(q_next, r_next)
 })
+
+test_that("runif snapshots its minimum before evaluating its maximum", {
+  fn <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 10
+      5
+    }
+    runif(1L, min = x, max = bump())
+  }
+  qfn <- quick(fn)
+
+  expect_identical(
+    set_seed_and_call(fn, 1),
+    set_seed_and_call(qfn, 1)
+  )
+})
