@@ -166,11 +166,18 @@ test_that("seq_len refuses negative bounds", {
     }
     out
   }
+  value <- function(n) {
+    declare(type(n = integer(1)))
+    sum(seq_len(n))
+  }
   message <- "seq_len() bound must be non-negative"
   expect_error(quick(static), message, fixed = TRUE)
   qdynamic <- quick(dynamic)
   expect_identical(qdynamic(3L), dynamic(3L))
   expect_error(qdynamic(-1L), message, fixed = TRUE)
+  qvalue <- quick(value)
+  expect_identical(qvalue(3L), value(3L))
+  expect_error(qvalue(-1L), message, fixed = TRUE)
 })
 test_that("parallel loops refuse RNG calls", {
   parallel_for <- function(n, out) {

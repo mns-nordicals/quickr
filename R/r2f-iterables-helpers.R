@@ -288,7 +288,7 @@ seq_like_r2f <- function(
     context <- "value"
   }
 
-  if (kind == "seq_len" && context == "for") {
+  if (kind == "seq_len") {
     if (!size_expr_is_known_nonnegative(len_expr)) {
       hoist <- list(...)$hoist
       to <- hoist_unless_name(to, hoist)
