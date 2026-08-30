@@ -281,6 +281,12 @@ test_that("short-circuited operators defer arity errors", {
 })
 
 test_that("nested short-circuits own their right-operand diagnostics", {
+  outer_skipped_and <- function() {
+    FALSE && (TRUE && abs())
+  }
+  outer_skipped_or <- function() {
+    TRUE || (FALSE || abs())
+  }
   skipped <- function() {
     TRUE && (FALSE && abs())
   }
@@ -288,6 +294,8 @@ test_that("nested short-circuits own their right-operand diagnostics", {
     TRUE && (TRUE && abs())
   }
 
+  expect_quick_identical(outer_skipped_and, list())
+  expect_quick_identical(outer_skipped_or, list())
   expect_quick_identical(skipped, list())
   qfn <- quick(reached)
   expect_error(qfn(), "abs")
