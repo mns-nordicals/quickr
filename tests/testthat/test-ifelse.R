@@ -259,71 +259,44 @@ test_that("ifelse defers unary mode errors in unselected branches", {
   expect_error(quick(reached_no)(), "expects a logical value", fixed = TRUE)
 })
 
-test_that("ifelse defers unresolved names in unselected branches", {
-  skipped_yes <- function() {
-    ifelse(FALSE, missing_name, 1)
+test_that("ifelse defers unresolved names throughout unselected branches", {
+  expressions <- list(
+    quote(ifelse(FALSE, missing_name, 1)),
+    quote(ifelse(TRUE, 1, missing_name)),
+    quote(ifelse(FALSE, missing_name + 1, 1)),
+    quote(ifelse(TRUE, 1, (missing_name))),
+    quote(ifelse(TRUE, missing_name, 1)),
+    quote(ifelse(FALSE, 1, missing_name)),
+    quote(ifelse(TRUE, missing_name + 1, 1)),
+    quote(ifelse(FALSE, 1, (missing_name)))
+  )
+  for (i in seq_along(expressions)) {
+    fn <- function() NULL
+    body(fn) <- call("{", expressions[[i]])
+    if (i <= 4L) {
+      expect_quick_identical(fn, list())
+    } else {
+      expect_error(quick(fn)(), "missing_name", fixed = TRUE)
+    }
   }
-  skipped_no <- function() {
-    ifelse(TRUE, 1, missing_name)
-  }
-  reached_yes <- function() {
-    ifelse(TRUE, missing_name, 1)
-  }
-  reached_no <- function() {
-    ifelse(FALSE, 1, missing_name)
-  }
-
-  expect_quick_identical(skipped_yes, list())
-  expect_quick_identical(skipped_no, list())
-  expect_error(quick(reached_yes)(), "missing_name", fixed = TRUE)
-  expect_error(quick(reached_no)(), "missing_name", fixed = TRUE)
-})
-
-test_that("ifelse defers unresolved names inside branch expressions", {
-  skipped_yes <- function() {
-    ifelse(FALSE, missing_name + 1, 1)
-  }
-  skipped_no <- function() {
-    ifelse(TRUE, 1, (missing_name))
-  }
-  reached_yes <- function() {
-    ifelse(TRUE, missing_name + 1, 1)
-  }
-  reached_no <- function() {
-    ifelse(FALSE, 1, (missing_name))
-  }
-
-  expect_quick_identical(skipped_yes, list())
-  expect_quick_identical(skipped_no, list())
-  expect_error(quick(reached_yes)(), "missing_name", fixed = TRUE)
-  expect_error(quick(reached_no)(), "missing_name", fixed = TRUE)
 })
 test_that("valueless ifelse branches are deferred until selected", {
-  skipped_yes <- function() {
-    ifelse(FALSE, NULL, 1L)
-  }
-  reached_yes <- function() {
-    ifelse(TRUE, NULL, 1L)
-  }
-  skipped_no <- function() {
-    ifelse(TRUE, 1L, NULL)
-  }
-  reached_no <- function() {
-    ifelse(FALSE, 1L, NULL)
+  expressions <- list(
+    quote(ifelse(FALSE, NULL, 1L)),
+    quote(ifelse(TRUE, 1L, NULL)),
+    quote(ifelse(TRUE, NULL, 1L)),
+    quote(ifelse(FALSE, 1L, NULL))
+  )
+  for (i in seq_along(expressions)) {
+    fn <- function() NULL
+    body(fn) <- call("{", expressions[[i]])
+    if (i <= 2L) {
+      expect_quick_identical(fn, list())
+    } else {
+      expect_error(quick(fn)(), "branches must produce a value")
+    }
   }
 
-  expect_quick_identical(skipped_yes, list())
-  expect_error(
-    quick(reached_yes)(),
-    "ifelse() branches must produce a value",
-    fixed = TRUE
-  )
-  expect_quick_identical(skipped_no, list())
-  expect_error(
-    quick(reached_no)(),
-    "ifelse() branches must produce a value",
-    fixed = TRUE
-  )
 })
 
 test_that("ifelse defers constructor diagnostics until branch selection", {

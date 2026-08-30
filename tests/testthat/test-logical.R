@@ -219,47 +219,26 @@ test_that("short-circuited nested operands defer length errors", {
   expect_error(quick(reached_and)(), "requires length-1 operands")
 })
 
-test_that("short-circuited unresolved names are deferred", {
-  skipped_and <- function() {
-    FALSE && missing_name
+test_that("short-circuited unresolved names remain deferred", {
+  expressions <- list(
+    quote(FALSE && missing_name),
+    quote(TRUE || missing_name),
+    quote(FALSE && (missing_name + 1 > 0)),
+    quote(TRUE || ((missing_name) + 1 > 0)),
+    quote(TRUE && missing_name),
+    quote(FALSE || missing_name),
+    quote(TRUE && (missing_name + 1 > 0)),
+    quote(FALSE || ((missing_name) + 1 > 0))
+  )
+  for (i in seq_along(expressions)) {
+    fn <- function() NULL
+    body(fn) <- call("{", expressions[[i]])
+    if (i <= 4L) {
+      expect_quick_identical(fn, list())
+    } else {
+      expect_error(quick(fn)(), "missing_name", fixed = TRUE)
+    }
   }
-  skipped_or <- function() {
-    TRUE || missing_name
-  }
-  reached_and <- function() {
-    TRUE && missing_name
-  }
-  reached_or <- function() {
-    FALSE || missing_name
-  }
-
-  expect_quick_identical(skipped_and, list())
-  expect_quick_identical(skipped_or, list())
-
-  qand <- quick(reached_and)
-  expect_error(qand(), "missing_name", fixed = TRUE)
-  qor <- quick(reached_or)
-  expect_error(qor(), "missing_name", fixed = TRUE)
-})
-
-test_that("nested unresolved names remain inside short-circuit branches", {
-  skipped_and <- function() {
-    FALSE && (missing_name + 1 > 0)
-  }
-  skipped_or <- function() {
-    TRUE || ((missing_name) + 1 > 0)
-  }
-  reached_and <- function() {
-    TRUE && (missing_name + 1 > 0)
-  }
-  reached_or <- function() {
-    FALSE || ((missing_name) + 1 > 0)
-  }
-
-  expect_quick_identical(skipped_and, list())
-  expect_quick_identical(skipped_or, list())
-  expect_error(quick(reached_and)(), "missing_name", fixed = TRUE)
-  expect_error(quick(reached_or)(), "missing_name", fixed = TRUE)
 })
 test_that("short-circuited division is not evaluated eagerly", {
   skipped_and <- function(x) {
