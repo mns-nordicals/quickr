@@ -47,10 +47,10 @@ r2f_handlers[["repeat"]] <- function(args, scope, ..., hoist = NULL) {
   body <- r2f(args[[1]], scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
   checks <- quickr_error_serial_loop_checks(scope)
+  loop_stmts <- str_flatten_lines(checks$before, body)
   Fortran(glue(
     "do
-    {indent(checks$before)}
-    {indent(body)}
+    {indent(loop_stmts)}
     end do
     {checks$after}
     "
@@ -86,7 +86,7 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
   body <- r2f(args[[2]], scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
   checks <- quickr_error_serial_loop_checks(scope)
-  if (cond_hoist$is_empty() && !nzchar(checks$before)) {
+  if (cond_hoist$is_empty() && !length(checks$before)) {
     # nothing hoisted: keep the plain do-while form
     return(Fortran(glue(
       "do while ({cond})
@@ -97,11 +97,10 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
     )))
   }
   cond_code <- cond_hoist$render(glue("if (.not. ({cond})) exit"))
+  loop_stmts <- str_flatten_lines(checks$before, cond_code, body)
   Fortran(glue(
     "do
-    {indent(checks$before)}
-    {indent(cond_code)}
-    {indent(body)}
+    {indent(loop_stmts)}
     end do
     {checks$after}
     "

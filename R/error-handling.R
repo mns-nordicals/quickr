@@ -164,7 +164,7 @@ quickr_error_return_if_set <- function(
 
 quickr_error_serial_loop_checks <- function(scope, parallel = NULL) {
   if (!scope_in_openmp(scope) || !is.null(parallel)) {
-    return(list(before = "", after = ""))
+    return(list(before = character(), after = ""))
   }
   list(
     before = glue("if ({quickr_error_msg_name()}(1) /= c_null_char) exit"),
