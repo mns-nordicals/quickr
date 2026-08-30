@@ -622,7 +622,8 @@ dims2f_needs_final_size_cast <- function(e) {
 }
 
 
-dims2f <- function(dims, scope) {
+dims2f <- function(dims, scope, collapse = TRUE) {
+  stopifnot(is_bool(collapse))
   syms <- unique(unlist(lapply(dims, \(d) if (is.language(d)) all.vars(d))))
   vars <- lapply(syms, function(sym) {
     scope_fortran_symbol(as.symbol(sym), scope)
@@ -652,6 +653,9 @@ dims2f <- function(dims, scope) {
     }
     d
   })
+  if (!collapse) {
+    return(dims)
+  }
   if (!length(dims) || identical(dims, "1")) {
     ""
   } else {

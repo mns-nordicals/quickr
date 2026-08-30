@@ -142,6 +142,35 @@ test_that("reused BLAS locals are allocated on every reachable path", {
   expect_equal(qfn(a, b, TRUE), fn(a, b, TRUE))
 })
 
+test_that("reusable BLAS locals verify their current extents", {
+  fn <- function(a, n) {
+    declare(type(a = double(n, n)), type(n = integer(1)))
+    total <- 0
+    for (i in seq_len(n)) {
+      z <- a[1:i, 1:i]
+      out <- z %*% z
+      total <- total + sum(out)
+    }
+    total
+  }
+
+  code <- as.character(r2f(fn))
+  expect_match(
+    code,
+    "size(out, 1, kind=c_ptrdiff_t)",
+    fixed = TRUE
+  )
+  expect_match(
+    code,
+    "size(out, 2, kind=c_ptrdiff_t)",
+    fixed = TRUE
+  )
+  expect_match(code, "deallocate(out)", fixed = TRUE)
+
+  a <- matrix(as.double(1:16), 4, 4)
+  expect_quick_equal(fn, list(a, 4L))
+})
+
 test_that("reused BLAS locals retain their earlier allocation", {
   gemm <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, k)))

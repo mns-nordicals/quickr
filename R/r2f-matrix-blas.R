@@ -483,8 +483,22 @@ allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
       unique(c(point_allocated, dest@name))
     )
   }
+  dims <- dims2f(dest@dims, scope, collapse = FALSE)
+  extent_checks <- vapply(
+    seq_along(dims),
+    function(axis) {
+      glue(
+        "if (allocated({dest@name})) then\n",
+        "  if (size({dest@name}, {axis}, kind=c_ptrdiff_t) /= ",
+        "int({dims[[axis]]}, kind=c_ptrdiff_t)) deallocate({dest@name})\n",
+        "end if"
+      )
+    },
+    character(1L)
+  )
+  hoist$emit(str_flatten_lines(extent_checks))
   hoist$emit(glue(
-    "if (.not. allocated({dest@name})) allocate({dest@name}({dims2f(dest@dims, scope)}))"
+    "if (.not. allocated({dest@name})) allocate({dest@name}({str_flatten_commas(dims)}))"
   ))
   invisible(dest)
 }
