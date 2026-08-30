@@ -21,12 +21,14 @@ test_that("non-smoke test files skip on CRAN", {
     "test-ifelse.R",
     "test-logical.R",
     "test-loops.R",
+    "test-matrix-inference.R",
     "test-matrix-lapack.R",
     "test-matrix-mul.R",
     "test-reduction-scalars.R",
     "test-recycling.R",
     "test-r2f-registry.R",
-    "test-refusal-diagnostics.R"
+    "test-refusal-diagnostics.R",
+    "test-subset-reduction.R"
   )
   test_files <- list.files(
     test_path(),
