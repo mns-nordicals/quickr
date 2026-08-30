@@ -891,6 +891,12 @@ register_r2f_handler(
       passes_as_scalar(x@value) &&
       x@value@mode %in% c("integer", "double")
     if (numeric_size) {
+      if (grepl("unif_rand()", as.character(x), fixed = TRUE)) {
+        stop(
+          "diag() identity size cannot depend on an effectful expression",
+          call. = FALSE
+        )
+      }
       x_var <- if (is.symbol(x_arg)) {
         get0(as.character(x_arg), scope, inherits = TRUE)
       }

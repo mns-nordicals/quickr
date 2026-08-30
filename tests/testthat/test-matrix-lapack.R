@@ -334,6 +334,15 @@ test_that("diag treats declared numeric scalars as identity sizes", {
     diag(n)
   }
   expect_quick_identical(local_double_size, list())
+
+  computed_double_size <- function() {
+    diag(runif(1L, 1, 3))
+  }
+  expect_error(
+    quick(computed_double_size),
+    "identity size cannot depend on an effectful expression",
+    fixed = TRUE
+  )
 })
 
 test_that("diag refuses negative identity sizes", {
