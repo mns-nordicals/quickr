@@ -270,7 +270,10 @@ is_pure_scalar_condition <- function(e, scope) {
     )
   }
   if (is.atomic(e) && length(e) == 1L) {
-    return(typeof(e) %in% c("logical", "integer", "double", "complex"))
+    return(
+      !anyNA(e) &&
+        typeof(e) %in% c("logical", "integer", "double", "complex")
+    )
   }
   if (!is.call(e) || !is.symbol(e[[1L]])) {
     return(FALSE)
@@ -587,6 +590,21 @@ lower_short_circuit_operator <- function(
   defer_andor_length_error = FALSE
 ) {
   stopifnot(length(args) == 2L, op %in% c("&&", "||"))
+  has_assignment <- vapply(
+    args,
+    function(arg) {
+      any(c("<-", "=") %in% all.names(arg, functions = TRUE))
+    },
+    logical(1L)
+  )
+  if (any(has_assignment)) {
+    stop(
+      "`",
+      op,
+      "` does not support assignment expressions; assign on a separate line",
+      call. = FALSE
+    )
+  }
 
   left <- r2f(
     args[[1L]],

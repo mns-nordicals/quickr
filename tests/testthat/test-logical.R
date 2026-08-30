@@ -494,6 +494,39 @@ test_that("short-circuited operands defer matrix diagnostics", {
   expect_error(quick(reached_braced)(), "floor", fixed = TRUE)
 })
 
+test_that("short-circuited missing literals stay in the right branch", {
+  skipped_and <- function() {
+    FALSE && NA
+  }
+  skipped_or <- function() {
+    TRUE || NA
+  }
+  reached_and <- function() {
+    TRUE && NA
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_quick_identical(skipped_or, list())
+  expect_error(
+    quick(reached_and)(),
+    "NA literals are not supported",
+    fixed = TRUE
+  )
+})
+
+test_that("short-circuit operands reject assignment expressions", {
+  leaked <- function() {
+    out <- FALSE && (x <- TRUE)
+    x
+  }
+
+  expect_error(
+    quick(leaked),
+    "does not support assignment expressions",
+    fixed = TRUE
+  )
+})
+
 test_that("short-circuited operators defer arity errors", {
   bad_calls <- lapply(
     c(
