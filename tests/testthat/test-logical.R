@@ -174,13 +174,18 @@ test_that("short-circuited right operands defer length errors", {
   expect_error(quick(reached_or)(), "requires length-1 operands")
 })
 
-test_that("short-circuit right operands still receive static validation", {
+test_that("short-circuit right operands defer static validation", {
   skipped <- function() {
     TRUE || (logical(2) & logical(3))
   }
+  reached <- function() {
+    FALSE || (logical(2) & logical(3))
+  }
 
+  expect_quick_identical(skipped, list())
+  qfn <- quick(reached)
   expect_error(
-    quick(skipped),
+    qfn(),
     "elementwise vector operations require equal lengths"
   )
 })
