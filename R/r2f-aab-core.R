@@ -179,8 +179,12 @@ materialize_via_hoist <- function(
 # actual arguments before the call, so repeating an expression duplicates
 # its side effects (e.g. RNG state via runif()) -- which names and literals
 # don't have.
-hoist_unless_name <- function(x, hoist) {
-  stopifnot(inherits(x, Fortran), inherits(x@value, Variable))
+hoist_unless_name <- function(x, hoist, allocate_at_point = FALSE) {
+  stopifnot(
+    inherits(x, Fortran),
+    inherits(x@value, Variable),
+    is_bool(allocate_at_point)
+  )
   code <- trimws(as.character(x))
   if (!is.null(x@value@name) && identical(code, x@value@name)) {
     return(x)
@@ -197,7 +201,8 @@ hoist_unless_name <- function(x, hoist) {
     dims = x@value@dims,
     hoist = hoist,
     logical_storage = logical_as_int(x@value) &&
-      !isTRUE(x@logical_booleanized)
+      !isTRUE(x@logical_booleanized),
+    allocate_at_point = allocate_at_point
   )
 }
 
