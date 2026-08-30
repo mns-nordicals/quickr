@@ -279,6 +279,25 @@ test_that("multi-argument any/all evaluate arguments before later guards", {
     )
     expect_identical(.Random.seed, expected_seed)
   }
+  any_mutation <- function() {
+    x <- 1L
+    flip <- function() {
+      x <<- 0L
+      FALSE
+    }
+    any(x > 0L, ((flip))())
+  }
+  all_mutation <- function() {
+    x <- 0L
+    flip <- function() {
+      x <<- 1L
+      TRUE
+    }
+    all(x == 0L, ((flip))())
+  }
+  for (fn in list(any_mutation, all_mutation)) {
+    expect_quick_identical(fn, list())
+  }
 })
 
 test_that("1x1 subsetting keeps dims and C bridge builds", {

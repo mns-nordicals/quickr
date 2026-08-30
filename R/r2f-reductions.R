@@ -264,7 +264,8 @@ register_r2f_handler(
   function(
     args,
     scope,
-    ...
+    ...,
+    hoist = NULL
   ) {
     # For now, we only support the most common `any(x)` / `all(x)` shape.
     # We intentionally do not support named arguments like `na.rm`.
@@ -290,9 +291,16 @@ register_r2f_handler(
       return(Fortran(lit, Variable("logical")))
     }
 
-    reduce_arg <- function(arg) {
+    reduce_arg <- function(arg, arg_hoist = hoist) {
       mask_hoist <- create_mask_hoist()
-      x <- r2f(arg, scope, ..., hoist_mask = mask_hoist$try_set)
+      dots <- list(...)
+      x <- r2f(
+        arg,
+        scope,
+        calls = dots$calls,
+        hoist = arg_hoist,
+        hoist_mask = mask_hoist$try_set
+      )
       if (mask_hoist$has_conflict()) {
         stop(
           "reduction expressions only support a single logical mask",
@@ -403,7 +411,23 @@ register_r2f_handler(
       return(reduce_arg(args[[1L]]))
     }
 
-    args <- lapply(args, reduce_arg)
+    source_args <- args
+    args <- Map(
+      function(arg, index) {
+        arg_hoist <- capture_hoist(hoist)
+        out <- reduce_arg(arg, arg_hoist)
+        out <- snapshot_operand_before_later_effects(
+          out,
+          arg,
+          tail(source_args, -index),
+          scope,
+          arg_hoist
+        )
+        finish_captured_operand(out, arg_hoist, hoist)
+      },
+      source_args,
+      seq_along(source_args)
+    )
     op <- if (identical(call_name, "any")) ".or." else ".and."
     Fortran(glue("({str_flatten(args, glue(' {op} '))})"), Variable("logical"))
   }
