@@ -42,7 +42,7 @@ register_r2f_handler(
       stop(empty_extrema_message, call. = FALSE)
     }
 
-    reduce_arg <- function(arg, allow_empty = FALSE) {
+    reduce_arg <- function(arg, index = length(args), allow_empty = FALSE) {
       arg_hoist <- capture_hoist(hoist)
       mask_hoist <- create_mask_hoist()
       # Nested reductions (e.g., min(max(...), ...)) can thread an existing
@@ -115,6 +115,13 @@ register_r2f_handler(
         )
         Fortran(s, Variable(x@value@mode))
       }
+      out <- snapshot_operand_before_later_effects(
+        out,
+        arg,
+        tail(args, -index),
+        scope,
+        arg_hoist
+      )
 
       if (allow_empty) {
         return(list(value = out, nonempty = nonempty, hoist = arg_hoist))
@@ -125,7 +132,12 @@ register_r2f_handler(
     if (length(args) == 1) {
       reduce_arg(args[[1]])
     } else if (call_name %in% c("min", "max")) {
-      reduced <- lapply(args, reduce_arg, allow_empty = TRUE)
+      reduced <- Map(
+        reduce_arg,
+        args,
+        seq_along(args),
+        MoreArgs = list(allow_empty = TRUE)
+      )
       if (
         all(vapply(
           reduced,
@@ -213,7 +225,7 @@ register_r2f_handler(
       )
       Fortran(result@name, result)
     } else {
-      args <- lapply(args, reduce_arg)
+      args <- Map(reduce_arg, args, seq_along(args))
       # Fortran's max/min require uniform argument types; cast every operand
       # whose mode differs from the join. The + / * spellings for sum/prod
       # don't strictly need it, but one code path beats two. Logical

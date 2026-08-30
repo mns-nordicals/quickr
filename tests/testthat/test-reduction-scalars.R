@@ -72,6 +72,16 @@ test_that("multi-argument reductions preserve evaluation order", {
 
   expect_identical(actual, expected)
   expect_identical(actual_seed, expected_seed)
+
+  mutating <- function(x) {
+    declare(type(x = double(1)))
+    bump <- function() {
+      x <<- x + 1
+      0
+    }
+    sum(x, bump())
+  }
+  expect_quick_identical(mutating, list(1))
 })
 
 test_that("empty extrema are rejected explicitly", {
