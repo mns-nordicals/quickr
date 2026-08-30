@@ -32,7 +32,9 @@ lower_subscript_args <- function(idx_args, base_dims, scope, ..., hoist) {
     if (is_missing(idx)) {
       Fortran(":", Variable("integer", base_dims[[i]]))
     } else {
-      cast_subscript_to_integer(r2f(idx, scope, ..., hoist = hoist))
+      cast_subscript_to_integer(
+        lower_r2f_operand_in_order(idx, scope, ..., hoist = hoist)
+      )
     }
   })
 }
@@ -118,7 +120,7 @@ r2f_handlers[["["]] <- function(
   #   double subscripts coerce to integer).
 
   var <- args[[1]]
-  var <- r2f(var, scope, ..., hoist = hoist)
+  var <- lower_r2f_operand_in_order(var, scope, ..., hoist = hoist)
 
   idx_args <- args[-1]
   drop <- idx_args$drop %||% TRUE
