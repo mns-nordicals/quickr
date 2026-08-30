@@ -94,3 +94,20 @@ test_that("generated temps do not shadow user variables", {
   expect_identical(actual, expected)
   expect_identical(actual_next, expected_next)
 })
+
+test_that("later user variables do not shadow generated temps", {
+  root_fn <- function(n) {
+    declare(type(n = integer(1)))
+    z <- seq_len(n)
+    Tmp1. <- 2L
+    sum(z) + Tmp1.
+  }
+  block_fn <- function(x) {
+    declare(type(x = double(2)))
+    Btmp1. <- x + numeric(2)
+    sum(Btmp1.)
+  }
+
+  expect_quick_identical(root_fn, list(2L))
+  expect_quick_identical(block_fn, list(c(1, 2)))
+})
