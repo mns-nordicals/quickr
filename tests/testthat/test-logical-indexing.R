@@ -223,6 +223,13 @@ test_that("external logical masks work in x[pred] (pack / masked reduction)", {
   x <- matrix(runif(12), 3, 4)
   pred <- matrix(sample(c(TRUE, FALSE), 12, TRUE), 3, 4)
   expect_quick_identical(fn, list(x, pred))
+  dynamic <- function(x, pred) {
+    declare(type(x = double(n)), type(pred = logical(m)))
+    length(x[pred])
+  }
+  qdynamic <- quick(dynamic)
+  expect_identical(qdynamic(as.double(1:4), c(TRUE, FALSE, TRUE, FALSE)), 2L)
+  expect_error(qdynamic(as.double(1:4), c(TRUE, FALSE)), "logical mask extent")
 })
 
 test_that("logical declared inputs reject integer 0/1 arrays (strict typing)", {

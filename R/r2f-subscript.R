@@ -77,6 +77,20 @@ r2f_handlers[["["]] <- function(
     if (hoist_mask(mask)) {
       return(var)
     }
+    for (axis in seq_len(mask@value@rank)) {
+      guard_conformable_dims(
+        dim_or_one(var, axis),
+        dim_or_one(mask, axis),
+        "logical mask extents must match indexed value",
+        hoist,
+        scope,
+        left = var,
+        right = mask,
+        left_axis = axis,
+        right_axis = axis,
+        checker = check_equal_dims
+      )
+    }
     return(Fortran(
       glue("pack({var}, {mask})"),
       Variable(var@value@mode, dims = NA)
