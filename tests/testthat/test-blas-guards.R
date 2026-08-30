@@ -463,6 +463,11 @@ test_that("square guards precede symbolic inverse and Cholesky allocations", {
       case$message,
       fixed = TRUE
     )
+    expect_error(
+      qfn(matrix(double(), 0, 0)),
+      "zero-sized outputs are not supported",
+      fixed = TRUE
+    )
   }
 })
 
