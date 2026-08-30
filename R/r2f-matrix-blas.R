@@ -1382,7 +1382,9 @@ diag_extract <- function(x, scope, hoist, dest = NULL, context = "diag") {
     expected_dims = list(diag_len),
     context = context,
     mode = x@value@mode,
-    logical_is_c_int = logical_is_c_int
+    logical_is_c_int = logical_is_c_int,
+    scope = scope,
+    allocate_at_point = TRUE
   )
 
   idx_i <- hoist$declare_tmp(mode = "integer", dims = NULL)
