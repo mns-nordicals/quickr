@@ -7,15 +7,26 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   scope_mark_uses_rng(scope)
   mark_openmp_scope_uses_rng(scope)
 
+  min <- args$min %||% 0
+  max <- args$max %||% 1
   dims <- r2dims(args$n, scope)
   n <- dims[[1L]]
+  count <- n
   if (is_scalar_integerish(n) && as.integer(n) < 0L) {
     stop("runif() sample count must be non-negative", call. = FALSE)
   }
+  if (!is_scalar_integerish(n)) {
+    count <- lower_r2f_operand_in_order(
+      args$n,
+      scope,
+      ...,
+      hoist = hoist,
+      later_args = list(min, max)
+    )
+    count <- trimws(as.character(count))
+  }
   var <- Variable("double", dims)
 
-  min <- args$min %||% 0
-  max <- args$max %||% 1
   default_min <- identical(min, 0) || identical(min, 0L)
   default_max <- identical(max, 1) || identical(max, 1L)
 
@@ -49,7 +60,7 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   # Emit this guard after bound hoists so effectful arguments consume their
   # RNG draws in the same order.
   if (!is_wholenumber(n) && !is_scalar_na(n) && !is_size_name(n)) {
-    n_f <- dims2f(list(n), scope)
+    n_f <- dims2f(list(count), scope)
     if (nzchar(n_f) && !grepl(":", n_f, fixed = TRUE)) {
       emit_quickr_error_if(
         glue("{n_f} < 0"),
@@ -64,7 +75,7 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
     fortran <- get1rand
   } else {
     tmp_i <- scope_unique_var(scope, "integer") ## would be better as uint64...
-    fortran <- glue("[({get1rand}, {tmp_i}=1, {dims[[1L]]})]")
+    fortran <- glue("[({get1rand}, {tmp_i}=1, {count})]")
   }
 
   Fortran(fortran, var)
