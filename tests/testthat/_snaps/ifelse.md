@@ -38,26 +38,9 @@
           where (tmp1_) tmp2_ = real(1_c_int, kind=c_double)
         end if
         if (any(.not. tmp1_)) then
-          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
-      call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
-      & supported")
-            return
-          end if
           where (.not. tmp1_) tmp2_ = a
         end if
         out_ = tmp2_
-      
-        contains
-          subroutine quickr_set_error_msg(msg)
-            character(len=*), intent(in) :: msg
-            integer :: i
-            integer :: n
-            if (quickr_err_msg(1) == c_null_char) then
-              n = min(len(msg), 256 - 1)
-              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
-              quickr_err_msg(n + 1) = c_null_char
-            end if
-          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -153,7 +136,7 @@
       
         tmp1_ = (c/=0)
         if (any(tmp1_)) then
-          if (size(a, 1, kind=c_ptrdiff_t) == 0 .or. size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
+          if (size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
             return
@@ -161,7 +144,7 @@
           where (tmp1_) tmp2_ = a
         end if
         if (any(.not. tmp1_)) then
-          if (size(b, 1, kind=c_ptrdiff_t) == 0 .or. size(b, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
+          if (size(b, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
             return
@@ -252,3 +235,4 @@
         UNPROTECT(1);
         return out_;
       }
+
