@@ -183,6 +183,22 @@ test_that("nested elementwise operands preserve left-to-right evaluation", {
   expect_identical(quick(conformable)(), expected)
 })
 
+test_that("subscript operands preserve left-to-right evaluation", {
+  fn <- function(x) {
+    declare(type(x = double(2, 2)))
+    x[runif(1, 1, 3), runif(1, 1, 3) + 0]
+  }
+  qfn <- quick(fn)
+  x <- matrix(c(11, 21, 12, 22), 2, 2)
+
+  set.seed(106)
+  expected <- fn(x)
+  expected_next <- runif(1)
+  set.seed(106)
+  expect_identical(qfn(x), expected)
+  expect_identical(runif(1), expected_next)
+})
+
 test_that("matrix-matrix elementwise ops guard unknown dims per axis", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, j)))
