@@ -137,6 +137,23 @@ test_that("matrix ops infer destination sizes for assignments", {
   expect_quick_equal(chol2inv_infer, list(A = A_pd))
 })
 
+test_that("crossprod inference defers expression operands to lowering", {
+  cross_expr <- function(x, y) {
+    declare(type(x = double(3)), type(y = double(6)))
+    out <- crossprod(x, matrix(y, 3, 2))
+    out
+  }
+  tcross_expr <- function(x, y) {
+    declare(type(x = double(3)), type(y = double(6)))
+    out <- tcrossprod(x, matrix(y, 2, 3))
+    out
+  }
+
+  x <- c(1, 2, 3)
+  y <- as.double(1:6)
+  expect_quick_equal(cross_expr, list(x, y))
+  expect_quick_equal(tcross_expr, list(x, y))
+})
 test_that("matrix helpers report unsupported inputs", {
   matmul_bad_rank <- function(a, b) {
     declare(type(a = double(2, 2, 2)), type(b = double(2, 2)))
