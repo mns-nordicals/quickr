@@ -23,7 +23,10 @@ defuse_numeric_literals <- function(e) {
         all(map_lgl(e[-1L], is.atomic)) &&
         !zero_divisor
     ) {
-      e <- eval(e, baseenv())
+      folded <- tryCatch(eval(e, baseenv()), error = identity)
+      if (!inherits(folded, "error") && all(is.finite(folded))) {
+        e <- folded
+      }
     }
   }
   e
