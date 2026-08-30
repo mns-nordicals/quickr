@@ -656,11 +656,21 @@ test_that("matrix BLAS rejects known zero-sized outputs", {
     declare(type(x = double(0, 0)))
     crossprod(x)
   }
+  outer_left <- function(x, y) {
+    declare(type(x = double(0)), type(y = double(2)))
+    outer(x, y)
+  }
+  outer_right <- function(x, y) {
+    declare(type(x = double(2)), type(y = double(0)))
+    x %o% y
+  }
 
   expect_error(quick(matrix_matrix), "zero-sized outputs are not supported")
   expect_error(quick(matrix_vector), "zero-sized outputs are not supported")
   expect_error(quick(tcross_vec), "zero-sized outputs are not supported")
   expect_error(quick(cross_mat), "zero-sized outputs are not supported")
+  expect_error(quick(outer_left), "zero-sized outputs are not supported")
+  expect_error(quick(outer_right), "zero-sized outputs are not supported")
 })
 
 test_that("matrix BLAS guards unknown output extents at runtime", {
@@ -680,11 +690,16 @@ test_that("matrix BLAS guards unknown output extents at runtime", {
     declare(type(x = double(NA, 2)))
     tcrossprod(x)
   }
+  outer_fn <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    outer(x, y)
+  }
 
   q_matrix_matrix <- expect_no_warning(quick(matrix_matrix))
   q_matrix_vector <- expect_no_warning(quick(matrix_vector))
   q_cross_mat <- expect_no_warning(quick(cross_mat))
   q_tcross_mat <- expect_no_warning(quick(tcross_mat))
+  q_outer <- expect_no_warning(quick(outer_fn))
   message <- "zero-sized outputs are not supported"
 
   expect_error(
@@ -694,6 +709,9 @@ test_that("matrix BLAS guards unknown output extents at runtime", {
   expect_error(q_matrix_vector(matrix(double(), 0, 2), double(2)), message)
   expect_error(q_cross_mat(matrix(double(), 2, 0)), message)
   expect_error(q_tcross_mat(matrix(double(), 0, 2)), message)
+  expect_equal(q_outer(as.double(1:2), as.double(3:4)), outer(1:2, 3:4))
+  expect_error(q_outer(double(), as.double(1:2)), message)
+  expect_error(q_outer(as.double(1:2), double()), message)
 })
 
 test_that("outer products reject known zero-sized outputs", {
