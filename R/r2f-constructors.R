@@ -420,6 +420,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       stop("array(dim=) must be known", call. = FALSE)
     }
 
+    is_fill_constructor <- is_fill_constructor_call(args$data, scope)
     axis_terms <- vapply(
       target_dims,
       function(d) {
@@ -441,8 +442,6 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
     } else {
       paste0("(", paste0(axis_terms_ptrdiff, collapse = " * "), ")")
     }
-
-    is_fill_constructor <- is_fill_constructor_call(args$data, scope)
     if (is_fill_constructor) {
       source_len <- out@value@dims[[1L]]
       source_may_be_empty <- !is_wholenumber(source_len) || source_len == 0
@@ -452,8 +451,14 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
         if (!nzchar(source_len_f) || grepl(":", source_len_f, fixed = TRUE)) {
           stop("array() fill length must be known", call. = FALSE)
         }
+        target_nonempty <- paste0(
+          "(",
+          axis_terms,
+          ") > 0",
+          collapse = " .and. "
+        )
         emit_quickr_error_if(
-          glue("({source_len_f}) == 0 .and. ({n_expr_ptrdiff}) > 0"),
+          glue("({source_len_f}) == 0 .and. {target_nonempty}"),
           "array() with empty data would produce NA values, which are not supported",
           hoist,
           scope
