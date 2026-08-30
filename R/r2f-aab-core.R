@@ -67,14 +67,32 @@ new_hoist <- function(scope) {
     )
   }
 
-  allocate_tmp_at_point <- function(var, emit_at_point) {
+  tmp_allocation_line <- function(var) {
+    local_var <- if (is.null(block_scope)) {
+      NULL
+    } else {
+      scope_var_by_fortran_name(block_scope, var@name)
+    }
+    if (is.null(local_var)) {
+      return(character())
+    }
     if (!block_tmp_allocatable(var, block_scope)) {
-      return(var)
+      return(character())
+    }
+    if (var@name %in% point_allocated) {
+      return(character())
     }
     point_allocated <<- c(point_allocated, var@name)
-    emit_at_point(glue(
+    glue(
       "allocate({var@name}({dims2f(var@dims, block_scope)}))"
-    ))
+    )
+  }
+
+  allocate_tmp_at_point <- function(var, emit_at_point) {
+    line <- tmp_allocation_line(var)
+    if (length(line)) {
+      emit_at_point(line)
+    }
     var
   }
 
@@ -96,6 +114,14 @@ new_hoist <- function(scope) {
       str_flatten_lines(str_split_lines(captured, code))
     }
     capture_has_code <- function() length(captured) > 0L
+    capture_allocate_existing_tmp_at_point <- function(var) {
+      line <- tmp_allocation_line(var)
+      if (length(line)) {
+        first_use <- which(grepl(var@name, captured, fixed = TRUE))[[1L]]
+        captured <<- append(captured, line, after = first_use - 1L)
+      }
+      var
+    }
     capture_declare_tmp_at_point <- function(
       mode,
       dims,
@@ -114,6 +140,7 @@ new_hoist <- function(scope) {
         emit = capture_emit,
         declare_tmp = declare_tmp,
         declare_tmp_at_point = capture_declare_tmp_at_point,
+        allocate_tmp_at_point = capture_allocate_existing_tmp_at_point,
         render = capture_render,
         has_code = capture_has_code,
         mark_runtime_guard = capture_mark_runtime_guard,
@@ -183,6 +210,9 @@ hoist_unless_name <- function(x, hoist, allocate_at_point = FALSE) {
   )
   code <- trimws(as.character(x))
   if (!is.null(x@value@name) && identical(code, x@value@name)) {
+    if (allocate_at_point) {
+      hoist$allocate_tmp_at_point(x@value)
+    }
     return(x)
   }
   declare_tmp <- if (allocate_at_point) {
