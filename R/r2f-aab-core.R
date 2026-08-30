@@ -14,6 +14,13 @@ stop_deferred_branch_error <- function(message) {
   ))
 }
 
+stop_static_mode_error <- function(message, hoist) {
+  if (!is.null(hoist) && isTRUE(hoist$defer_static_mode_error)) {
+    stop_deferred_branch_error(message)
+  }
+  stop(message, call. = FALSE)
+}
+
 new_hoist <- function(scope) {
   hoisted <- character()
   block_scope <- NULL
@@ -174,6 +181,9 @@ capture_hoist <- function(hoist) {
   )
   captured_hoist$defer_builtin_arity_error <- isTRUE(
     hoist$defer_builtin_arity_error
+  )
+  captured_hoist$defer_static_mode_error <- isTRUE(
+    hoist$defer_static_mode_error
   )
   captured_hoist
 }
