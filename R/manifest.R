@@ -621,9 +621,49 @@ dims2f_needs_final_size_cast <- function(e) {
   any(vapply(as.list(e)[-1L], dims2f_needs_final_size_cast, logical(1)))
 }
 
+size_expr_needs_r_integer_guard <- function(e, scope) {
+  if (dims2f_needs_final_size_cast(e)) {
+    return(TRUE)
+  }
+  syms <- if (is.language(e)) all.vars(e) else character()
+  any(vapply(
+    syms,
+    function(name) {
+      var <- get0(name, scope)
+      if (!inherits(var, Variable)) {
+        var <- scope_var_by_fortran_name(scope, name)
+      }
+      inherits(var, Variable) && identical(var@mode, "double")
+    },
+    logical(1L)
+  ))
+}
 
-dims2f <- function(dims, scope, collapse = TRUE) {
-  stopifnot(is_bool(collapse))
+size_expr_integer_conversion_inputs <- function(e) {
+  e <- unwrap_parens(e)
+  if (!is.call(e)) {
+    return(list())
+  }
+  args <- as.list(e)[-1L]
+  nested <- unlist(
+    lapply(args, size_expr_integer_conversion_inputs),
+    recursive = FALSE
+  )
+  if (is_call(e, quote(as.integer)) && length(args) == 1L) {
+    c(nested, list(args[[1L]]))
+  } else {
+    nested
+  }
+}
+
+
+dims2f <- function(
+  dims,
+  scope,
+  collapse = TRUE,
+  final_size_cast = TRUE
+) {
+  stopifnot(is_bool(collapse), is_bool(final_size_cast))
   syms <- unique(unlist(lapply(dims, \(d) if (is.language(d)) all.vars(d))))
   vars <- lapply(syms, function(sym) {
     scope_fortran_symbol(as.symbol(sym), scope)
@@ -648,7 +688,7 @@ dims2f <- function(dims, scope, collapse = TRUE) {
       }
       stop("unexpected axis size value")
     }
-    if (dims2f_needs_final_size_cast(original)) {
+    if (final_size_cast && dims2f_needs_final_size_cast(original)) {
       d <- glue("int(({d}), kind=c_ptrdiff_t)")
     }
     d

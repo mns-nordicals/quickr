@@ -903,6 +903,79 @@ test_that("matrix and array reject negative dimensions before use", {
   expect_error(qarray(-1L), "dimensions must be non-negative")
 })
 
+test_that("matrix and array reject non-finite runtime dimensions", {
+  matrix_dynamic <- function(n) {
+    declare(type(n = double(1)))
+    sum(matrix(1, n, 2L))
+  }
+  array_dynamic <- function(n) {
+    declare(type(n = double(1)))
+    sum(array(1, dim = c(n, 2L)))
+  }
+
+  matrix_code <- suppressWarnings(as.character(r2f(matrix_dynamic)))
+  array_code <- suppressWarnings(as.character(r2f(array_dynamic)))
+  expect_match(matrix_code, "huge(0_c_int)", fixed = TRUE)
+  expect_match(array_code, "huge(0_c_int)", fixed = TRUE)
+  expect_lt(
+    regexpr("huge(0_c_int)", matrix_code, fixed = TRUE)[[1L]],
+    regexpr("allocate(", matrix_code, fixed = TRUE)[[1L]]
+  )
+  expect_lt(
+    regexpr("huge(0_c_int)", array_code, fixed = TRUE)[[1L]],
+    regexpr("allocate(", array_code, fixed = TRUE)[[1L]]
+  )
+
+  qmatrix <- suppressWarnings(quick(matrix_dynamic))
+  qarray <- suppressWarnings(quick(array_dynamic))
+  for (bad_dim in c(Inf, -Inf, NaN, 2147483648)) {
+    expect_error(
+      qmatrix(bad_dim),
+      "representable as an R integer",
+      fixed = TRUE
+    )
+    expect_error(
+      qarray(bad_dim),
+      "representable as an R integer",
+      fixed = TRUE
+    )
+  }
+  expect_identical(qmatrix(2), 4.0)
+  expect_identical(qarray(2), 4.0)
+
+  matrix_assigned <- function(n) {
+    declare(type(n = double(1)))
+    out <- matrix(1, n, 2L)
+    sum(out)
+  }
+  array_assigned <- function(n) {
+    declare(type(n = double(1)))
+    out <- array(1, dim = c(n, 2L))
+    sum(out)
+  }
+  qmatrix_assigned <- suppressWarnings(quick(matrix_assigned))
+  qarray_assigned <- suppressWarnings(quick(array_assigned))
+  expect_error(qmatrix_assigned(Inf), "representable as an R integer")
+  expect_error(qarray_assigned(Inf), "representable as an R integer")
+  expect_identical(qmatrix_assigned(2), 4.0)
+  expect_identical(qarray_assigned(2), 4.0)
+
+  matrix_coerced <- function(n) {
+    declare(type(n = double(1)))
+    sum(matrix(1, as.integer(n), 2L))
+  }
+  array_coerced <- function(n) {
+    declare(type(n = double(1)))
+    sum(array(1, dim = c(as.integer(n), 2L)))
+  }
+  qmatrix_coerced <- suppressWarnings(quick(matrix_coerced))
+  qarray_coerced <- suppressWarnings(quick(array_coerced))
+  expect_error(qmatrix_coerced(Inf), "representable as an R integer")
+  expect_error(qarray_coerced(Inf), "representable as an R integer")
+  expect_identical(qmatrix_coerced(2), 4.0)
+  expect_identical(qarray_coerced(2), 4.0)
+})
+
 test_that("integer-backed logical matrix fills materialize portably", {
   fn <- function(flag) {
     declare(type(flag = logical(1)))

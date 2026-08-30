@@ -79,6 +79,43 @@ materialize_unknown_reassignment_value <- function(target, value, hoist) {
   )
 }
 
+allocate_new_guarded_constructor_local_at_point <- function(
+  name,
+  var,
+  scope,
+  hoist
+) {
+  stopifnot(
+    is_string(name),
+    inherits(var, Variable),
+    inherits(scope, "quickr_scope"),
+    is.environment(hoist)
+  )
+  if (
+    !scope_kind(scope) %in% c("subroutine", "closure") ||
+      name %in%
+        (scope_get(scope, "return_names", character()) %||%
+          character()) ||
+      (var@r_name %||% var@name) %in% names(formals(scope_closure(scope))) ||
+      !subroutine_local_allocatable(var, scope) ||
+      !hoist$contains_runtime_guard()
+  ) {
+    return(invisible(var))
+  }
+  point_allocated <- scope_get(
+    scope,
+    "point_allocated_local_names",
+    character()
+  )
+  scope_set(
+    scope,
+    "point_allocated_local_names",
+    unique(c(point_allocated, var@name))
+  )
+  hoist$emit(glue("allocate({var@name}({dims2f(var@dims, scope)}))"))
+  invisible(var)
+}
+
 register_r2f_handler(
   "<-",
   function(args, scope, ..., hoist = NULL) {
@@ -243,6 +280,20 @@ register_r2f_handler(
       )
       scope[[name]] <- var
       register_openmp_private(scope, var@name)
+      guarded_constructor <- is.call(rhs_unwrapped) &&
+        is.symbol(rhs_unwrapped[[1L]]) &&
+        as.character(rhs_unwrapped[[1L]]) %in% c("matrix", "array")
+      if (
+        guarded_constructor &&
+          (!inherits(value, Fortran) || !isTRUE(value@writes_to_dest))
+      ) {
+        allocate_new_guarded_constructor_local_at_point(
+          name,
+          var,
+          scope,
+          hoist
+        )
+      }
     } else {
       # The var already exists, this assignment is a modification / reassignment
       if (is.null(var@r_name)) {

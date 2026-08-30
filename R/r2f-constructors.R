@@ -145,9 +145,50 @@ validate_static_constructor_dims <- function(dims, context) {
   invisible(TRUE)
 }
 
+validate_constructor_dim_integer_ranges <- function(
+  dims,
+  context,
+  scope,
+  hoist
+) {
+  stopifnot(is.list(dims), is_string(context), !is.null(hoist))
+  for (dim in dims) {
+    guard_exprs <- c(size_expr_integer_conversion_inputs(dim), list(dim))
+    guard_exprs <- Filter(
+      \(expr) size_expr_needs_r_integer_guard(expr, scope),
+      guard_exprs
+    )
+    raw_dims_f <- unique(vapply(
+      guard_exprs,
+      \(expr) dims2f(list(expr), scope, final_size_cast = FALSE),
+      character(1L)
+    ))
+    for (raw_dim_f in raw_dims_f) {
+      raw_dim_real <- glue("real(({raw_dim_f}), kind=c_double)")
+      emit_quickr_error_if(
+        glue(
+          "({raw_dim_real} /= {raw_dim_real}) .or. ",
+          "({raw_dim_real} <= ",
+          "(-real(huge(0_c_int), kind=c_double) - 1.0_c_double)) .or. ",
+          "({raw_dim_real} >= ",
+          "(real(huge(0_c_int), kind=c_double) + 1.0_c_double))"
+        ),
+        paste0(
+          context,
+          " dimensions must be finite and representable as an R integer"
+        ),
+        hoist,
+        scope
+      )
+    }
+  }
+  invisible(TRUE)
+}
+
 validate_constructor_dims <- function(dims, context, scope, hoist) {
   stopifnot(is.list(dims), is_string(context), !is.null(hoist))
   validate_static_constructor_dims(dims, context)
+  validate_constructor_dim_integer_ranges(dims, context, scope, hoist)
   message <- paste0(context, " dimensions must be non-negative")
   for (dim in dims) {
     if (is_size_name(dim)) {
@@ -467,6 +508,12 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   # must be a real rank-2 array, so materialize it into a hoisted temporary.
   if (passes_as_scalar(src@value)) {
     if (parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")) {
+      validate_constructor_dim_integer_ranges(
+        dims,
+        "matrix()",
+        scope,
+        hoist
+      )
       src@value <- out_val
       return(src)
     }
@@ -654,11 +701,25 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   )
   if (
     data_scalar &&
-      !passes_as_scalar(out@value) &&
-      !parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")
+      !passes_as_scalar(out@value)
   ) {
+    if (parent_call_name(list(...)$calls) %in% c("<-", "=", "<<-")) {
+      validate_constructor_dim_integer_ranges(
+        target_dims,
+        "array()",
+        scope,
+        hoist
+      )
+      return(out)
+    }
     validate_constructor_dims(target_dims, "array()", scope, hoist)
-    return(materialize_via_hoist(out, out@value@mode, target_dims, hoist))
+    return(materialize_via_hoist(
+      out,
+      out@value@mode,
+      target_dims,
+      hoist,
+      allocate_at_point = TRUE
+    ))
   }
   out
 }
