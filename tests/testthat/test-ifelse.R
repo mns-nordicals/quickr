@@ -314,6 +314,22 @@ test_that("valueless ifelse branches are deferred until selected", {
   )
 })
 
+test_that("ifelse defers constructor diagnostics until branch selection", {
+  skipped <- function() {
+    ifelse(FALSE, matrix(1, nrow = 1, ncol = 1, byrow = TRUE), 1)
+  }
+  reached <- function() {
+    ifelse(TRUE, matrix(1, nrow = 1, ncol = 1, byrow = TRUE), 1)
+  }
+
+  expect_quick_identical(skipped, list())
+  expect_error(
+    quick(reached)(),
+    "matrix(byrow=TRUE) is not supported",
+    fixed = TRUE
+  )
+})
+
 test_that("ifelse defers anonymous local closure diagnostics", {
   skipped <- function() {
     ifelse(FALSE, (function(x) x + 1)(), 1)

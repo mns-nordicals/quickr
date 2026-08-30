@@ -166,6 +166,10 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
       quickr_deferred_branch_error = function(error) {
         deferred_error <<- conditionMessage(error)
         NULL
+      },
+      error = function(error) {
+        deferred_error <<- conditionMessage(error)
+        NULL
       }
     )
     if (!is.null(deferred_error)) {
