@@ -302,6 +302,46 @@ can_use_output <- function(
   !output_name %in% disallowed
 }
 
+allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
+  stopifnot(inherits(dest, Variable), inherits(scope, "quickr_scope"))
+  assert_hoist_env(hoist)
+
+  if (
+    !identical(scope_kind(scope), "subroutine") ||
+      isTRUE(dest@is_external) ||
+      !is.na(var_element_count(dest)) ||
+      !subroutine_local_allocatable(dest, scope)
+  ) {
+    return(invisible(dest))
+  }
+
+  return_names <- scope_get(scope, "return_names", character()) %||%
+    character()
+  return_fortran_names <- vapply(
+    return_names,
+    fortranize_name,
+    character(1L)
+  )
+  if (tolower(dest@name) %in% tolower(return_fortran_names)) {
+    return(invisible(dest))
+  }
+
+  point_allocated <- scope_get(
+    scope,
+    "point_allocated_local_names",
+    character()
+  )
+  scope_set(
+    scope,
+    "point_allocated_local_names",
+    unique(c(point_allocated, dest@name))
+  )
+  hoist$emit(glue(
+    "if (.not. allocated({dest@name})) allocate({dest@name}({dims2f(dest@dims, scope)}))"
+  ))
+  invisible(dest)
+}
+
 # Ensure a BLAS operand is named, hoisting into a temp if needed.
 ensure_blas_operand_name <- function(x, hoist) {
   name <- symbol_name_or_null(x)
@@ -405,6 +445,7 @@ gemm <- function(
       context = context
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     blas_call <- glue(
       "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {dest@name}, {blas_int(ldc_expr)})"
     )
@@ -465,6 +506,7 @@ gemv <- function(
       context = context
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     # Assign output to output destination
     blas_call <- glue(
       "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {dest@name}, 1_c_int)"
