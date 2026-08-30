@@ -279,7 +279,8 @@ test_that("short-circuited operators defer arity errors", {
 
     expect_identical(skipped(), FALSE)
     expect_identical(quick(skipped)(), FALSE)
-    expect_error(quick(reached)())
+    qfn <- quick(reached)
+    expect_error(qfn())
   }
 
   reached_with_effects <- function() {
@@ -304,7 +305,8 @@ test_that("nested short-circuits own their right-operand diagnostics", {
   }
 
   expect_quick_identical(skipped, list())
-  expect_error(quick(reached)(), "abs")
+  qfn <- quick(reached)
+  expect_error(qfn(), "abs")
 })
 
 test_that("short-circuited elementwise shape errors are deferred", {
