@@ -149,16 +149,22 @@ materialize_via_hoist <- function(
   mode,
   dims,
   hoist,
-  logical_storage = NULL
+  logical_storage = NULL,
+  allocate_at_point = FALSE
 ) {
-  stopifnot(is.environment(hoist))
+  stopifnot(is.environment(hoist), is_bool(allocate_at_point))
   if (is.null(logical_storage)) {
     logical_storage <- inherits(code, Fortran) &&
       inherits(code@value, Variable) &&
       logical_as_int(code@value) &&
       !isTRUE(code@logical_booleanized)
   }
-  tmp <- hoist$declare_tmp(
+  declare_tmp <- if (allocate_at_point) {
+    hoist$declare_tmp_at_point
+  } else {
+    hoist$declare_tmp
+  }
+  tmp <- declare_tmp(
     mode = mode,
     dims = dims,
     logical_as_int = logical_storage

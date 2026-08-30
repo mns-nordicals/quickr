@@ -459,7 +459,13 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       return(src)
     }
     validate_constructor_dims(dims, "matrix()", scope, hoist)
-    return(materialize_via_hoist(src, src@value@mode, dims, hoist))
+    return(materialize_via_hoist(
+      src,
+      src@value@mode,
+      dims,
+      hoist,
+      allocate_at_point = TRUE
+    ))
   }
 
   # reshape_vector_for_matrix() splices its source into both the `source`
