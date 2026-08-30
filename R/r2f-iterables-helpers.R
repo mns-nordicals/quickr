@@ -289,12 +289,7 @@ seq_like_r2f <- function(
   }
 
   if (kind == "seq_len" && context == "for") {
-    n_r <- attr(to, "r", exact = TRUE)
-    known_nonnegative <- is.atomic(n_r) &&
-      length(n_r) == 1L &&
-      !is.na(n_r) &&
-      n_r >= 0
-    if (!known_nonnegative) {
+    if (!size_expr_is_known_nonnegative(len_expr)) {
       hoist <- list(...)$hoist
       to <- hoist_unless_name(to, hoist)
       emit_quickr_error_if(

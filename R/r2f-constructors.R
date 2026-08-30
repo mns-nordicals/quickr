@@ -75,6 +75,12 @@ guard_constructor_dims <- function(dims, constructor, hoist, scope) {
     if (is_scalar_na(dim)) {
       next
     }
+    if (
+      identical(constructor, "array") &&
+        size_expr_is_known_nonnegative(dim)
+    ) {
+      next
+    }
     dim_f <- dims2f(list(dim), scope)
     if (nzchar(dim_f) && !grepl(":", dim_f, fixed = TRUE)) {
       emit_quickr_error_if(
