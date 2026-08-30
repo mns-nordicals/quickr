@@ -199,6 +199,26 @@ test_that("ifelse defers malformed calls in unselected branches", {
   expect_identical(actual_seed, .Random.seed)
 })
 
+test_that("ifelse defers mode errors in unselected branches", {
+  skipped_yes <- function() {
+    ifelse(FALSE, !1, TRUE)
+  }
+  skipped_no <- function() {
+    ifelse(TRUE, TRUE, !1)
+  }
+  reached_yes <- function() {
+    ifelse(TRUE, !1, TRUE)
+  }
+  reached_no <- function() {
+    ifelse(FALSE, TRUE, !1)
+  }
+
+  expect_quick_identical(skipped_yes, list())
+  expect_quick_identical(skipped_no, list())
+  expect_error(quick(reached_yes)(), "expects a logical value", fixed = TRUE)
+  expect_error(quick(reached_no)(), "expects a logical value", fixed = TRUE)
+})
+
 test_that("ifelse defers anonymous local closure diagnostics", {
   skipped <- function() {
     ifelse(FALSE, (function(x) x + 1)(), 1)
