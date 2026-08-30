@@ -465,6 +465,35 @@ test_that("short-circuited matrix calls defer missing-argument errors", {
   expect_error(quick(reached_two)(), "requires at least two arguments")
 })
 
+test_that("short-circuited operands defer matrix diagnostics", {
+  skipped <- function() {
+    out <- FALSE && (sum(matrix(1, nrow = 1, ncol = 1, byrow = TRUE)) > 0)
+    out <- FALSE &&
+      {
+        floor(1i) > 0
+      }
+    out
+  }
+  reached <- function() {
+    TRUE && (sum(matrix(1, nrow = 1, ncol = 1, byrow = TRUE)) > 0)
+  }
+  reached_braced <- function() {
+    TRUE &&
+      {
+        floor(1i) > 0
+      }
+  }
+
+  expect_identical(skipped(), FALSE)
+  expect_identical(quick(skipped)(), FALSE)
+  expect_error(
+    quick(reached)(),
+    "matrix(byrow=TRUE) is not supported",
+    fixed = TRUE
+  )
+  expect_error(quick(reached_braced)(), "floor", fixed = TRUE)
+})
+
 test_that("short-circuited operators defer arity errors", {
   bad_calls <- lapply(
     c(
