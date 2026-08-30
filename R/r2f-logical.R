@@ -438,6 +438,7 @@ is_statically_logical_condition <- function(e, scope) {
 
 lazy_builtin_arities <- list(
   `(` = 1L,
+  `$` = 2L,
   `!` = 1L,
   `&&` = 2L,
   `||` = 2L,
@@ -481,14 +482,18 @@ lazy_builtin_arities <- list(
   Conj = 1L,
   as.double = 1L,
   as.integer = 1L,
+  array = 2:3,
   cat = 1L,
+  chol2inv = 1L,
   dim = 1L,
   drop = 1L,
   is.null = 1L,
+  ifelse = 3L,
   length = 1L,
   ncol = 1L,
   nrow = 1L,
   print = 1L,
+  rep.int = 2L,
   rev = 1L,
   seq_along = 1L,
   seq_len = 1L,
@@ -510,15 +515,17 @@ lazy_builtin_arity_error <- function(e, scope, recursive = TRUE) {
       !is.null(allowed) &&
       !((length(e) - 1L) %in% allowed)
   ) {
-    expected <- if (length(allowed) == 2L) {
-      "one or two arguments"
-    } else {
+    arity_words <- c("zero", "one", "two", "three")
+    allowed_words <- arity_words[allowed + 1L]
+    expected <- if (length(allowed_words) == 1L) {
       paste0(
         "exactly ",
-        if (allowed == 1L) "one" else "two",
+        allowed_words,
         " argument",
         if (allowed == 1L) "" else "s"
       )
+    } else {
+      paste0(str_flatten(allowed_words, " or "), " arguments")
     }
     return(paste0("`", op, "` requires ", expected))
   }

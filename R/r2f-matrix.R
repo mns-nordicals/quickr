@@ -620,7 +620,8 @@ register_r2f_handler(
     } else {
       tol <- cast_linalg_double(
         lower_r2f_operand_in_order(tol_arg, scope, ..., hoist = hoist),
-        "qr.solve"
+        "qr.solve",
+        hoist
       )
       if (!passes_as_scalar(tol@value)) {
         stop("qr.solve() expects a scalar `tol`", call. = FALSE)
@@ -955,7 +956,7 @@ crossprod_like <- function(
   opB <- if (identical(trans, "T")) "N" else "T"
 
   x <- lower_r2f_operand_in_order(x_arg, scope, ..., hoist = hoist)
-  x <- cast_linalg_double(x, context)
+  x <- cast_linalg_double(x, context, hoist)
   assert_rank_leq2(x, paste0(context, " only supports rank 0-2 inputs"))
 
   if (is.null(y_arg)) {
@@ -971,7 +972,8 @@ crossprod_like <- function(
 
   y <- cast_linalg_double(
     lower_r2f_operand_in_order(y_arg, scope, ..., hoist = hoist),
-    context
+    context,
+    hoist
   )
   assert_rank_leq2(y, paste0(context, " only supports rank 0-2 inputs"))
 
