@@ -33,17 +33,14 @@
         allocate(tmp2_(c__len_))
       
       
-          allocate(btmp1_(c__len_))
-          allocate(btmp2_(c__len_))
-          btmp1_ = (c/=0)
-          if (any(btmp1_)) then
-            where (btmp1_) btmp2_ = real(1_c_int, kind=c_double)
-          end if
-          if (any(.not. btmp1_)) then
-            where (.not. btmp1_) btmp2_ = a
-          end if
-          out_ = btmp2_
-        end block
+        tmp1_ = (c/=0)
+        if (any(tmp1_)) then
+          where (tmp1_) tmp2_ = real(1_c_int, kind=c_double)
+        end if
+        if (any(.not. tmp1_)) then
+          where (.not. tmp1_) tmp2_ = a
+        end if
+        out_ = tmp2_
       end subroutine
     Code
       cat(cwrapper)
@@ -54,9 +51,9 @@
       
       
       extern void fn(
-        const int* const c__, 
-        const double* const a__, 
-        double* const out___, 
+        const int* const c__,
+        const double* const a__,
+        double* const out___,
         const R_xlen_t c__len_);
       
       SEXP fn_(SEXP _args) {
@@ -95,7 +92,6 @@
         UNPROTECT(1);
         return out_;
       }
-
 # ifelse guards unknown branch lengths at runtime
 
     Code
@@ -137,17 +133,17 @@
         allocate(tmp2_(c__len_))
       
       
-          allocate(btmp1_(c__len_))
-          allocate(btmp2_(c__len_))
-          btmp1_ = (c/=0)
-          if (any(btmp1_)) then
-            if (size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+        tmp1_ = (c/=0)
+        if (any(tmp1_)) then
+          if (size(a, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
             return
           end if
-          if (any(.not. btmp1_)) then
-            if (size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+          where (tmp1_) tmp2_ = a
+        end if
+        if (any(.not. tmp1_)) then
+          if (size(b, 1, kind=c_ptrdiff_t) /= size(tmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
             return
