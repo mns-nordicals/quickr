@@ -314,29 +314,6 @@ finish_captured_operand <- function(operand, captured_hoist, hoist) {
   operand
 }
 
-r2f_expression_may_mutate_scope <- function(e, scope) {
-  if (!is.call(e)) {
-    return(FALSE)
-  }
-  if (!is.symbol(e[[1L]])) {
-    return(TRUE)
-  }
-  op <- as.character(e[[1L]])
-  if (
-    op %in%
-      c("<-", "=", "<<-", "[<-", "[[<-", "$<-") ||
-      inherits(get0(op, scope), LocalClosure)
-  ) {
-    return(TRUE)
-  }
-  any(vapply(
-    as.list(e)[-1L],
-    r2f_expression_may_mutate_scope,
-    logical(1L),
-    scope
-  ))
-}
-
 snapshot_operand_before_later_effects <- function(
   operand,
   arg,
@@ -345,17 +322,27 @@ snapshot_operand_before_later_effects <- function(
   hoist
 ) {
   stopifnot(is.list(later_args), inherits(scope, "quickr_scope"))
+  mutation_names <- unique(unlist(lapply(
+    later_args,
+    r2f_expression_host_mutations,
+    scope = scope
+  )))
+  read_names <- if (is.null(arg)) {
+    character()
+  } else {
+    all.names(arg, functions = FALSE, unique = TRUE)
+  }
+  operand_code <- trimws(as.character(operand))
+  already_materialized <- !is.null(operand@value@name) &&
+    identical(operand_code, operand@value@name) &&
+    operand@value@name %in% scope_generated_fortran_names(scope)
   if (
     !length(later_args) ||
-      !any(vapply(
-        later_args,
-        r2f_expression_may_mutate_scope,
-        logical(1L),
-        scope
-      )) ||
       is.null(arg) ||
       is_scalar_atomic(arg) ||
-      !inherits(operand@value, Variable)
+      !inherits(operand@value, Variable) ||
+      already_materialized ||
+      !any(read_names %in% mutation_names)
   ) {
     return(operand)
   }
@@ -365,6 +352,63 @@ snapshot_operand_before_later_effects <- function(
     allocate_at_point = TRUE,
     force = TRUE
   )
+}
+
+r2f_expression_host_mutations <- function(e, scope, seen = character()) {
+  if (!is.call(e)) {
+    return(character())
+  }
+
+  callable <- e[[1L]]
+  op <- if (is.symbol(callable)) as.character(callable) else NULL
+  if (identical(op, "function")) {
+    return(character())
+  }
+
+  mutations <- character()
+  if (identical(op, "<<-")) {
+    target <- e[[2L]]
+    while (is_call(target, quote(`(`)) && length(target) == 2L) {
+      target <- target[[2L]]
+    }
+    if (is.call(target) && identical(target[[1L]], quote(`[`))) {
+      target <- target[[2L]]
+    }
+    if (is.symbol(target)) {
+      mutations <- as.character(target)
+    }
+  }
+
+  if (!is.null(op)) {
+    closure_obj <- scope[[op]]
+    if (inherits(closure_obj, LocalClosure) && !op %in% seen) {
+      mutations <- c(
+        mutations,
+        r2f_expression_host_mutations(
+          body(closure_obj@fun),
+          scope,
+          seen = c(seen, op)
+        )
+      )
+    }
+  } else if (
+    is.call(callable) &&
+      identical(callable[[1L]], quote(`function`))
+  ) {
+    mutations <- c(
+      mutations,
+      r2f_expression_host_mutations(callable[[3L]], scope, seen)
+    )
+  }
+
+  children <- as.list(e)[-1L]
+  if (length(children)) {
+    mutations <- c(
+      mutations,
+      unlist(lapply(children, r2f_expression_host_mutations, scope, seen))
+    )
+  }
+  unique(mutations)
 }
 
 lower_r2f_operand_in_order <- function(
