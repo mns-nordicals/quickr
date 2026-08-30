@@ -310,7 +310,7 @@ the exponent is integral and the base can be negative.
 `NA` values are not supported, in inputs or as literals. quickr does not
 implement R's missing-value semantics, and compiled code does not detect
 `NA` in inputs — passing `NA` produces undefined results. (For doubles,
-`NaN` and `Inf` flow through arithmetic per IEEE rules as they do in R,
+`NaN` and `Inf` flow through most arithmetic as in R; double `%/%` can return `Inf` where R returns `NaN`,
 but no guarantees are made for code that branches on them.)
 
 ### No partial recycling
