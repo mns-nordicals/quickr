@@ -16,7 +16,6 @@ test_that("local closure calls reject effectful argument promises", {
   expect_error(quick(forward), message, fixed = TRUE)
   expect_error(quick(reverse), message, fixed = TRUE)
 })
-
 test_that("cbind/rbind evaluate effectful arguments from left to right", {
   cbind_fn <- function() {
     cbind(runif(2), runif(2) + 1)
@@ -35,7 +34,6 @@ test_that("cbind/rbind evaluate effectful arguments from left to right", {
   set.seed(915)
   expect_identical(quick(rbind_fn)(), rbind_expected)
 })
-
 test_that("later subscript effects cannot change the evaluated base", {
   fn <- function(x) {
     declare(type(x = double(2)))
@@ -48,7 +46,6 @@ test_that("later subscript effects cannot change the evaluated base", {
 
   expect_quick_identical(fn, list(c(3, 4)))
 })
-
 test_that("later matrix effects cannot change the evaluated left operand", {
   fn <- function(x) {
     declare(type(x = double(1, 1)))

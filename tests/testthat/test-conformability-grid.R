@@ -8,7 +8,6 @@ grid_shapes <- list(
   mat11 = list(decl = "1, 1", kind = "mat", dims = c(1L, 1L), n = 1L),
   sym = list(decl = "NA", kind = "vec", len = NA_integer_, n = 3L)
 )
-
 grid_op_families <- list(
   gen = c(
     add = "+",
@@ -22,7 +21,6 @@ grid_op_families <- list(
   div = c(div = "/", pow = "^", mod = "%%", idv = "%/%")
 )
 grid_logical_only_ops <- c("and", "or")
-
 grid_mode_pairs <- function(opname) {
   if (opname %in% grid_logical_only_ops) {
     return(list(c("l", "l")))
@@ -34,7 +32,6 @@ grid_mode_pairs <- function(opname) {
   )
   lapply(seq_len(nrow(pairs)), function(i) c(pairs[i, 2L], pairs[i, 1L]))
 }
-
 grid_value_pool <- list(
   gen = list(
     primary = list(
@@ -89,7 +86,6 @@ grid_value_pool <- list(
     )
   )
 )
-
 grid_operand <- function(role, family, set, mode, shape, sym_len = 3L) {
   pool <- grid_value_pool[[family]][[set]][[role]][[mode]]
   s <- grid_shapes[[shape]]
@@ -100,7 +96,6 @@ grid_operand <- function(role, family, set, mode, shape, sym_len = 3L) {
   }
   x
 }
-
 grid_pair_args <- function(
   sa,
   sb,
@@ -116,7 +111,6 @@ grid_pair_args <- function(
   }
   args
 }
-
 grid_sym_ok_len <- function(partner) {
   p <- grid_shapes[[partner]]
   if (p$kind == "vec" && !is.na(p$len)) {
@@ -127,7 +121,6 @@ grid_sym_ok_len <- function(partner) {
     3L
   }
 }
-
 make_grid_pair_fn <- function(sa, sb, family) {
   decls <- c(
     vapply(
@@ -208,7 +201,6 @@ make_grid_pair_fn <- function(sa, sb, family) {
   attr(fn, "grid_cell_count") <- length(ids)
   fn
 }
-
 make_grid_cell_fn <- function(sa, sb, op, ma, mb) {
   src <- paste0(
     "function(a, b) {\n",
@@ -229,7 +221,6 @@ make_grid_cell_fn <- function(sa, sb, op, ma, mb) {
   )
   eval(parse(text = src)[[1L]])
 }
-
 grid_strict_ops <- c("lt", "eq", "and", "or")
 grid_cell_verdict <- function(sa, sb, opname) {
   A <- grid_shapes[[sa]]
@@ -279,11 +270,9 @@ grid_cell_verdict <- function(sa, sb, opname) {
   }
   err("matrix first dimension")
 }
-
 grid_pair_verdict <- function(sa, sb) {
   grid_cell_verdict(sa, sb, "add")
 }
-
 expect_grid_cells_match <- function(qfn, fn, args, context) {
   r_res <- suppressWarnings(do.call(fn, args))
   q_res <- do.call(qfn, args)
@@ -303,7 +292,6 @@ expect_grid_cells_match <- function(qfn, fn, args, context) {
     )
   }
 }
-
 grid_pair_names <- names(grid_shapes)
 for (i in seq_along(grid_pair_names)) {
   for (j in seq.int(i, length(grid_pair_names))) {
