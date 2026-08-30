@@ -856,14 +856,15 @@ lapack_solve <- function(
   }
 
   if (!identical(context, "qr.solve")) {
-    A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
+    A_work <- hoist$declare_tmp_at_point(mode = "double", dims = list(m, n))
     hoist$emit(glue("{A_work@name} = {A_name}"))
 
     use_dest <- dest_usable()
     out_var <- if (use_dest) {
+      allocate_reusable_local_output_at_point(dest, scope, hoist)
       dest
     } else {
-      hoist$declare_tmp(mode = "double", dims = expected_dims)
+      hoist$declare_tmp_at_point(mode = "double", dims = expected_dims)
     }
     out_name <- out_var@name
     # The output length follows ncol(a) (R's contract) while `b` follows
@@ -878,7 +879,7 @@ lapack_solve <- function(
     }
     hoist$emit(glue("{out_name} = {b_src}"))
 
-    ipiv <- hoist$declare_tmp(mode = "integer", dims = list(m))
+    ipiv <- hoist$declare_tmp_at_point(mode = "integer", dims = list(m))
     info <- hoist$declare_tmp(mode = "integer", dims = NULL)
 
     hoist$emit(glue(
@@ -1030,9 +1031,13 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
@@ -1105,9 +1110,13 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
@@ -1169,9 +1178,13 @@ lapack_chol2inv <- function(
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
