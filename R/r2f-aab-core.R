@@ -507,6 +507,11 @@ lang2fortran <- r2f <- function(
           )
         }
       }
+      if (is.null(val) && isTRUE(hoist$defer_static_mode_error)) {
+        stop_deferred_branch_error(
+          paste0("object '", r_name, "' not found")
+        )
+      }
       s <- if (inherits(val, Variable) && !is.null(val@name)) {
         val@name
       } else {
