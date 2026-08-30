@@ -25,6 +25,7 @@ test_that("cbind binds vectors and matrices with scalar recycling", {
   y <- runif(4)
   s <- 2.5
   expect_bind_equal(cbind_vec, list(x, y, s))
+  expect_error(quick(cbind_vec)(double(), double(), s), "empty inputs")
 
   cbind_mat <- function(A, v) {
     declare(type(A = double(n, m)), type(v = double(n)))
@@ -56,6 +57,7 @@ test_that("rbind binds vectors and matrices with scalar recycling", {
   y <- runif(5)
   s <- -1.25
   expect_bind_equal(rbind_vec, list(x, y, s))
+  expect_error(quick(rbind_vec)(double(), double(), s), "empty inputs")
 
   rbind_mat <- function(A, v) {
     declare(type(A = double(n, m)), type(v = double(m)))

@@ -234,6 +234,11 @@ register_r2f_handler(
 
     row_dim <- x@value@dims[[1L]]
     col_dim <- x@value@dims[[2L]]
+    message <- "drop() cannot change rank when a runtime extent is 1"
+    for (dim in Filter(Negate(is_wholenumber), list(row_dim, col_dim))) {
+      condition <- glue("{dims2f(list(dim), scope)} == 1")
+      emit_quickr_error_if(condition, message, hoist, scope)
+    }
     row_is_one <- dim_is_one(row_dim)
     col_is_one <- dim_is_one(col_dim)
 
@@ -342,6 +347,21 @@ bind_common_dim <- function(dim_list, scalar_flags, context, label) {
   target
 }
 
+guard_bind_empty <- function(dim, scalar, context, hoist, scope) {
+  if (!any(scalar)) {
+    return()
+  }
+  message <- glue("{context} cannot recycle scalars with empty inputs")
+  if (is_wholenumber(dim)) {
+    if (as.integer(dim) == 0L) {
+      stop(message, call. = FALSE)
+    }
+    return()
+  }
+  condition <- glue("{dims2f(list(dim), scope)} == 0")
+  emit_quickr_error_if(condition, message, hoist, scope)
+}
+
 bind_dim_string <- function(dim) {
   if (is.character(dim)) {
     dim
@@ -424,6 +444,7 @@ register_r2f_handler(
     col_sizes <- lapply(dims, `[[`, "cols")
 
     rows <- bind_common_dim(row_sizes, scalar_flags, context, "row")
+    guard_bind_empty(rows, scalar_flags, context, hoist, scope)
     cols <- bind_dim_sum(col_sizes, context, "column")
 
     col_exprs <- vector("list", length(values))
@@ -480,6 +501,7 @@ register_r2f_handler(
     col_sizes <- lapply(dims, `[[`, "cols")
 
     cols <- bind_common_dim(col_sizes, scalar_flags, context, "column")
+    guard_bind_empty(cols, scalar_flags, context, hoist, scope)
     rows <- bind_dim_sum(row_sizes, context, "row")
 
     row_exprs <- vector("list", length(values))
