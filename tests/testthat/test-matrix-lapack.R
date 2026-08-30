@@ -336,6 +336,21 @@ test_that("diag treats declared numeric scalars as identity sizes", {
   expect_quick_identical(local_double_size, list())
 })
 
+test_that("diag refuses negative identity sizes", {
+  static <- function() {
+    sum(diag(-1L))
+  }
+  dynamic <- function(n) {
+    declare(type(n = integer(1)))
+    sum(diag(n))
+  }
+
+  expect_error(quick(static), "identity size must be non-negative")
+  qdynamic <- quick(dynamic)
+  expect_identical(qdynamic(0L), sum(diag(0L)))
+  expect_error(qdynamic(-1L), "identity size must be non-negative")
+})
+
 test_that("diag refuses to cycle an empty vector into a nonempty matrix", {
   static_fn <- function() {
     diag(double(0), 2L, 2L)

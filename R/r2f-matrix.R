@@ -725,6 +725,27 @@ register_r2f_handler(
   dest_infer = infer_dest_chol2inv
 )
 
+guard_diag_identity_size <- function(size, hoist, scope) {
+  message <- "diag() identity size must be non-negative"
+  if (is_scalar_integerish(size)) {
+    if (size < 0) {
+      stop(message, call. = FALSE)
+    }
+    return(invisible())
+  }
+
+  size_f <- dims2f(list(size), scope)
+  if (nzchar(size_f) && !grepl(":", size_f, fixed = TRUE)) {
+    emit_quickr_error_if(
+      glue("{size_f} < 0"),
+      message,
+      hoist,
+      scope
+    )
+  }
+  invisible()
+}
+
 register_r2f_handler(
   "diag",
   function(args, scope, ..., hoist = NULL, dest = NULL) {
@@ -838,6 +859,7 @@ register_r2f_handler(
       } else {
         call("quickr_size_int", x_arg)
       }
+      guard_diag_identity_size(nrow, hoist, scope)
       ncol <- nrow
       x_val <- Fortran("1.0_c_double", Variable("double"))
       return(diag_matrix(
