@@ -363,6 +363,27 @@ test_that("local closures can be called directly with multiple arguments", {
   expect_quick_identical(fn, list(10L, 8L, 0.1, 0.01, 3L))
 })
 
+test_that("local closure arguments are evaluated from left to right", {
+  fn <- function() {
+    pair <- function(first, second) {
+      c(first, second)
+    }
+    pair(runif(1), runif(1) + 1)
+  }
+
+  qfn <- quick(fn)
+  set.seed(744)
+  expected <- fn()
+  expected_seed <- .Random.seed
+
+  set.seed(744)
+  actual <- qfn()
+  actual_seed <- .Random.seed
+
+  expect_identical(actual, expected)
+  expect_identical(actual_seed, expected_seed)
+})
+
 test_that("sapply errors for insufficient arguments", {
   expect_error(
     quick(function(x) {

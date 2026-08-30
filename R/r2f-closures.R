@@ -762,7 +762,11 @@ match_closure_call_args <- function(
   ...,
   hoist = NULL
 ) {
-  stopifnot(is.call(call_expr), inherits(closure_obj, LocalClosure))
+  stopifnot(
+    is.call(call_expr),
+    inherits(closure_obj, LocalClosure),
+    inherits(hoist, "environment")
+  )
   fun <- closure_obj@fun
   call_expr <- match.call(fun, call_expr)
   args_expr <- as.list(call_expr)[-1L]
