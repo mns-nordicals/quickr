@@ -17,7 +17,7 @@ guard_nonzero_arithmetic_divisor <- function(right, hoist, scope, context) {
   r_value <- attr(right, "r", exact = TRUE)
   if (is.atomic(r_value) && length(r_value) == 1L && !is.na(r_value)) {
     if (r_value == 0) {
-      stop(message, call. = FALSE)
+      stop_static_value_error(message, hoist)
     }
     return(right)
   }

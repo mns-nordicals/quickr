@@ -551,6 +551,7 @@ compile_andor <- function(
   sub$defer_static_shape_error <- TRUE
   sub$defer_builtin_arity_error <- TRUE
   sub$defer_static_mode_error <- TRUE
+  sub$defer_static_value_error <- TRUE
   deferred_error <- NULL
   right <- tryCatch(
     r2f(

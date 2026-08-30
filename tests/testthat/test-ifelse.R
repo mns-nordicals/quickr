@@ -212,6 +212,26 @@ test_that("ifelse defers empty extrema errors in unselected branches", {
   )
 })
 
+test_that("lazy branches defer literal zero-divisor errors", {
+  and_skipped <- function() {
+    FALSE && (1 %% 0 > 0)
+  }
+  and_reached <- function() {
+    TRUE && (1 %% 0 > 0)
+  }
+  ifelse_skipped <- function() {
+    ifelse(FALSE, 1 %/% 0, 0)
+  }
+  ifelse_reached <- function() {
+    ifelse(TRUE, 1 %/% 0, 0)
+  }
+
+  expect_quick_identical(and_skipped, list())
+  expect_quick_identical(ifelse_skipped, list())
+  expect_error(quick(and_reached)(), "zero divisors", fixed = TRUE)
+  expect_error(quick(ifelse_reached)(), "zero divisors", fixed = TRUE)
+})
+
 test_that("ifelse defers mode errors in unselected branches", {
   skipped <- function() {
     ifelse(FALSE, 1L & 1L, FALSE)
