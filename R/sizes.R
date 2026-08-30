@@ -277,6 +277,8 @@ size_expr_is_known_nonnegative <- function(x) {
   if (is_scalar_integerish(x)) {
     return(as.integer(x) >= 0L)
   }
+  # Source symbols cannot end in `_`; this spelling is reserved for extents
+  # synthesized after check_all_var_names_valid() accepts the source closure.
   if (is_size_name(x)) {
     return(TRUE)
   }
