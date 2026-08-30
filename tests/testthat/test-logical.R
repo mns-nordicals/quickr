@@ -319,6 +319,16 @@ test_that("short-circuited literal traps preserve lazy evaluation", {
     expect_identical(quick(skipped_and)(), FALSE)
     expect_identical(quick(skipped_ifelse)(), TRUE)
   }
+
+  for (op in c("%%", "%/%")) {
+    value <- call(op, 1L, 0L)
+    condition <- call(">", value, 0L)
+    direct <- reached <- function() NULL
+    body(direct) <- call("{", value)
+    body(reached) <- call("{", call("&&", TRUE, condition))
+    expect_error(quick(direct), "literal zero divisor", fixed = TRUE)
+    expect_error(quick(reached)(), "literal zero divisor", fixed = TRUE)
+  }
 })
 
 test_that("short-circuited calls defer arity errors", {

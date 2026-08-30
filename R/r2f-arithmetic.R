@@ -110,7 +110,12 @@ r2f_handlers[["^"]] <- function(args, scope, ..., hoist = NULL) {
 #   - AINT(x)       : truncation toward 0       (real)
 
 r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
-  literal_zero_divisor <- is_literal_zero_divisor(args[[2L]])
+  if (is_literal_zero_divisor(args[[2L]])) {
+    stop_static_mode_error(
+      "`%%` does not support a literal zero divisor",
+      hoist
+    )
+  }
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   # `modulo` requires same-typed arguments, so cast both operands to the
   # join (logical joins as integer: R's TRUE %% TRUE is 0L).
@@ -121,9 +126,6 @@ r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
   }
   left <- cast_to_mode(left, mode, "%%")
   right <- cast_to_mode(right, mode, "%%")
-  if (literal_zero_divisor) {
-    right <- hoist_unless_name(right, hoist)
-  }
   .[left, right] <- maybe_reshape_vector_matrix(left, right, hoist, scope)
   out_val <- conform(left@value, right@value)
   # MODULO gives result with sign(right) - matches R %% behaviour
@@ -131,12 +133,14 @@ r2f_handlers[["%%"]] <- function(args, scope, ..., hoist = NULL) {
 }
 
 r2f_handlers[["%/%"]] <- function(args, scope, ..., hoist = NULL) {
-  literal_zero_divisor <- is_literal_zero_divisor(args[[2L]])
+  if (is_literal_zero_divisor(args[[2L]])) {
+    stop_static_mode_error(
+      "`%/%` does not support a literal zero divisor",
+      hoist
+    )
+  }
   .[left, right] <- lower_elementwise_operands(args, scope, ..., hoist = hoist)
   .[left, right] <- promote_arith_pair(left, right, "%/%")
-  if (literal_zero_divisor) {
-    right <- hoist_unless_name(right, hoist)
-  }
   .[left, right] <- maybe_reshape_vector_matrix(left, right, hoist, scope)
   out_val <- conform(left@value, right@value)
 
