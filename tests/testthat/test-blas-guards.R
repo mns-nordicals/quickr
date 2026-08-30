@@ -356,6 +356,133 @@ test_that("solve(a) and chol() guard squareness", {
   )
 })
 
+test_that("square guards precede symbolic inverse and Cholesky allocations", {
+  inverse <- function(a) {
+    declare(type(a = double(n, k)))
+    sum(solve(a))
+  }
+  cholesky <- function(a) {
+    declare(type(a = double(n, k)))
+    sum(chol(a))
+  }
+  chol_inverse <- function(a) {
+    declare(type(a = double(n, k)))
+    sum(chol2inv(a))
+  }
+
+  cases <- list(
+    list(fn = inverse, message = "solve requires a square matrix"),
+    list(fn = cholesky, message = "chol requires a square matrix"),
+    list(fn = chol_inverse, message = "chol2inv requires a square matrix")
+  )
+  for (case in cases) {
+    code <- strsplit(as.character(r2f(case$fn)), "\n", fixed = TRUE)[[1L]]
+    output_decl <- grep(
+      "real\\(c_double\\), allocatable :: .*\\(:, :\\)",
+      code
+    )
+    expect_length(output_decl, 1L)
+    output_name <- sub(
+      ".*:: ([^(:]+)\\(:, :\\).*",
+      "\\1",
+      code[[output_decl]]
+    )
+    guard_line <- grep(case$message, code, fixed = TRUE)
+    allocation_line <- grep(
+      paste0("allocate(", output_name, "("),
+      code,
+      fixed = TRUE
+    )
+    expect_length(guard_line, 1L)
+    expect_length(allocation_line, 1L)
+    expect_lt(guard_line, allocation_line)
+
+    qfn <- quick(case$fn)
+    expect_equal(qfn(diag(2)), 2)
+    expect_error(
+      qfn(matrix(as.double(1:6), 2, 3)),
+      case$message,
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("solve guards squareness before allocating system workspaces", {
+  fn <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(NA)))
+    sum(solve(a, b))
+  }
+
+  code <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1L]]
+  guard_line <- grep("solve requires a square matrix", code, fixed = TRUE)
+  allocation_lines <- grep("^ *allocate\\(", code)
+  expect_length(guard_line, 1L)
+  expect_length(allocation_lines, 3L)
+  expect_true(all(guard_line < allocation_lines))
+
+  qfn <- quick(fn)
+  expect_equal(qfn(diag(2), c(1, 2)), 3)
+  expect_error(
+    qfn(matrix(as.double(1:6), 2, 3), c(1, 2)),
+    "solve requires a square matrix",
+    fixed = TRUE
+  )
+})
+
+test_that("triangular solve guards before allocating a nested result", {
+  fn <- function(a, b) {
+    declare(type(a = double(n, n)), type(b = double(NA)))
+    sum(forwardsolve(a, b))
+  }
+
+  code <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1L]]
+  guard_line <- grep(
+    "non-conformable arguments in triangular solve",
+    code,
+    fixed = TRUE
+  )
+  allocation_lines <- grep("^ *allocate\\(", code)
+  expect_length(guard_line, 1L)
+  expect_gt(length(allocation_lines), 0L)
+  expect_true(all(guard_line < allocation_lines))
+
+  qfn <- quick(fn)
+  expect_equal(qfn(diag(2), c(1, 2)), 3)
+  expect_error(
+    qfn(diag(2), as.double(1:3)),
+    "non-conformable arguments in triangular solve",
+    fixed = TRUE
+  )
+})
+
+test_that("qr.solve guards before allocating nested workspaces", {
+  fn <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(m, p)))
+    sum(qr.solve(a, b))
+  }
+
+  code <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1L]]
+  guard_line <- grep(
+    "non-conformable arguments in qr.solve",
+    code,
+    fixed = TRUE
+  )
+  allocation_lines <- grep("^ *allocate\\(", code)
+  expect_length(guard_line, 1L)
+  expect_gt(length(allocation_lines), 0L)
+  expect_true(all(guard_line < allocation_lines))
+
+  qfn <- quick(fn)
+  a <- matrix(as.double(c(1, 0, 1, 0, 1, 1)), 3, 2)
+  b <- matrix(as.double(1:6), 3, 2)
+  expect_equal(qfn(a, b), sum(qr.solve(a, b)))
+  expect_error(
+    qfn(a, matrix(as.double(1:8), 2, 4)),
+    "non-conformable arguments in qr.solve",
+    fixed = TRUE
+  )
+})
+
 test_that("matrix-matrix %*% returns zeros for a known empty contraction", {
   fn <- function(a, b) {
     declare(type(a = double(2, 0)), type(b = double(0, 3)))
