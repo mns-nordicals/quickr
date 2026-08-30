@@ -378,6 +378,39 @@ test_that("diag refuses to cycle an empty vector into a nonempty matrix", {
   expect_error(qdynamic(double(0)), "cannot recycle an empty vector")
 })
 
+test_that("diag rejects negative explicit dimensions before materialization", {
+  static_nrow <- function() {
+    out <- diag(1, nrow = -1L, ncol = 2L)
+    sum(out)
+  }
+  static_ncol <- function() {
+    out <- diag(1, nrow = 2L, ncol = -1L)
+    sum(out)
+  }
+  dynamic <- function(x, n, m) {
+    declare(
+      type(x = double(2)),
+      type(n = integer(1)),
+      type(m = integer(1))
+    )
+    sum(diag(rev(x), nrow = n, ncol = m))
+  }
+
+  expect_error(quick(static_nrow), "dimensions must be non-negative")
+  expect_error(quick(static_ncol), "dimensions must be non-negative")
+
+  expect_quick_identical(dynamic, list(as.double(1:2), 2L, 3L))
+  qdynamic <- quick(dynamic)
+  expect_error(
+    qdynamic(as.double(1:2), -1L, 2L),
+    "dimensions must be non-negative"
+  )
+  expect_error(
+    qdynamic(as.double(1:2), 2L, -1L),
+    "dimensions must be non-negative"
+  )
+})
+
 test_that("diag handles missing x with nrow/ncol and 1x1 matrices", {
   diag_nrow <- function(n) {
     declare(type(n = integer(1)))

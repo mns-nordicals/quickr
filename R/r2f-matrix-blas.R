@@ -1292,6 +1292,9 @@ diag_matrix <- function(
   # a synthesized 1.0_c_double, which keeps diag(n) double, as in R.
   assert_rank_leq1(x, paste0(context, " expects a vector or scalar input"))
 
+  dims <- if (identical(nrow, ncol)) list(nrow) else list(nrow, ncol)
+  validate_constructor_dims(dims, "diag()", scope, hoist)
+
   mode <- x@value@mode
   logical_is_c_int <- logical_as_int(x@value)
 
