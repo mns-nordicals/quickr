@@ -370,6 +370,20 @@ test_that("short-circuited operators defer arity errors", {
     expect_error(qfn())
   }
 
+  bad_comparison <- as.call(list(as.name("==")))
+  skipped_nested <- function() NULL
+  body(skipped_nested) <- call(
+    "{",
+    call("&&", FALSE, call("&&", TRUE, bad_comparison))
+  )
+  reached_nested <- function() NULL
+  body(reached_nested) <- call(
+    "{",
+    call("&&", TRUE, call("&&", TRUE, bad_comparison))
+  )
+  expect_identical(quick(skipped_nested)(), FALSE)
+  expect_error(quick(reached_nested)(), "requires exactly two arguments")
+
   reached_with_effects <- function() {
     TRUE && ((runif(1) > 0) & abs())
   }

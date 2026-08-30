@@ -350,6 +350,63 @@ is_statically_complex_expression <- function(e, scope) {
     ))
 }
 
+is_statically_safe_expression <- function(e, scope) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(inherits(var, Variable) && var@mode %in% mode_lattice)
+  }
+  if (is.atomic(e)) {
+    return(length(e) == 1L && typeof(e) %in% mode_lattice)
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+
+  op <- as.character(e[[1L]])
+  args <- as.list(e)[-1L]
+  allowed <- lazy_builtin_arities[[op]]
+  if (
+    inherits(scope[[op]], LocalClosure) ||
+      is.null(allowed) ||
+      !length(args) %in% allowed
+  ) {
+    return(FALSE)
+  }
+  if (op == "(") {
+    return(is_statically_safe_expression(args[[1L]], scope))
+  }
+  if (op %in% c("!", "&&", "||", "&", "|")) {
+    return(is_statically_logical_condition(e, scope))
+  }
+  if (op %in% c("<", "<=", ">", ">=", "==", "!=")) {
+    operands_are_safe <- all(vapply(
+      args,
+      is_statically_safe_expression,
+      logical(1L),
+      scope = scope
+    ))
+    return(
+      operands_are_safe &&
+        (op %in%
+          c("==", "!=") ||
+          !any(vapply(
+            args,
+            is_statically_complex_expression,
+            logical(1L),
+            scope = scope
+          )))
+    )
+  }
+  op %in%
+    c("+", "-", "*", "abs") &&
+    all(vapply(
+      args,
+      is_statically_safe_expression,
+      logical(1L),
+      scope = scope
+    ))
+}
+
 is_statically_logical_condition <- function(e, scope) {
   if (is.symbol(e)) {
     var <- get0(as.character(e), scope)
@@ -366,18 +423,8 @@ is_statically_logical_condition <- function(e, scope) {
   if (op == "(" && length(args) == 1L) {
     return(is_statically_logical_condition(args[[1L]], scope))
   }
-  if (op %in% c("==", "!=")) {
-    return(TRUE)
-  }
-  if (op %in% c("<", "<=", ">", ">=")) {
-    return(
-      !any(vapply(
-        args,
-        is_statically_complex_expression,
-        logical(1L),
-        scope = scope
-      ))
-    )
+  if (op %in% c("<", "<=", ">", ">=", "==", "!=")) {
+    return(is_statically_safe_expression(e, scope))
   }
   if (op == "!" && length(args) == 1L) {
     return(is_statically_logical_condition(args[[1L]], scope))
