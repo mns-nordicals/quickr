@@ -99,6 +99,76 @@ test_that("matrix-vector %*% guards before allocating a reusable local", {
   )
 })
 
+test_that("reused BLAS locals retain their earlier allocation", {
+  gemm <- function(a, b) {
+    declare(type(a = double(n, k)), type(b = double(m, k)))
+    out <- a + 0
+    out <- a %*% b
+    sum(out)
+  }
+  gemv <- function(a, x) {
+    declare(type(a = double(m, 1)), type(x = double(n)))
+    out <- a + 0
+    out <- a %*% x
+    sum(out)
+  }
+
+  for (fn in list(gemm, gemv)) {
+    code <- as.character(r2f(fn))
+    allocation <- regexpr("allocate(out(", code, fixed = TRUE)
+    initialization <- regexpr("out = (a + 0.0_c_double)", code, fixed = TRUE)
+    expect_lt(allocation, initialization)
+  }
+
+  qgemm <- quick(gemm)
+  a <- matrix(as.double(1:4), 2, 2)
+  b <- diag(2)
+  expect_equal(qgemm(a, b), gemm(a, b))
+  expect_error(
+    qgemm(matrix(as.double(1:2), 2, 1), matrix(as.double(1:2), 2, 1)),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+
+  qgemv <- quick(gemv)
+  a <- matrix(as.double(1:3), 3, 1)
+  expect_equal(qgemv(a, 2), gemv(a, 2))
+  expect_error(
+    qgemv(a, c(1, 2)),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+})
+
+test_that("reused BLAS locals are allocated on every reachable path", {
+  fn <- function(a, b, flag) {
+    declare(
+      type(a = double(n, k)),
+      type(b = double(k, p)),
+      type(flag = logical(1))
+    )
+    if (flag) {
+      out <- a %*% b
+    }
+    out <- a %*% b
+    sum(out)
+  }
+
+  code <- as.character(r2f(fn))
+  allocation_guards <- gregexpr(
+    "if (.not. allocated(out)) allocate(out(",
+    code,
+    fixed = TRUE
+  )[[1L]]
+  expect_length(allocation_guards[allocation_guards > 0L], 2L)
+
+  a <- matrix(as.double(1:6), 2, 3)
+  b <- matrix(as.double(1:6), 3, 2)
+  qfn <- quick(fn)
+  expect_equal(qfn(a, b, FALSE), fn(a, b, FALSE))
+  expect_equal(qfn(a, b, TRUE), fn(a, b, TRUE))
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))
