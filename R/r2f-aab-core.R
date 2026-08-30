@@ -58,10 +58,15 @@ new_hoist <- function(scope) {
         declare_tmp = declare_tmp,
         render = capture_render,
         has_code = capture_has_code,
-        capture = capture
+        capture = capture,
+        capture_block = capture_block
       ),
       parent = emptyenv()
     )
+  }
+
+  capture_block <- function() {
+    new_hoist(ensure_block_scope())
   }
 
   render <- function(code) {
@@ -90,7 +95,8 @@ new_hoist <- function(scope) {
       emit = emit,
       declare_tmp = declare_tmp,
       render = render,
-      capture = capture
+      capture = capture,
+      capture_block = capture_block
     ),
     parent = emptyenv()
   )
