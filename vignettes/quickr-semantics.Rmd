@@ -326,6 +326,8 @@ longer vector, where R would recycle with a deprecation warning.
 
 Non-fill `array(data, dim)` calls also refuse to recycle `data` when it is shorter than `prod(dim)`.
 
+`matrix(data, nrow, ncol)` requires both dimensions; R can infer either omitted dimension from the other one and `length(data)`.
+
 ### Zero-length operands do not recycle to zero-length results
 
 R arithmetic with a zero-length operand returns a zero-length result
@@ -379,6 +381,12 @@ natively, including mixed integer, double, and complex operands:
 (`t(x)` and `diag(x)` are mode-preserving and keep working on complex
 values; order comparisons and `%%` on complex values are errors in R
 itself, so refusing them is not a divergence.)
+
+### `solve()` uses LAPACK's singularity result
+
+Unlike R, `solve()` does not apply a reciprocal-condition tolerance. It only
+reports an exact LAPACK singularity, so an ill-conditioned system may return a
+result that R rejects as computationally singular.
 
 ### `runif()` bound differences
 
