@@ -322,6 +322,9 @@ snapshot_operand_before_later_effects <- function(
   hoist
 ) {
   stopifnot(is.list(later_args), inherits(scope, "quickr_scope"))
+  if (!inherits(operand@value, Variable)) {
+    return(operand)
+  }
   mutation_names <- unique(unlist(lapply(
     later_args,
     r2f_expression_host_mutations,
@@ -341,7 +344,6 @@ snapshot_operand_before_later_effects <- function(
     !length(later_args) ||
       is.null(arg) ||
       is_scalar_atomic(arg) ||
-      !inherits(operand@value, Variable) ||
       already_materialized ||
       !any(read_names %in% mutation_names)
   ) {
