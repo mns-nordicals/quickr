@@ -8,11 +8,13 @@ ifelse_branch_shape_msg <- paste0(
   "R-style recycling is not supported"
 )
 
-# A pure, non-trapping branch can stay inline in a WHERE assignment: evaluating
-# only selected elements is observably equivalent to evaluating the full R
-# branch, and avoids a full-size temporary. Keep the whitelist conservative;
-# calls that can consume RNG state, fail, or trap must still be materialized.
-ifelse_branch_is_pure <- function(e, scope) {
+# Conservative classifier for expressions whose evaluation timing is not
+# observable. It lets ifelse() keep safe branches inline and local closures
+# accept actual values without pretending to implement R promise semantics.
+r2f_expression_is_pure <- function(e, scope) {
+  if (is.null(e) || identical(e, quote(NULL))) {
+    return(TRUE)
+  }
   if (is.symbol(e)) {
     var <- get0(as.character(e), scope)
     return(!inherits(var, Variable) || is.null(var@optional_dummy))
@@ -45,7 +47,7 @@ ifelse_branch_is_pure <- function(e, scope) {
   ) {
     return(FALSE)
   }
-  all(vapply(as.list(e)[-1L], ifelse_branch_is_pure, logical(1L), scope))
+  all(vapply(as.list(e)[-1L], r2f_expression_is_pure, logical(1L), scope))
 }
 
 ifelse_branch_shape_is_known <- function(branch, mask) {
@@ -126,7 +128,7 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     branch <- r2f(arg, scope, ..., hoist = sub)
     if (
       !passes_as_scalar(mask@value) &&
-        (!ifelse_branch_is_pure(arg, scope) ||
+        (!r2f_expression_is_pure(arg, scope) ||
           !ifelse_branch_shape_is_known(branch, mask))
     ) {
       # WHERE may evaluate only selected RHS elements. Materialize a branch
