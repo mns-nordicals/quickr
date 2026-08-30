@@ -30,6 +30,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-parallel-declare.R",
     "test-reduction-scalars.R",
     "test-recycling.R",
+    "test-runif.R",
     "test-r2f-registry.R",
     "test-refusal-diagnostics.R",
     "test-sapply-closures.R",
