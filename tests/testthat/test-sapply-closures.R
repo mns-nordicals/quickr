@@ -382,6 +382,26 @@ test_that("local closure calls reject effectful argument promises", {
   expect_error(quick(reverse), message, fixed = TRUE)
 })
 
+test_that("local closure purity respects shadowed operators", {
+  fn <- function() {
+    state <- 0L
+    abs <- function() {
+      state <<- state + 1L
+      1L
+    }
+    ignore <- function(x) {
+      0L
+    }
+    ignore(abs())
+  }
+
+  expect_error(
+    quick(fn),
+    "local closure calls only support pure argument expressions",
+    fixed = TRUE
+  )
+})
+
 test_that("sapply errors for insufficient arguments", {
   expect_error(
     quick(function(x) {
