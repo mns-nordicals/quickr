@@ -224,26 +224,27 @@ assert_nonempty_blas_output <- function(
 # Check that destination dimensions match expected output dimensions.
 assert_dest_dims_compatible <- function(dest, expected_dims, context) {
   if (is.null(dest) || is.null(expected_dims)) {
-    return(invisible(TRUE))
+    return(TRUE)
   }
   expected_rank <- length(expected_dims)
   if (dest@rank != expected_rank) {
     stop("assignment target has incompatible rank for ", context, call. = FALSE)
   }
+  proven <- TRUE
   for (i in seq_len(expected_rank)) {
     dest_dim <- dest@dims[[i]]
     expected_dim <- expected_dims[[i]]
-    if (is_wholenumber(dest_dim) && is_wholenumber(expected_dim)) {
-      if (!identical(as.integer(dest_dim), as.integer(expected_dim))) {
-        stop(
-          "assignment target has incompatible dimensions for ",
-          context,
-          call. = FALSE
-        )
-      }
+    verdict <- check_equal_dims(dest_dim, expected_dim)
+    if (!verdict$ok) {
+      stop(
+        "assignment target has incompatible dimensions for ",
+        context,
+        call. = FALSE
+      )
     }
+    proven <- proven && !verdict$unknown
   }
-  invisible(TRUE)
+  proven
 }
 
 # Determine if output can safely write into dest without aliasing.
@@ -269,7 +270,20 @@ can_use_output <- function(
   if (!identical(logical_as_int(dest), logical_is_c_int)) {
     return(FALSE)
   }
-  assert_dest_dims_compatible(dest, expected_dims, context)
+  dims_proven <- assert_dest_dims_compatible(dest, expected_dims, context)
+  if (!dims_proven && isTRUE(dest@is_external)) {
+    stop(
+      "cannot change the shape of an external assignment target in ",
+      context,
+      call. = FALSE
+    )
+  }
+  if (!dims_proven) {
+    # Local allocatables fall back to intrinsic assignment, which reallocates
+    # them to the temporary result's shape. External arrays have fixed ABI
+    # extents and are rejected above.
+    return(FALSE)
+  }
   output_name <- dest@name
   if (is.null(output_name) || !nzchar(output_name)) {
     return(FALSE)
@@ -726,6 +740,7 @@ triangular_solve <- function(
     right_axis = if (b_rank == 1L) NULL else 1L,
     checker = check_blas_dims
   )
+  assert_nonempty_blas_output(n, A, 1L, context, hoist, scope)
 
   A_name <- ensure_blas_operand_name(A, hoist)
   B_input_name <- symbol_name_or_null(B)
@@ -826,6 +841,7 @@ lapack_solve <- function(
     right_axis = if (b_rank == 1L) NULL else 1L,
     checker = check_blas_dims
   )
+  assert_nonempty_blas_output(n, A, 2L, context, hoist, scope)
 
   A_name <- ensure_blas_operand_name(A, hoist)
   B_input_name <- ensure_blas_operand_name(B, hoist)
