@@ -42,6 +42,9 @@ r2f_expression_is_pure <- function(e, scope) {
         "+",
         "-",
         "*",
+        ":",
+        "seq_len",
+        "rev",
         "abs"
       )
   ) {

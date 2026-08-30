@@ -31,7 +31,7 @@ r2f_handlers[["["]] <- function(
 
   check_subscript_exprs(var@value, idx_args)
 
-  idxs <- whole_doubles_to_ints(idx_args)
+  idxs <- unname(whole_doubles_to_ints(idx_args))
   idxs <- imap(idxs, function(idx, i) {
     if (is_missing(idx)) {
       Fortran(":", Variable("integer", var@value@dims[[i]]))
