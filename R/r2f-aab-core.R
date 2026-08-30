@@ -7,6 +7,13 @@
 
 # --- Hoisting Infrastructure ---
 
+stop_deferred_branch_error <- function(message) {
+  stop(structure(
+    list(message = message, call = NULL),
+    class = c("quickr_deferred_branch_error", "error", "condition")
+  ))
+}
+
 new_hoist <- function(scope) {
   hoisted <- character()
   block_scope <- NULL
@@ -155,6 +162,12 @@ lower_r2f_operand_in_order <- function(arg, scope, ..., hoist) {
   }
 
   captured_hoist <- hoist$capture()
+  captured_hoist$defer_static_elementwise_error <- isTRUE(
+    hoist$defer_static_elementwise_error
+  )
+  captured_hoist$defer_builtin_arity_error <- isTRUE(
+    hoist$defer_builtin_arity_error
+  )
   operand <- r2f(arg, scope, ..., hoist = captured_hoist)
   finish_captured_operand(operand, captured_hoist, hoist)
 }
@@ -229,6 +242,13 @@ lang2fortran <- r2f <- function(
           length(callable_unwrapped) == 2L
       ) {
         callable_unwrapped <- callable_unwrapped[[2L]]
+      }
+
+      if (isTRUE(hoist$defer_builtin_arity_error)) {
+        arity_error <- lazy_builtin_arity_error(e, scope, recursive = FALSE)
+        if (!is.null(arity_error)) {
+          stop_deferred_branch_error(arity_error)
+        }
       }
 
       if (!is.null(scope)) {

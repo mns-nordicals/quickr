@@ -217,6 +217,64 @@ test_that("short-circuited calls defer arity errors", {
   expect_error(quick(reached_abs)(), "abs")
 })
 
+test_that("short-circuited operators defer arity errors", {
+  bad_calls <- lapply(
+    c(
+      "(",
+      "!",
+      "&&",
+      "||",
+      "&",
+      "|",
+      "<",
+      "<=",
+      ">",
+      ">=",
+      "==",
+      "!=",
+      "+",
+      "-",
+      "*"
+    ),
+    \(op) as.call(list(as.name(op)))
+  )
+
+  for (bad_call in bad_calls) {
+    skipped <- function() NULL
+    body(skipped) <- call("{", call("&&", FALSE, bad_call))
+    reached <- function() NULL
+    body(reached) <- call("{", call("&&", TRUE, bad_call))
+
+    expect_identical(skipped(), FALSE)
+    expect_identical(quick(skipped)(), FALSE)
+    expect_error(quick(reached)())
+  }
+
+  reached_with_effects <- function() {
+    TRUE && ((runif(1) > 0) & abs())
+  }
+  qfn <- quick(reached_with_effects)
+  set.seed(817)
+  expect_error(qfn(), "abs")
+  actual_seed <- .Random.seed
+
+  set.seed(817)
+  runif(1)
+  expect_identical(actual_seed, .Random.seed)
+})
+
+test_that("nested short-circuits own their right-operand diagnostics", {
+  skipped <- function() {
+    TRUE && (FALSE && abs())
+  }
+  reached <- function() {
+    TRUE && (TRUE && abs())
+  }
+
+  expect_quick_identical(skipped, list())
+  expect_error(quick(reached)(), "abs")
+})
+
 test_that("&& and || accept one-element matrices", {
   matrix_and <- function(x, y) {
     declare(type(x = logical(1, 1)), type(y = logical(1, 1)))

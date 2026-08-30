@@ -123,7 +123,19 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
 
   lower_branch <- function(arg) {
     sub <- hoist$capture()
-    branch <- r2f(arg, scope, ..., hoist = sub)
+    sub$defer_builtin_arity_error <- TRUE
+    deferred_error <- NULL
+    branch <- tryCatch(
+      r2f(arg, scope, ..., hoist = sub),
+      quickr_deferred_branch_error = function(error) {
+        deferred_error <<- conditionMessage(error)
+        NULL
+      }
+    )
+    if (!is.null(deferred_error)) {
+      emit_quickr_error_if(".true.", deferred_error, sub, scope)
+      return(list(value = NULL, hoist = sub))
+    }
     if (
       !passes_as_scalar(mask@value) &&
         (!ifelse_branch_is_pure(arg, scope) ||
@@ -139,6 +151,21 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
 
   yes <- lower_branch(args[[2L]])
   no <- lower_branch(args[[3L]])
+  value <- yes$value %||% no$value
+  mode <- if (inherits(value, Fortran)) value@value@mode else "logical"
+  error_placeholder <- atomic2Fortran(switch(
+    mode,
+    logical = FALSE,
+    integer = 0L,
+    double = 0,
+    complex = 0 + 0i
+  ))
+  if (is.null(yes$value)) {
+    yes$value <- error_placeholder
+  }
+  if (is.null(no$value)) {
+    no$value <- error_placeholder
+  }
   tsource <- yes$value
   fsource <- no$value
 
