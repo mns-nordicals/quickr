@@ -61,13 +61,13 @@ test_that("block-scoped temps work for deferred-shape intermediates", {
 })
 
 test_that("generated temps do not shadow user variables", {
-  block_fn <- function(btmp1.) {
-    declare(type(btmp1. = double(1)))
-    btmp1. + runif(1)
+  block_fn <- function(Btmp1.) {
+    declare(type(Btmp1. = double(1)))
+    Btmp1. + runif(1)
   }
-  root_fn <- function(tmp1.) {
-    declare(type(tmp1. = double(2)))
-    tmp1. + runif(2)
+  root_fn <- function(Tmp1.) {
+    declare(type(Tmp1. = double(2)))
+    Tmp1. + runif(2)
   }
   block_qfn <- quick(block_fn)
   root_qfn <- quick(root_fn)
