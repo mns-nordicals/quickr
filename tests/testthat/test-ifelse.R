@@ -297,6 +297,11 @@ test_that("valueless ifelse branches are deferred until selected", {
     }
   }
 
+  body(fn) <- quote({
+    ifelse(FALSE, x <- 1L, 0L)
+    x
+  })
+  expect_error(quick(fn), "assignment expressions")
 })
 
 test_that("ifelse defers constructor diagnostics until branch selection", {

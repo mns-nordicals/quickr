@@ -110,6 +110,10 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
 # --- Handlers ---
 
 r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
+  branch_names <- unlist(lapply(args[2:3], all.names, functions = TRUE))
+  if (any(c("<-", "=") %in% branch_names)) {
+    stop("ifelse() does not support assignment expressions", call. = FALSE)
+  }
   mask <- lower_r2f_operand_in_order(args[[1L]], scope, ..., hoist = hoist)
   mask_code <- trimws(as.character(mask))
   if (
