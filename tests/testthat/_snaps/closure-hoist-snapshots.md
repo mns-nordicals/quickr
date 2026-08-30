@@ -167,6 +167,14 @@
         ! manifest end
       
       
+        if (nx < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
+        if (ny < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
         temp = 0.0_c_double
       
         call bc()

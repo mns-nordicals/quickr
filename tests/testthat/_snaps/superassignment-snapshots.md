@@ -26,11 +26,14 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(nx, ny, temp) bind(c)
-        use iso_c_binding, only: c_double, c_int
+      subroutine fn(nx, ny, temp, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
         implicit none
       
         ! manifest start
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
+      
         ! args
         integer(c_int), intent(in) :: nx
         integer(c_int), intent(in) :: ny
@@ -38,9 +41,18 @@
         ! manifest end
       
       
+        if (nx < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
+        if (ny < 0) then
+          call quickr_set_error_msg("matrix() dimensions must be non-negative")
+          return
+        end if
         temp = 0.0_c_double
       
         call bc()
+        if (quickr_err_msg(1) /= c_null_char) return
       
         contains
           subroutine bc()
@@ -54,6 +66,16 @@
             temp(:, 1_c_int) = 3.0_c_double
             temp(:, ny) = 4.0_c_double
           end subroutine
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -66,7 +88,8 @@
       extern void fn(
         const int* const nx__,
         const int* const ny__,
-        double* const temp__);
+        double* const temp__,
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // nx
@@ -106,7 +129,18 @@
           Rf_dimgets(temp, _dim_sexp);
         }
         
-        fn(nx__, ny__, temp__);
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
+        fn(
+          nx__,
+          ny__,
+          temp__,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
         
         UNPROTECT(2);
         return temp;
@@ -239,11 +273,14 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(nx, ny, nz, a) bind(c)
-        use iso_c_binding, only: c_double, c_int
+      subroutine fn(nx, ny, nz, a, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
         implicit none
       
         ! manifest start
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
+      
         ! args
         integer(c_int), intent(in) :: nx
         integer(c_int), intent(in) :: ny
@@ -252,10 +289,24 @@
         ! manifest end
       
       
+        if (nx < 0) then
+          call quickr_set_error_msg("array() dimensions must be non-negative")
+          return
+        end if
+        if (ny < 0) then
+          call quickr_set_error_msg("array() dimensions must be non-negative")
+          return
+        end if
+        if (nz < 0) then
+          call quickr_set_error_msg("array() dimensions must be non-negative")
+          return
+        end if
         a = 0.0_c_double
       
         call f(1_c_int)
+        if (quickr_err_msg(1) /= c_null_char) return
         call f(nz)
+        if (quickr_err_msg(1) /= c_null_char) return
       
         contains
           subroutine f(k)
@@ -267,6 +318,16 @@
             a(:, :, k) = real(k, kind=c_double)
             a(1_c_int, 1_c_int, k) = (a(1_c_int, 1_c_int, k) + 0.5_c_double)
           end subroutine
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -280,7 +341,8 @@
         const int* const nx__,
         const int* const ny__,
         const int* const nz__,
-        double* const a__);
+        double* const a__,
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // nx
@@ -334,11 +396,19 @@
           Rf_dimgets(a, _dim_sexp);
         }
         
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
         fn(
           nx__,
           ny__,
           nz__,
-          a__);
+          a__,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
         
         UNPROTECT(2);
         return a;
