@@ -61,6 +61,7 @@
         UNPROTECT(1);
         return out;
       }
+
 ---
 
     Code
