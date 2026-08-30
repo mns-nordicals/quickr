@@ -275,6 +275,32 @@ test_that("nested short-circuits own their right-operand diagnostics", {
   expect_error(quick(reached)(), "abs")
 })
 
+test_that("short-circuited elementwise shape errors are deferred", {
+  skipped <- function() {
+    FALSE && (logical(2) & logical(3))
+  }
+  reached <- function() {
+    TRUE && (logical(2) & logical(3))
+  }
+
+  expect_quick_identical(skipped, list())
+  qfn <- quick(reached)
+  expect_error(qfn(), "elementwise vector operations")
+
+  reached_with_effects <- function() {
+    TRUE && ((runif(2) > 0) & (runif(3) > 0))
+  }
+  qfn <- quick(reached_with_effects)
+  set.seed(816)
+  expect_error(qfn(), "elementwise vector operations")
+  actual_seed <- .Random.seed
+
+  set.seed(816)
+  runif(2)
+  runif(3)
+  expect_identical(actual_seed, .Random.seed)
+})
+
 test_that("&& and || accept one-element matrices", {
   matrix_and <- function(x, y) {
     declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
