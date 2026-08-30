@@ -268,6 +268,13 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       other <- lower_one(args[[2L]])
     } else {
       other <- lower_one(args[[1L]])
+      other <- snapshot_operand_before_later_effects(
+        other,
+        args[[1L]],
+        list(args[[2L]]),
+        scope,
+        hoist
+      )
     }
     broadcastable <- inherits(other, Fortran) &&
       !is.null(other@value) &&
