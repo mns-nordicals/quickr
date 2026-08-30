@@ -280,6 +280,31 @@ test_that("size powers retain integer exponent type", {
   )
 
   expect_quick_identical(fn, list(-2L, -1L, 4L))
+
+  compound <- function(x, exponent) {
+    declare(
+      type(x = integer(1)),
+      type(exponent = integer(1))
+    )
+    double(as.integer(x^(exponent %/% 1L)) + 10L)
+  }
+  expect_quick_identical(compound, list(-2L, 3L))
+})
+
+test_that("size powers reject runtime real exponents", {
+  fn <- function(x, exponent) {
+    declare(
+      type(x = integer(1)),
+      type(exponent = double(1))
+    )
+    double(as.integer(x^exponent) + 10L)
+  }
+
+  expect_error(
+    quick(fn),
+    "size expression powers require an integer exponent",
+    fixed = TRUE
+  )
 })
 
 test_that("dim/length/nrow/ncol are supported in allocation sizes", {

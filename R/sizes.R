@@ -183,6 +183,57 @@ unwrap_scalar_size_expr <- function(r, scope) {
   }
 }
 
+size_power_exponent_is_integer <- function(x, scope) {
+  x <- unwrap_parens(x)
+  if (
+    is.atomic(x) &&
+      typeof(x) %in% c("integer", "double") &&
+      length(x) == 1L &&
+      !is.na(x) &&
+      (is.integer(x) || is.finite(x) && trunc(x) == x)
+  ) {
+    return(TRUE)
+  }
+  if (is.symbol(x)) {
+    if (is_size_name(x)) {
+      return(TRUE)
+    }
+    var <- get0(as.character(x), scope)
+    return(
+      inherits(var, Variable) &&
+        identical(var@mode, "integer") &&
+        passes_as_scalar(var)
+    )
+  }
+  if (!is.call(x) || !is.symbol(x[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(x[[1L]])
+  args <- as.list(x)[-1L]
+  if (identical(op, "as.integer")) {
+    return(length(args) == 1L)
+  }
+  if (op %in% c("length", "nrow", "ncol")) {
+    return(length(args) == 1L)
+  }
+  if (
+    identical(op, "[") &&
+      length(args) == 2L &&
+      is_call(args[[1L]], quote(dim))
+  ) {
+    return(TRUE)
+  }
+  if (op %in% c("+", "-", "*", "%/%", "%%", "abs", "min", "max")) {
+    return(all(vapply(
+      args,
+      size_power_exponent_is_integer,
+      logical(1L),
+      scope = scope
+    )))
+  }
+  FALSE
+}
+
 r2size <- function(r, scope, preserve_numeric = FALSE) {
   r <- unwrap_scalar_size_expr(r, scope)
 
@@ -243,6 +294,17 @@ r2size <- function(r, scope, preserve_numeric = FALSE) {
       },
       language = {
         op <- as.character(r[[1]])
+
+        if (
+          identical(op, "^") &&
+            length(r) == 3L &&
+            !size_power_exponent_is_integer(r[[3L]], scope)
+        ) {
+          stop(
+            "size expression powers require an integer exponent",
+            call. = FALSE
+          )
+        }
 
         if (
           op %in%
