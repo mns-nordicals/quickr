@@ -290,12 +290,93 @@ is_pure_scalar_condition <- function(e, scope) {
   if (inherits(scope[[op]], LocalClosure)) {
     return(FALSE)
   }
-  all(vapply(
-    as.list(e)[-1L],
-    is_pure_scalar_condition,
-    logical(1L),
-    scope = scope
-  ))
+  allowed <- lazy_builtin_arities[[op]]
+  if (!((length(e) - 1L) %in% allowed)) {
+    return(FALSE)
+  }
+  if (
+    !all(vapply(
+      as.list(e)[-1L],
+      is_pure_scalar_condition,
+      logical(1L),
+      scope = scope
+    ))
+  ) {
+    return(FALSE)
+  }
+  if (op %in% c("!", "&&", "||", "&", "|", "<", "<=", ">", ">=")) {
+    return(is_statically_logical_condition(e, scope))
+  }
+  TRUE
+}
+
+is_statically_complex_expression <- function(e, scope) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(inherits(var, Variable) && identical(var@mode, "complex"))
+  }
+  if (is.atomic(e)) {
+    return(is.complex(e))
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  args <- as.list(e)[-1L]
+  if (op == "(" && length(args) == 1L) {
+    return(is_statically_complex_expression(args[[1L]], scope))
+  }
+  op %in%
+    c("+", "-", "*") &&
+    any(vapply(
+      args,
+      is_statically_complex_expression,
+      logical(1L),
+      scope = scope
+    ))
+}
+
+is_statically_logical_condition <- function(e, scope) {
+  if (is.symbol(e)) {
+    var <- get0(as.character(e), scope)
+    return(inherits(var, Variable) && identical(var@mode, "logical"))
+  }
+  if (is.atomic(e)) {
+    return(is.logical(e) && length(e) == 1L)
+  }
+  if (!is.call(e) || !is.symbol(e[[1L]])) {
+    return(FALSE)
+  }
+  op <- as.character(e[[1L]])
+  args <- as.list(e)[-1L]
+  if (op == "(" && length(args) == 1L) {
+    return(is_statically_logical_condition(args[[1L]], scope))
+  }
+  if (op %in% c("==", "!=")) {
+    return(TRUE)
+  }
+  if (op %in% c("<", "<=", ">", ">=")) {
+    return(
+      !any(vapply(
+        args,
+        is_statically_complex_expression,
+        logical(1L),
+        scope = scope
+      ))
+    )
+  }
+  if (op == "!" && length(args) == 1L) {
+    return(is_statically_logical_condition(args[[1L]], scope))
+  }
+  if (op %in% c("&&", "||", "&", "|") && length(args) == 2L) {
+    return(all(vapply(
+      args,
+      is_statically_logical_condition,
+      logical(1L),
+      scope = scope
+    )))
+  }
+  FALSE
 }
 
 lazy_builtin_arities <- list(
