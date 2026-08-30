@@ -140,6 +140,35 @@ test_that("reused BLAS locals retain their earlier allocation", {
   )
 })
 
+test_that("reused BLAS locals are allocated on every reachable path", {
+  fn <- function(a, b, flag) {
+    declare(
+      type(a = double(n, k)),
+      type(b = double(k, p)),
+      type(flag = logical(1))
+    )
+    if (flag) {
+      out <- a %*% b
+    }
+    out <- a %*% b
+    sum(out)
+  }
+
+  code <- as.character(r2f(fn))
+  allocation_guards <- gregexpr(
+    "if (.not. allocated(out)) allocate(out(",
+    code,
+    fixed = TRUE
+  )[[1L]]
+  expect_length(allocation_guards[allocation_guards > 0L], 2L)
+
+  a <- matrix(as.double(1:6), 2, 3)
+  b <- matrix(as.double(1:6), 3, 2)
+  qfn <- quick(fn)
+  expect_equal(qfn(a, b, FALSE), fn(a, b, FALSE))
+  expect_equal(qfn(a, b, TRUE), fn(a, b, TRUE))
+})
+
 test_that("%*% evaluates effectful operands before a runtime shape error", {
   matmul <- function(m) {
     declare(type(m = double(n, n)))

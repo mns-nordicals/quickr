@@ -331,20 +331,18 @@ allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
     "initialized_local_names",
     character()
   )
-  if (tolower(dest@name) %in% tolower(initialized_local_names)) {
-    return(invisible(dest))
+  if (!tolower(dest@name) %in% tolower(initialized_local_names)) {
+    point_allocated <- scope_get(
+      scope,
+      "point_allocated_local_names",
+      character()
+    )
+    scope_set(
+      scope,
+      "point_allocated_local_names",
+      unique(c(point_allocated, dest@name))
+    )
   }
-
-  point_allocated <- scope_get(
-    scope,
-    "point_allocated_local_names",
-    character()
-  )
-  scope_set(
-    scope,
-    "point_allocated_local_names",
-    unique(c(point_allocated, dest@name))
-  )
   hoist$emit(glue(
     "if (.not. allocated({dest@name})) allocate({dest@name}({dims2f(dest@dims, scope)}))"
   ))
