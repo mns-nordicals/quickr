@@ -294,6 +294,33 @@ test_that("short-circuited calls defer arity errors", {
   expect_error(quick(reached)(), "sqrt")
 })
 
+test_that("short-circuited local closure diagnostics are deferred", {
+  skipped_missing <- function() {
+    predicate <- function(x) x > 0
+    FALSE && predicate()
+  }
+  reached_missing <- function() {
+    predicate <- function(x) x > 0
+    TRUE && predicate()
+  }
+  skipped_body <- function() {
+    predicate <- function(x) abs()
+    FALSE && predicate(1)
+  }
+  reached_body <- function() {
+    predicate <- function(x) abs()
+    TRUE && predicate(1)
+  }
+
+  expect_quick_identical(skipped_missing, list())
+  expect_quick_identical(skipped_body, list())
+
+  qmissing <- quick(reached_missing)
+  expect_error(qmissing(), "missing required argument")
+  qbody <- quick(reached_body)
+  expect_error(qbody(), "abs")
+})
+
 test_that("short-circuited operators defer arity errors", {
   bad_calls <- lapply(
     c(
