@@ -476,7 +476,8 @@ compile_andor <- function(
 
   if (
     is.null(rhs_arity_error) &&
-      is_pure_scalar_condition(args[[2L]], scope)
+      is_pure_scalar_condition(args[[2L]], scope) &&
+      is_statically_logical_condition(args[[2L]], scope)
   ) {
     # Fortran may evaluate both operands of .and./.or.; for a pure right
     # operand that is indistinguishable from short-circuiting, so keep

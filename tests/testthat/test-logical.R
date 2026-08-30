@@ -187,11 +187,27 @@ test_that("short-circuited nested operands defer mode errors", {
   reached_or <- function() {
     FALSE || (1L | 1L)
   }
+  direct_skipped_and <- function() {
+    FALSE && 1L
+  }
+  direct_skipped_or <- function() {
+    TRUE || 1L
+  }
+  direct_reached_and <- function() {
+    TRUE && 1L
+  }
+  direct_reached_or <- function() {
+    FALSE || 1L
+  }
 
   expect_quick_identical(skipped_and, list())
   expect_quick_identical(skipped_or, list())
+  expect_quick_identical(direct_skipped_and, list())
+  expect_quick_identical(direct_skipped_or, list())
   expect_error(quick(reached_and)(), "must be logical")
   expect_error(quick(reached_or)(), "must be logical")
+  expect_error(quick(direct_reached_and)(), "requires logical operands")
+  expect_error(quick(direct_reached_or)(), "requires logical operands")
 })
 
 test_that("short-circuited nested operands defer length errors", {
