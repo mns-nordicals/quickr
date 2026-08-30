@@ -56,10 +56,10 @@
       
       
       extern void fn(
-      const double* const x__,
-      double* const out__,
-      const R_xlen_t x__len_,
-      char* quickr_err_msg);
+        const double* const x__,
+        double* const out__,
+        const R_xlen_t x__len_,
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // x
@@ -190,3 +190,4 @@
         UNPROTECT(1);
         return out;
       }
+

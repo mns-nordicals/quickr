@@ -355,10 +355,10 @@
       
       
       extern void fn(
-      const int* const x__,
-      double* const out___,
-      const R_xlen_t x__len_,
-      char* quickr_err_msg);
+        const int* const x__,
+        double* const out___,
+        const R_xlen_t x__len_,
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // x
@@ -745,3 +745,4 @@
     Condition
       Error:
       ! cannot reassign `x`: assignment would narrow double to integer; R would promote `x` to double
+
