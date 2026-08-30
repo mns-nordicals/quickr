@@ -332,6 +332,9 @@ Non-fill `array(data, dim)` calls also refuse to recycle `data` when it is short
 `matrix(data, nrow, ncol)` requires both dimensions and refuses
 `byrow = TRUE`; R can infer an omitted dimension and supports row-wise filling.
 
+`c()` accepts scalars and vectors only; it refuses matrix arguments instead of
+flattening them as R does.
+
 ### Zero-length operands do not recycle to zero-length results
 
 R arithmetic with a zero-length operand returns a zero-length result
@@ -429,6 +432,8 @@ defeat the purpose of compiling, so quickr's contract is:
   matching Fortran's own contract: reading or writing out of bounds is
   undefined behavior, as in C. It will not return `NA`-padded results
   the way R does.
+- A logical mask must match the indexed extent. quickr refuses the shorter
+  masks that R recycles.
 
 If you need R's bounds behavior, validate indices before the loop.
 
