@@ -637,6 +637,24 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     ))
   }
 
+  if (identical(op, "quickr_extent_int")) {
+    arg <- args[[1L]]
+    stopifnot(length(args) == 2L, is.symbol(arg), is.environment(c_hoist))
+    var <- get(as.character(arg), scope)
+    stopifnot(
+      inherits(var, Variable),
+      var@mode == "double",
+      is_string(args[[2L]])
+    )
+    size <- glue("Rf_asReal({var@name})")
+    check <- glue(
+      'if (!R_FINITE({size}) || {size} < 0 || {size} > 2147483647)
+       Rf_error("{args[[2L]]}");'
+    )
+    c_hoist$pending <- c(c_hoist$pending, check)
+    return(glue("((R_xlen_t)({size}))"))
+  }
+
   if (identical(op, "quickr_size_int")) {
     if (length(args) != 1L || is.null(c_hoist)) {
       stop("quickr_size_int() requires one argument and a C bridge hoist")

@@ -428,16 +428,15 @@ test_that("fill constructors spread inside c()", {
   expect_quick_identical(known, list(as.double(1:3)))
 
   symbolic <- function(x, k) {
-    declare(type(x = double(3)), type(k = integer(1)))
+    declare(type(x = double(3)), type(k = double(1)))
     c(numeric(k), x)
   }
-  expect_quick_identical(symbolic, list(as.double(1:3), 2L))
-  expect_quick_identical(symbolic, list(as.double(1:3), 0L))
-  expect_error(
-    quick(symbolic)(as.double(1:3), -1L),
-    "invalid 'length' argument",
-    fixed = TRUE
-  )
+  qsymbolic <- quick(symbolic)
+  expect_identical(qsymbolic(as.double(1:3), 2), symbolic(as.double(1:3), 2))
+  expect_identical(qsymbolic(as.double(1:3), 0), symbolic(as.double(1:3), 0))
+  for (k in c(-1, Inf, NaN, 2147483648)) {
+    expect_error(qsymbolic(as.double(1:3), k), "invalid 'length' argument")
+  }
 
   promoted <- function(x) {
     declare(type(x = double(1)))

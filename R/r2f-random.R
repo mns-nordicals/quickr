@@ -12,6 +12,7 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   dims <- r2dims(args$n, scope)
   n <- dims[[1L]]
   count <- n
+  count_is_double <- FALSE
   if (is_scalar_integerish(n) && as.integer(n) < 0L) {
     stop("runif() sample count must be non-negative", call. = FALSE)
   }
@@ -23,9 +24,9 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
       hoist = hoist,
       later_args = list(min, max)
     )
+    count_is_double <- identical(count@value@mode, "double")
     count <- trimws(as.character(count))
   }
-  var <- Variable("double", dims)
 
   default_min <- identical(min, 0) || identical(min, 0L)
   default_max <- identical(max, 1) || identical(max, 1L)
@@ -59,17 +60,22 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   # R forces the bounds before reporting a negative dynamic sample count.
   # Emit this guard after bound hoists so effectful arguments consume their
   # RNG draws in the same order.
-  if (!is_wholenumber(n) && !is_scalar_na(n) && !is_size_name(n)) {
-    n_f <- dims2f(list(count), scope)
-    if (nzchar(n_f) && !grepl(":", n_f, fixed = TRUE)) {
-      emit_quickr_error_if(
-        glue("{n_f} < 0"),
-        "runif() sample count must be non-negative",
-        hoist,
-        scope
-      )
+  if (!is_size_name(n)) {
+    message <- "runif() sample count must be non-negative"
+    checked <- guard_constructor_dims(
+      list(count),
+      "runif",
+      hoist,
+      scope,
+      count_is_double,
+      message
+    )
+    if (!identical(checked[[1L]], count)) {
+      count <- dims2f(checked, scope)
+      dims[[1L]] <- call("quickr_extent_int", n, message)
     }
   }
+  var <- Variable("double", dims)
 
   if (passes_as_scalar(var)) {
     fortran <- get1rand

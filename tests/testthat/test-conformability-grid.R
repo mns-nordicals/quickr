@@ -231,7 +231,6 @@ make_grid_cell_fn <- function(sa, sb, op, ma, mb) {
 }
 
 grid_strict_ops <- c("lt", "eq", "and", "or")
-
 grid_cell_verdict <- function(sa, sb, opname) {
   A <- grid_shapes[[sa]]
   B <- grid_shapes[[sb]]
@@ -239,7 +238,6 @@ grid_cell_verdict <- function(sa, sb, opname) {
   ok <- list(outcome = "ok")
   guard <- function(msg) list(outcome = "guard", guard_msg = msg)
   err <- function(msg) list(outcome = "error", msg = msg)
-
   if (A$kind == "scalar" || B$kind == "scalar") {
     return(ok)
   }
@@ -317,14 +315,12 @@ for (i in seq_along(grid_pair_names)) {
         return() # handled in the compile-error section below
       }
       pair_id <- paste0(sa, ".", sb)
-
       for (family in names(grid_op_families)) {
         test_that(paste0("elementwise grid ", pair_id, " [", family, "]"), {
           fn <- make_grid_pair_fn(sa, sb, family)
           dll_paths_before <- loaded_dll_paths()
           on.exit(cleanup_new_quick_dlls(dll_paths_before), add = TRUE)
           qfn <- quick(fn)
-
           sym_a <- if (identical(sa, "sym")) grid_sym_ok_len(sb) else 3L
           sym_b <- if (identical(sb, "sym")) grid_sym_ok_len(sa) else 3L
           for (set in c("primary", "edge")) {
@@ -357,7 +353,6 @@ for (i in seq_along(grid_pair_names)) {
     })
   }
 }
-
 test_that("statically nonconformable cells are compile errors for every op", {
   for (i in seq_along(grid_pair_names)) {
     for (j in seq.int(i, length(grid_pair_names))) {
@@ -402,7 +397,6 @@ test_that("statically nonconformable cells are compile errors for every op", {
     }
   }
 })
-
 test_that("known length-0 operands are compile errors", {
   fn <- eval(parse(
     text = paste0(
@@ -413,7 +407,6 @@ test_that("known length-0 operands are compile errors", {
   )[[1L]])
   expect_error(quick(fn), "equal lengths", fixed = TRUE)
 })
-
 test_that("& and | require logical operands (R would coerce: error divergence)", {
   for (op in c("&", "|")) {
     for (ma in names(grid_modes)) {
@@ -439,7 +432,6 @@ test_that("& and | require logical operands (R would coerce: error divergence)",
     }
   }
 })
-
 test_that("c() grid: lattice join across modes, known and mixed lengths", {
   ids <- character()
   stmts <- character()
@@ -485,7 +477,6 @@ test_that("c() grid: lattice join across modes, known and mixed lengths", {
     expect_grid_cells_match(qfn, fn, args, context = paste0("c()/", set))
   }
 })
-
 test_that("c() grid: symbolic lengths are constructive (no guard)", {
   src <- paste0(
     "function(al, ai, ad, bl, bi, bd) {\n",
@@ -514,7 +505,6 @@ test_that("c() grid: symbolic lengths are constructive (no guard)", {
   )
   expect_grid_cells_match(qfn, fn, args, context = "c()/sym")
 })
-
 test_that("c() rejects rank-2 args (R would flatten: error divergence)", {
   fn <- eval(parse(
     text = paste0(
@@ -525,7 +515,6 @@ test_that("c() rejects rank-2 args (R would flatten: error divergence)", {
   )[[1L]])
   expect_error(quick(fn), "scalars or 1-d arrays", fixed = TRUE)
 })
-
 test_that("multi-arg min/max/sum grid: modes join, arg shapes independent", {
   ids <- character()
   stmts <- character()
@@ -576,7 +565,6 @@ test_that("multi-arg min/max/sum grid: modes join, arg shapes independent", {
     )
   }
 })
-
 test_that("ifelse grid: branch mode pairs join; scalars broadcast against vector test", {
   ids <- character()
   stmts <- character()
@@ -631,7 +619,6 @@ test_that("ifelse grid: branch mode pairs join; scalars broadcast against vector
     expect_grid_cells_match(qfn, fn, args, context = paste0("ifelse/", set))
   }
 })
-
 test_that("ifelse grid: symbolic branch lengths get a runtime guard", {
   ids <- character()
   stmts <- character()
@@ -692,7 +679,6 @@ test_that("ifelse grid: symbolic branch lengths get a runtime guard", {
     fixed = TRUE
   )
 })
-
 test_that("ifelse grid: matrix test shapes the result", {
   src <- paste0(
     "function(tm, ym, nm, yi, pd) {\n",
@@ -720,7 +706,6 @@ test_that("ifelse grid: matrix test shapes the result", {
   )
   expect_grid_cells_match(qfn, fn, args, context = "ifelse/mat")
 })
-
 test_that("ifelse contract violations respect lazy branches", {
   scalar_test <- eval(parse(
     text = paste0(

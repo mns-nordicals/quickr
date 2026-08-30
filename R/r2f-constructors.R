@@ -68,12 +68,14 @@ guard_constructor_dims <- function(
   constructor,
   hoist,
   scope,
-  dbl = NULL
+  dbl = NULL,
+  message = NULL
 ) {
   stopifnot(is.list(dims), is_string(constructor))
   dbl <- dbl %||% rep(FALSE, length(dims))
   stopifnot(length(dbl) == length(dims))
-  message <- paste0(constructor, "() dimensions must be non-negative")
+  message <- message %||%
+    paste0(constructor, "() dimensions must be non-negative")
   for (i in seq_along(dims)) {
     dim <- dims[[i]]
     if (is_scalar_integerish(dim)) {
@@ -119,9 +121,12 @@ guard_constructor_dims <- function(
         hoist,
         scope
       )
+      if (is_double) {
+        dims[[i]] <- call("quickr_extent_int", dim, message)
+      }
     }
   }
-  invisible()
+  dims
 }
 
 # --- Handlers ---
@@ -295,21 +300,9 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
 # claim two -- so materialize the fill into a hoisted temporary there.
 fill_constructor_value <- function(literal, mode, args, scope, ..., hoist) {
   dims <- if (length(args)) r2dims(args, scope) else list(0L)
+  message <- "invalid 'length' argument"
+  dims <- guard_constructor_dims(dims, "", hoist, scope, message = message)
   var <- Variable(mode = mode, dims = dims)
-  length_dim <- var@dims[[1L]]
-  if (is_wholenumber(length_dim)) {
-    if (as.integer(length_dim) < 0L) {
-      stop("invalid 'length' argument", call. = FALSE)
-    }
-  } else if (!is_scalar_na(length_dim)) {
-    length_f <- dims2f(list(length_dim), scope)
-    emit_quickr_error_if(
-      glue("{length_f} < 0"),
-      "invalid 'length' argument",
-      hoist,
-      scope
-    )
-  }
   out <- Fortran(literal, var)
   if (passes_as_scalar(var)) {
     return(out)

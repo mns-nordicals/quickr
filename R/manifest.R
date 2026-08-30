@@ -552,6 +552,9 @@ dims2f_eval_base_env[["quickr_seq_length"]] <- function(from, to, by) {
   safe_by <- glue("merge(int({by}), 1, int({by}) /= 0)")
   glue("(abs((int({to}) - int({from})) / {safe_by}) + 1)")
 }
+dims2f_eval_base_env[["quickr_extent_int"]] <- function(x, message = NULL) {
+  glue("int({x}, kind=c_ptrdiff_t)")
+}
 dims2f_eval_base_env[["quickr_size_int"]] <- function(x) {
   glue("int({x}, kind=c_ptrdiff_t)")
 }

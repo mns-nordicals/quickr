@@ -8,7 +8,6 @@ test_that("character declarations are refused with a clean message", {
     "character values are not supported by quickr"
   )
 })
-
 test_that("unsupported complex operations are refused with R's messages", {
   complex_lt <- function(x, y) {
     declare(type(x = complex(1)), type(y = complex(1)))
@@ -27,7 +26,6 @@ test_that("unsupported complex operations are refused with R's messages", {
   }
   expect_error(quick(complex_mod), "unimplemented complex operation")
 })
-
 test_that("as.double refuses unsupported complex coercion", {
   fn <- function(x) {
     declare(type(x = complex(n)))
@@ -35,7 +33,6 @@ test_that("as.double refuses unsupported complex coercion", {
   }
   expect_error(quick(fn), "does not support complex")
 })
-
 test_that("lazy branches defer unsupported as.double coercion", {
   skipped <- function(x) {
     declare(type(x = complex(1)))
@@ -48,7 +45,6 @@ test_that("lazy branches defer unsupported as.double coercion", {
   expect_quick_identical(skipped, list(1 + 1i))
   expect_error(quick(reached)(1 + 1i), "does not support complex")
 })
-
 test_that("arithmetic refuses raw operands", {
   for (op in c("+", "-", "*", "/", "^", "%%", "%/%")) {
     fn <- eval(bquote(function(x, y) {
@@ -63,7 +59,6 @@ test_that("arithmetic refuses raw operands", {
   }
   expect_error(quick(unary), "does not support raw operands", fixed = TRUE)
 })
-
 test_that("division operators refuse zero divisors", {
   for (op in c("%%", "%/%")) {
     literal <- eval(bquote(function(x) {
@@ -88,7 +83,6 @@ test_that("division operators refuse zero divisors", {
     )
   }
 })
-
 test_that("complex operands are refused in linear algebra", {
   complex_matmul <- function(x, y) {
     declare(type(x = complex(2)), type(y = complex(2)))
@@ -123,7 +117,6 @@ test_that("complex operands are refused in linear algebra", {
     list(matrix(c(1 + 1i, 2 + 0i, 3 - 1i, 4 + 2i), 2, 2))
   )
 })
-
 test_that("as.integer refuses values outside R's integer range", {
   fn <- function(x) {
     declare(type(x = double(1)))
@@ -134,7 +127,6 @@ test_that("as.integer refuses values outside R's integer range", {
   expect_error(qfn(Inf), "representable as an R integer")
   expect_error(qfn(1e100), "representable as an R integer")
 })
-
 test_that("as.integer(logical matrix) drops dimensions", {
   fn <- function(x) {
     declare(type(x = logical(2, 2)))
@@ -143,21 +135,21 @@ test_that("as.integer(logical matrix) drops dimensions", {
   x <- matrix(c(TRUE, FALSE, TRUE, FALSE), nrow = 2L)
   expect_quick_identical(fn, list(x))
 })
-
 test_that("runif refuses negative runtime sample counts", {
   static <- function() {
     sum(runif(-1L))
   }
   fn <- function(n) {
-    declare(type(n = integer(1)))
+    declare(type(n = double(1)))
     sum(runif(n))
   }
   expect_error(quick(static), "sample count must be non-negative")
   qfn <- quick(fn)
-  expect_type(qfn(2L), "double")
-  expect_error(qfn(-1L), "sample count must be non-negative")
+  expect_type(qfn(2), "double")
+  for (n in c(-1, Inf, NaN, 2147483648)) {
+    expect_error(qfn(n), "sample count must be non-negative")
+  }
 })
-
 test_that("seq_len refuses negative bounds", {
   static <- function() {
     out <- 0L
@@ -180,7 +172,6 @@ test_that("seq_len refuses negative bounds", {
   expect_identical(qdynamic(3L), dynamic(3L))
   expect_error(qdynamic(-1L), message, fixed = TRUE)
 })
-
 test_that("parallel loops refuse RNG calls", {
   parallel_for <- function(n, out) {
     declare(type(n = integer(1)), type(out = double(n)))
@@ -199,7 +190,6 @@ test_that("parallel loops refuse RNG calls", {
   expect_error(quick(parallel_for), message, fixed = TRUE)
   expect_error(quick(parallel_sapply), message, fixed = TRUE)
 })
-
 test_that("rep.int refuses negative repetition counts in subscripts", {
   static <- function(x) {
     declare(type(x = double(2)))
