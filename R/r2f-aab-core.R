@@ -118,6 +118,10 @@ new_hoist <- function(scope) {
     )
   }
 
+  capture_block <- function() {
+    new_hoist(ensure_block_scope())
+  }
+
   render <- function(code) {
     code <- str_split_lines(code)
     if (is_empty()) {
