@@ -2074,21 +2074,24 @@
       
         ! locals
         logical, allocatable :: y(:) ! logical
-        integer(c_int), allocatable :: tmp1_(:)
+        logical, allocatable :: tmp1_(:) ! logical
+        integer(c_int), allocatable :: tmp2_(:)
         ! manifest end
       
         allocate(y(x__len_))
         allocate(tmp1_(x__len_))
+        allocate(tmp2_(x__len_))
       
       
         y = (.not. (x/=0))
-        if (any(y)) then
-          where (y) tmp1_ = 1_c_int
+        tmp1_ = y
+        if (any(tmp1_)) then
+          where (tmp1_) tmp2_ = 1_c_int
         end if
-        if (any(.not. y)) then
-          where (.not. y) tmp1_ = 0_c_int
+        if (any(.not. tmp1_)) then
+          where (.not. tmp1_) tmp2_ = 0_c_int
         end if
-        out = tmp1_
+        out = tmp2_
       end subroutine
     Code
       cat(cwrapper)
