@@ -30,7 +30,6 @@
         ! manifest end
       
         allocate(tmp1_(c__len_))
-        allocate(tmp2_(c__len_))
       
       
         tmp1_ = (c/=0)
@@ -132,7 +131,6 @@
         ! manifest end
       
         allocate(tmp1_(c__len_))
-        allocate(tmp2_(c__len_))
       
       
         tmp1_ = (c/=0)
