@@ -439,7 +439,7 @@ compile_andor <- function(
   tmp <- scope_unique_var(scope, mode = "logical", dims = NULL)
   register_openmp_private(scope, tmp@name)
   sub <- new_hoist(scope)
-  sub$defer_static_elementwise_error <- TRUE
+  sub$defer_static_shape_error <- TRUE
   sub$defer_builtin_arity_error <- TRUE
   deferred_error <- NULL
   right <- tryCatch(

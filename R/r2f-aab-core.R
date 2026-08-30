@@ -200,8 +200,8 @@ lower_r2f_operand_in_order <- function(arg, scope, ..., hoist) {
   }
 
   captured_hoist <- hoist$capture()
-  captured_hoist$defer_static_elementwise_error <- isTRUE(
-    hoist$defer_static_elementwise_error
+  captured_hoist$defer_static_shape_error <- isTRUE(
+    hoist$defer_static_shape_error
   )
   captured_hoist$defer_builtin_arity_error <- isTRUE(
     hoist$defer_builtin_arity_error
