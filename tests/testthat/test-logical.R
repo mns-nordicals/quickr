@@ -419,6 +419,32 @@ test_that("short-circuited fixed-arity handlers defer arity errors", {
   expect_quick_identical(explicit_null_array, list())
 })
 
+test_that("short-circuited matrix calls defer missing-argument errors", {
+  skipped <- function() {
+    out <- FALSE && (sum(cbind()) > 0)
+    out <- FALSE && (sum(rbind()) > 0)
+    out <- FALSE && (sum(crossprod()) > 0)
+    out <- FALSE && (sum(tcrossprod()) > 0)
+    out <- FALSE && (sum(outer()) > 0)
+    out <- FALSE && (sum(solve()) > 0)
+    out <- FALSE && (sum(qr.solve()) > 0)
+    out <- FALSE && (sum(chol()) > 0)
+    out <- FALSE && (sum(forwardsolve()) > 0)
+    out <- FALSE && (sum(backsolve()) > 0)
+    out
+  }
+  reached_one <- function() {
+    TRUE && (sum(solve()) > 0)
+  }
+  reached_two <- function() {
+    TRUE && (sum(outer()) > 0)
+  }
+
+  expect_quick_identical(skipped, list())
+  expect_error(quick(reached_one)(), "requires at least one argument")
+  expect_error(quick(reached_two)(), "requires at least two arguments")
+})
+
 test_that("short-circuited operators defer arity errors", {
   bad_calls <- lapply(
     c(
@@ -573,6 +599,63 @@ test_that("short-circuited complex refusals are deferred", {
     quick(reached_matmul)(z),
     "linear algebra in quickr is double-only"
   )
+})
+
+test_that("short-circuited real-only math calls defer mode errors", {
+  for (op in c("floor", "ceiling", "trunc")) {
+    skipped <- function() NULL
+    body(skipped) <- call("{", call("&&", FALSE, call(">", call(op, 1i), 0)))
+    reached <- function() NULL
+    body(reached) <- call("{", call("&&", TRUE, call(">", call(op, 1i), 0)))
+
+    expect_identical(skipped(), FALSE)
+    expect_identical(quick(skipped)(), FALSE)
+    expect_error(
+      quick(reached)(),
+      paste0(op, "() only implemented"),
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("invalid literal arithmetic remains inside lazy branches", {
+  skipped_and <- function() {
+    FALSE && (1 + "a" > 0)
+  }
+  reached_and <- function() {
+    TRUE && (1 + "a" > 0)
+  }
+  skipped_ifelse <- function() {
+    ifelse(FALSE, 1 + "a" > 0, TRUE)
+  }
+  reached_ifelse <- function() {
+    ifelse(TRUE, 1 + "a" > 0, TRUE)
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_error(quick(reached_and)(), "Unsupported object type")
+  expect_quick_identical(skipped_ifelse, list())
+  expect_error(quick(reached_ifelse)(), "Unsupported object type")
+})
+
+test_that("unsupported comparisons remain inside lazy branches", {
+  skipped_and <- function() {
+    FALSE && ("a" == "b")
+  }
+  reached_and <- function() {
+    TRUE && ("a" == "b")
+  }
+  skipped_ifelse <- function() {
+    ifelse(FALSE, "a" == "b", TRUE)
+  }
+  reached_ifelse <- function() {
+    ifelse(TRUE, "a" == "b", TRUE)
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_error(quick(reached_and)(), "Unsupported object type")
+  expect_quick_identical(skipped_ifelse, list())
+  expect_error(quick(reached_ifelse)(), "Unsupported object type")
 })
 
 test_that("lazy multi-argument reductions defer operand errors", {

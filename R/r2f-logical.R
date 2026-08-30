@@ -282,7 +282,7 @@ is_pure_scalar_condition <- function(e, scope) {
     )
   }
   if (is.atomic(e) && length(e) == 1L) {
-    return(TRUE)
+    return(typeof(e) %in% c("logical", "integer", "double", "complex"))
   }
   if (!is.call(e) || !is.symbol(e[[1L]])) {
     return(FALSE)
@@ -467,6 +467,19 @@ lazy_builtin_arities <- list(
   which.min = 1L
 )
 
+lazy_builtin_min_arities <- list(
+  cbind = 1L,
+  rbind = 1L,
+  crossprod = 1L,
+  tcrossprod = 1L,
+  outer = 2L,
+  solve = 1L,
+  qr.solve = 2L,
+  chol = 1L,
+  forwardsolve = 2L,
+  backsolve = 2L
+)
+
 lazy_builtin_arity_error <- function(e, scope, recursive = TRUE) {
   if (!is.call(e) || !is.symbol(e[[1L]])) {
     return(NULL)
@@ -474,7 +487,24 @@ lazy_builtin_arity_error <- function(e, scope, recursive = TRUE) {
 
   op <- as.character(e[[1L]])
   allowed <- lazy_builtin_arities[[op]]
+  minimum <- lazy_builtin_min_arities[[op]]
   is_builtin <- !inherits(scope[[op]], LocalClosure)
+  if (
+    is_builtin &&
+      !is.null(minimum) &&
+      length(e) - 1L < minimum
+  ) {
+    arity_words <- c("zero", "one", "two", "three")
+    minimum_word <- arity_words[[minimum + 1L]]
+    return(paste0(
+      "`",
+      op,
+      "` requires at least ",
+      minimum_word,
+      " argument",
+      if (minimum == 1L) "" else "s"
+    ))
+  }
   if (
     is_builtin &&
       !is.null(allowed) &&
