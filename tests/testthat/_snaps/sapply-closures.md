@@ -709,6 +709,10 @@
       
       
         out = 0.0_c_double
+        if (k < 0) then
+          call quickr_set_error_msg("seq_len() bound must be non-negative")
+          return
+        end if
         do tmp1_ = 1_c_int, k
           call closure1_(tmp1_, out(:, :, tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return
@@ -1178,6 +1182,10 @@
       
       
         out = 0.0_c_double
+        if (k < 0) then
+          call quickr_set_error_msg("seq_len() bound must be non-negative")
+          return
+        end if
         do tmp1_ = 1_c_int, k
           call closure1_(tmp1_, out(:, :, :, tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return
@@ -1546,4 +1554,3 @@
         UNPROTECT(2);
         return out;
       }
-
