@@ -411,9 +411,11 @@ seq_like_r2f <- function(
       integer_kind = "c_ptrdiff_t"
     )
     fr <- if (omit_step) {
-      glue("[ ({i}, {i} = {start}, {end}) ]")
+      glue("[ (int({i}, kind=c_int), {i} = {start}, {end}) ]")
     } else {
-      glue("[ ({i}, {i} = {start}, {end}, {step}) ]")
+      glue(
+        "[ (int({i}, kind=c_int), {i} = {start}, {end}, {step}) ]"
+      )
     }
   }
 
