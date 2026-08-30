@@ -187,11 +187,19 @@ test_that("short-circuited right operands defer mode errors", {
   reached_or <- function() {
     FALSE || (1L & 1L)
   }
+  skipped_comparison <- function() {
+    FALSE && ((1L & 1L) == FALSE)
+  }
+  reached_comparison <- function() {
+    TRUE && ((1L & 1L) == FALSE)
+  }
 
   expect_quick_identical(skipped_and, list())
   expect_quick_identical(skipped_or, list())
+  expect_quick_identical(skipped_comparison, list())
   expect_error(quick(reached_and)(), "requires logical operands")
   expect_error(quick(reached_or)(), "requires logical operands")
+  expect_error(quick(reached_comparison)(), "requires logical operands")
 })
 
 test_that("short-circuiting does not read absent optional arguments", {
@@ -286,6 +294,20 @@ test_that("short-circuited operators defer arity errors", {
     qfn <- quick(reached)
     expect_error(qfn())
   }
+
+  bad_comparison <- as.call(list(as.name("==")))
+  skipped_nested <- function() NULL
+  body(skipped_nested) <- call(
+    "{",
+    call("&&", FALSE, call("&&", TRUE, bad_comparison))
+  )
+  reached_nested <- function() NULL
+  body(reached_nested) <- call(
+    "{",
+    call("&&", TRUE, call("&&", TRUE, bad_comparison))
+  )
+  expect_identical(quick(skipped_nested)(), FALSE)
+  expect_error(quick(reached_nested)(), "requires exactly two arguments")
 
   reached_with_effects <- function() {
     TRUE && ((runif(1) > 0) & abs())
