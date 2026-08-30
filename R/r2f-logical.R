@@ -431,7 +431,12 @@ lazy_builtin_arities <- list(
   Im = 1L,
   Mod = 1L,
   Arg = 1L,
-  Conj = 1L
+  Conj = 1L,
+  as.double = 1L,
+  as.integer = 1L,
+  is.null = 1L,
+  rev = 1L,
+  t = 1L
 )
 
 lazy_builtin_arity_error <- function(e, scope, recursive = TRUE) {
