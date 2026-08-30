@@ -33,7 +33,7 @@ register_r2f_handler(
     )
 
     reduce_arg <- function(arg) {
-      captured_hoist <- hoist$capture()
+      captured_hoist <- capture_hoist(hoist)
       mask_hoist <- create_mask_hoist()
       # Nested reductions (e.g., min(max(...), ...)) can thread an existing
       # hoist_mask through `...`. We always want a single mask hoister per

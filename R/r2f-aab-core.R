@@ -139,6 +139,18 @@ new_hoist <- function(scope) {
   )
 }
 
+capture_hoist <- function(hoist) {
+  stopifnot(inherits(hoist, "environment"))
+  captured_hoist <- hoist$capture()
+  captured_hoist$defer_static_shape_error <- isTRUE(
+    hoist$defer_static_shape_error
+  )
+  captured_hoist$defer_builtin_arity_error <- isTRUE(
+    hoist$defer_builtin_arity_error
+  )
+  captured_hoist
+}
+
 # Hoist `x` into a temporary variable unless it already renders as a bare
 # variable name or a literal constant. Use this whenever the same operand is
 # spliced into generated code more than once: Fortran evaluates intrinsic
@@ -214,13 +226,7 @@ lower_r2f_operand_in_order <- function(arg, scope, ..., hoist) {
     return(r2f(arg, scope, ..., hoist = hoist))
   }
 
-  captured_hoist <- hoist$capture()
-  captured_hoist$defer_static_shape_error <- isTRUE(
-    hoist$defer_static_shape_error
-  )
-  captured_hoist$defer_builtin_arity_error <- isTRUE(
-    hoist$defer_builtin_arity_error
-  )
+  captured_hoist <- capture_hoist(hoist)
   operand <- r2f(arg, scope, ..., hoist = captured_hoist)
   finish_captured_operand(operand, captured_hoist, hoist)
 }
