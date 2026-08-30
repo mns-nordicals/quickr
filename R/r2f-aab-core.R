@@ -391,6 +391,9 @@ r2f_expression_host_mutations <- function(e, scope, seen = character()) {
   }
 
   callable <- e[[1L]]
+  while (is_call(callable, quote(`(`)) && length(callable) == 2L) {
+    callable <- callable[[2L]]
+  }
   op <- if (is.symbol(callable)) as.character(callable) else NULL
   if (identical(op, "function")) {
     return(character())
