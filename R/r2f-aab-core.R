@@ -385,9 +385,28 @@ snapshot_operand_before_later_effects <- function(
   )
 }
 
-r2f_expression_host_mutations <- function(e, scope, seen = character()) {
+r2f_expression_host_mutations <- function(
+  e,
+  scope,
+  seen = character(),
+  local_functions = list()
+) {
   if (!is.call(e)) {
     return(character())
+  }
+
+  if (is_call(e, quote(`{`))) {
+    for (child in as.list(e)[-1L]) {
+      child <- unwrap_parens(child)
+      if (
+        (is_call(child, quote(`<-`)) || is_call(child, quote(`=`))) &&
+          length(child) == 3L &&
+          is.symbol(child[[2L]]) &&
+          is_function_call(child[[3L]])
+      ) {
+        local_functions[[as.character(child[[2L]])]] <- child[[3L]]
+      }
+    }
   }
 
   callable <- e[[1L]]
@@ -423,9 +442,37 @@ r2f_expression_host_mutations <- function(e, scope, seen = character()) {
         r2f_expression_host_mutations(
           body(closure_obj@fun),
           scope,
-          seen = c(seen, op)
+          seen = c(seen, op),
+          local_functions = local_functions
         )
       )
+    }
+    if (identical(op, "sapply") && length(e) >= 3L) {
+      fun_expr <- unwrap_parens(e[[3L]])
+      fun_body <- NULL
+      if (is_function_call(fun_expr)) {
+        fun_body <- fun_expr[[3L]]
+      } else if (is.symbol(fun_expr)) {
+        fun_name <- as.character(fun_expr)
+        fun_definition <- local_functions[[fun_name]]
+        fun_obj <- scope[[fun_name]]
+        if (is_function_call(fun_definition)) {
+          fun_body <- fun_definition[[3L]]
+        } else if (inherits(fun_obj, LocalClosure)) {
+          fun_body <- body(fun_obj@fun)
+        }
+      }
+      if (!is.null(fun_body)) {
+        mutations <- c(
+          mutations,
+          r2f_expression_host_mutations(
+            fun_body,
+            scope,
+            seen,
+            local_functions
+          )
+        )
+      }
     }
   } else if (
     is.call(callable) &&
@@ -433,7 +480,12 @@ r2f_expression_host_mutations <- function(e, scope, seen = character()) {
   ) {
     mutations <- c(
       mutations,
-      r2f_expression_host_mutations(callable[[3L]], scope, seen)
+      r2f_expression_host_mutations(
+        callable[[3L]],
+        scope,
+        seen,
+        local_functions
+      )
     )
   }
 
@@ -441,7 +493,13 @@ r2f_expression_host_mutations <- function(e, scope, seen = character()) {
   if (length(children)) {
     mutations <- c(
       mutations,
-      unlist(lapply(children, r2f_expression_host_mutations, scope, seen))
+      unlist(lapply(
+        children,
+        r2f_expression_host_mutations,
+        scope = scope,
+        seen = seen,
+        local_functions = local_functions
+      ))
     )
   }
   unique(mutations)

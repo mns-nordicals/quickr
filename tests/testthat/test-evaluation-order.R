@@ -91,3 +91,36 @@ test_that("parenthesized closure effects preserve earlier operands", {
 
   expect_quick_identical(fn, list(1))
 })
+
+test_that("sapply closure effects preserve earlier operands", {
+  fn <- function(x) {
+    declare(type(x = double(1)))
+    mutate <- function() {
+      out <- double(1)
+      out <- sapply(seq_len(1L), function(i) {
+        x <<- x + 1
+        x
+      })
+      out[1L]
+    }
+    c(x, mutate())
+  }
+
+  expect_quick_identical(fn, list(1))
+
+  named_fun <- function(x) {
+    declare(type(x = double(1)))
+    mutate <- function() {
+      out <- double(1)
+      bump <- function(i) {
+        x <<- x + 1
+        x
+      }
+      out <- sapply(seq_len(1L), bump)
+      out[1L]
+    }
+    c(x, mutate())
+  }
+
+  expect_quick_identical(named_fun, list(1))
+})
