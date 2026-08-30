@@ -305,9 +305,20 @@ test_that("short-circuited fixed-arity calls defer arity errors", {
     "Conj",
     "as.double",
     "as.integer",
+    "cat",
+    "dim",
+    "drop",
     "is.null",
+    "length",
+    "ncol",
+    "nrow",
+    "print",
     "rev",
-    "t"
+    "seq_along",
+    "seq_len",
+    "t",
+    "which.max",
+    "which.min"
   )
   bad_calls <- lapply(unary_calls, \(op) as.call(list(as.name(op))))
   skipped <- function() NULL
