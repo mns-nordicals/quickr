@@ -2,8 +2,6 @@
 # variable to R's new shape, so rank and every extent must stay
 # compatible (the shape analogue of the narrowing check).
 
-skip_on_cran()
-
 test_that("reassignment to a statically different shape is a compile error", {
   fn_vec <- function() {
     x <- numeric(2)
