@@ -144,13 +144,13 @@ test_that("reused BLAS locals are allocated on every reachable path", {
   fn <- function(a, b, flag) {
     declare(
       type(a = double(n, k)),
-      type(b = double(k, p)),
+      type(b = double(k, n)),
       type(flag = logical(1))
     )
     if (flag) {
       out <- a %*% b
     }
-    out <- a %*% b
+    out <- crossprod(b)
     sum(out)
   }
 
@@ -348,22 +348,28 @@ test_that("triangular solve guards squareness and RHS length", {
 
 test_that("LAPACK solves reject zero-sized outputs before library calls", {
   solve_fn <- function(a, b) {
-    declare(type(a = double(n, n)), type(b = double(n)))
+    declare(type(a = double(n, n)), type(b = double(n, p)))
     solve(a, b)
   }
   forward_fn <- function(a, b) {
-    declare(type(a = double(n, n)), type(b = double(n)))
+    declare(type(a = double(n, n)), type(b = double(n, p)))
     forwardsolve(a, b)
   }
   back_fn <- function(a, b) {
-    declare(type(a = double(n, n)), type(b = double(n)))
+    declare(type(a = double(n, n)), type(b = double(n, p)))
     backsolve(a, b)
   }
 
   a <- matrix(numeric(), 0, 0)
   for (fn in list(solve_fn, forward_fn, back_fn)) {
+    qfn <- quick(fn)
     expect_error(
-      quick(fn)(a, numeric()),
+      qfn(a, matrix(numeric(), 0, 1)),
+      "zero-sized outputs are not supported",
+      fixed = TRUE
+    )
+    expect_error(
+      qfn(diag(2), matrix(numeric(), 2, 0)),
       "zero-sized outputs are not supported",
       fixed = TRUE
     )
