@@ -163,7 +163,9 @@ make_c_bridge <- function(
 
   c_args <- paste("SEXP", names(formals(closure)), collapse = ", ")
   needs_rmath <- any(grepl("R_pow(", c_body, fixed = TRUE))
+  uses_modulo <- any(grepl("quickr_modulo(", c_body, fixed = TRUE))
   needs_math <- any(grepl("floor(", c_body, fixed = TRUE)) ||
+    uses_modulo ||
     any(grepl("fmod(", c_body, fixed = TRUE))
   c_body <- as_glue(str_flatten_lines(c_body))
 
@@ -182,8 +184,27 @@ make_c_bridge <- function(
     ""
   )
 
+  modulo_helper <- if (uses_modulo) {
+    str_flatten_lines(
+      "#ifndef QUICKR_MODULO_DEFINED",
+      "#define QUICKR_MODULO_DEFINED",
+      "static double quickr_modulo(double x, double y) {",
+      indent(c(
+        "double remainder = fmod(x, y);",
+        "if (remainder != 0.0 && ((remainder < 0.0) != (y < 0.0))) {",
+        indent("remainder += y;"),
+        "}",
+        "return remainder;"
+      )),
+      "}",
+      "#endif"
+    )
+  }
+
   as_glue(str_flatten_lines(c(
     if (headers) c_headers,
+    modulo_helper,
+    if (uses_modulo) "",
     fsub_extern_decl,
     "",
     c_func_def
@@ -708,10 +729,7 @@ dims2c_expr <- function(
       `*` = glue("({e1} * {e2})"),
       `/` = glue("((double)({e1}) / (double)({e2}))"),
       `%/%` = glue("floor((double)({e1}) / (double)({e2}))"),
-      `%%` = glue(
-        "fmod(fmod((double)({e1}), (double)({e2})) + ",
-        "(double)({e2}), (double)({e2}))"
-      ),
+      `%%` = glue("quickr_modulo((double)({e1}), (double)({e2}))"),
       `^` = glue("R_pow((double)({e1}), (double)({e2}))")
     ))
   }
