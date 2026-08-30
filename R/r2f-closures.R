@@ -453,7 +453,8 @@ compile_internal_subroutine <- function(
     code = proc_code,
     captures = character(),
     res = res_name,
-    res_var = res_var
+    res_var = res_var,
+    uses_rng = scope_uses_rng(proc_scope)
   )
 }
 
@@ -1375,6 +1376,9 @@ compile_sapply_assignment <- function(
     scope[[out_name]] <- out_var
   }
 
+  if (!is.null(parallel) && isTRUE(proc$uses_rng)) {
+    stop("runif() is not supported inside parallel loops", call. = FALSE)
+  }
   scope_add_internal_proc(scope_root(scope), proc)
 
   out_target <- out_name

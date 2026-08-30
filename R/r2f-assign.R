@@ -242,6 +242,7 @@ register_r2f_handler(
         error = function(e) NULL
       )
       scope[[name]] <- var
+      register_openmp_private(scope, var@name)
     } else {
       # The var already exists, this assignment is a modification / reassignment
       if (is.null(var@r_name)) {

@@ -54,6 +54,21 @@ openmp_private_vars <- function(scope) {
   scope_get(scope, "openmp_private_vars", character())
 }
 
+openmp_scope_uses_rng <- function(scope) {
+  if (!inherits(scope, "quickr_scope")) {
+    return(FALSE)
+  }
+  isTRUE(scope_get(scope, "openmp_uses_rng", FALSE))
+}
+
+mark_openmp_scope_uses_rng <- function(scope) {
+  stopifnot(inherits(scope, "quickr_scope"))
+  if (scope_in_openmp(scope)) {
+    scope_set(scope, "openmp_uses_rng", TRUE)
+  }
+  invisible(scope)
+}
+
 register_openmp_private <- function(scope, name) {
   stopifnot(inherits(scope, "quickr_scope"), is_string(name))
   if (!scope_in_openmp(scope)) {
@@ -83,11 +98,13 @@ enter_openmp_scope <- function(scope) {
   }
   previous <- list(
     depth = scope_get(scope, "openmp_depth"),
-    private_vars = scope_get(scope, "openmp_private_vars")
+    private_vars = scope_get(scope, "openmp_private_vars"),
+    uses_rng = scope_get(scope, "openmp_uses_rng")
   )
   depth <- scope_openmp_depth(scope)
   scope_set(scope, "openmp_depth", depth + 1L)
   scope_set(scope, "openmp_private_vars", character())
+  scope_set(scope, "openmp_uses_rng", FALSE)
   previous
 }
 
@@ -102,6 +119,7 @@ exit_openmp_scope <- function(scope, previous) {
     scope_set(scope, "openmp_depth", as.integer(previous_depth))
   }
   scope_set(scope, "openmp_private_vars", previous$private_vars)
+  scope_set(scope, "openmp_uses_rng", previous$uses_rng)
   invisible(TRUE)
 }
 

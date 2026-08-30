@@ -117,6 +117,9 @@ compile_for_body <- function(body, scope, ..., parallel, private = NULL) {
   }
   body <- r2f(body, scope, ..., hoist = NULL)
   check_pending_parallel_consumed(scope)
+  if (!is.null(parallel) && openmp_scope_uses_rng(scope)) {
+    stop("runif() is not supported inside parallel loops", call. = FALSE)
+  }
 
   directives <- openmp_directives(
     parallel,

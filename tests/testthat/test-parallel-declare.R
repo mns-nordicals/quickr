@@ -239,3 +239,24 @@ test_that("openmp functions that use BLAS load and run", {
   x <- matrix(runif(16), nrow = 4)
   expect_quick_equal(blas_parallel, list(x, 4L))
 })
+
+test_that("parallel loops isolate body-local scratch bindings", {
+  skip_if_no_openmp()
+
+  fn <- function(x, n, out) {
+    declare(
+      type(x = double(n)),
+      type(n = integer(1)),
+      type(out = double(n))
+    )
+    declare(parallel())
+    for (i in seq_len(n)) {
+      scratch <- x[i] * 2
+      out[i] <- scratch + 1
+    }
+    out
+  }
+
+  x <- as.double(seq_len(10000L))
+  expect_quick_identical(fn, list(x, length(x), double(length(x))))
+})

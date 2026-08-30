@@ -302,6 +302,9 @@ seq_like_r2f <- function(
       if (is_scalar_na(len_expr)) {
         len_expr <- NA_integer_
       }
+      if (is_scalar_integerish(len_expr) && as.integer(len_expr) < 0L) {
+        stop("seq_len() bound must be non-negative", call. = FALSE)
+      }
       list(
         from = Fortran("1", Variable("integer")),
         to = n,
@@ -336,6 +339,24 @@ seq_like_r2f <- function(
   context <- context %||% r2f_iterable_context(list(...)$calls)
   if (is.null(context)) {
     context <- "value"
+  }
+
+  if (kind == "seq_len" && context == "for") {
+    n_r <- attr(to, "r", exact = TRUE)
+    known_nonnegative <- is.atomic(n_r) &&
+      length(n_r) == 1L &&
+      !is.na(n_r) &&
+      n_r >= 0
+    if (!known_nonnegative) {
+      hoist <- list(...)$hoist
+      to <- hoist_unless_name(to, hoist)
+      emit_quickr_error_if(
+        glue("{to} < 0"),
+        "seq_len() bound must be non-negative",
+        hoist,
+        scope
+      )
+    }
   }
 
   check_step_at_runtime <- kind == "seq" &&

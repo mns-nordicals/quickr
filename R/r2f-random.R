@@ -5,6 +5,7 @@
 
 r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   scope_mark_uses_rng(scope)
+  mark_openmp_scope_uses_rng(scope)
 
   dims <- r2dims(args$n, scope)
   n <- dims[[1L]]
