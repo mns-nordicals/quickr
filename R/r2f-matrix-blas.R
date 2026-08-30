@@ -64,21 +64,7 @@ assert_rhs_rank <- function(
 # BLAS/LAPACK dimensions use equality semantics: equal zero contracted
 # dimensions are conformable and can still produce a non-empty result.
 check_blas_dims <- function(left, right) {
-  if (is_wholenumber(left) && is_wholenumber(right)) {
-    return(list(
-      ok = identical(as.integer(left), as.integer(right)),
-      unknown = FALSE,
-      reject_zero = FALSE
-    ))
-  }
-  if (!is_scalar_na(left) && !is_scalar_na(right)) {
-    left_norm <- fortranize_expr_symbols(left)
-    right_norm <- fortranize_expr_symbols(right)
-    if (identical(left_norm, right_norm)) {
-      return(list(ok = TRUE, unknown = FALSE, reject_zero = FALSE))
-    }
-  }
-  list(ok = TRUE, unknown = TRUE, reject_zero = FALSE)
+  check_equal_dims(left, right)
 }
 
 # Return the R symbol name if operand is a bare symbol; otherwise NULL.
@@ -749,12 +735,13 @@ triangular_solve <- function(
       allow_alias = B_input_name
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     hoist$emit(glue("{dest@name} = {B}"))
     B_name <- dest@name
     out_var <- dest
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(
+    out_var <- hoist$declare_tmp_at_point(
       mode = B@value@mode %||% "double",
       dims = B@value@dims
     )
@@ -899,10 +886,13 @@ lapack_solve <- function(
       scope = scope
     )
   } else {
-    A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
+    A_work <- hoist$declare_tmp_at_point(mode = "double", dims = list(m, n))
     hoist$emit(glue("{A_work@name} = {A_name}"))
 
-    B_work <- hoist$declare_tmp(mode = "double", dims = list(m, nrhs))
+    B_work <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(m, nrhs)
+    )
     m_f <- dims2f(list(m), scope)
     if (!nzchar(m_f)) {
       m_f <- "1"
@@ -918,9 +908,9 @@ lapack_solve <- function(
       hoist$emit(glue("{B_work@name}(1:{m_f}, 1:{nrhs_f}) = {B_input_name}"))
     }
 
-    qraux <- hoist$declare_tmp(mode = "double", dims = list(n))
-    jpvt <- hoist$declare_tmp(mode = "integer", dims = list(n))
-    work <- hoist$declare_tmp(mode = "double", dims = list(n, 2L))
+    qraux <- hoist$declare_tmp_at_point(mode = "double", dims = list(n))
+    jpvt <- hoist$declare_tmp_at_point(mode = "integer", dims = list(n))
+    work <- hoist$declare_tmp_at_point(mode = "double", dims = list(n, 2L))
     rank <- hoist$declare_tmp(mode = "integer", dims = NULL)
     idx <- hoist$declare_tmp(mode = "integer", dims = NULL)
 
@@ -944,7 +934,7 @@ end do"
       scope = scope
     )
 
-    coef_work <- hoist$declare_tmp(
+    coef_work <- hoist$declare_tmp_at_point(
       mode = "double",
       dims = list(mn, nrhs)
     )
@@ -963,9 +953,10 @@ end do"
 
     use_dest <- dest_usable()
     out_var <- if (use_dest) {
+      allocate_reusable_local_output_at_point(dest, scope, hoist)
       dest
     } else {
-      hoist$declare_tmp(mode = "double", dims = expected_dims)
+      hoist$declare_tmp_at_point(mode = "double", dims = expected_dims)
     }
     out_name <- out_var@name
 
