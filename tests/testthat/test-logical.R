@@ -384,6 +384,37 @@ test_that("short-circuited local closure diagnostics are deferred", {
   expect_error(qbody(), "is only supported on symbols")
 })
 
+test_that("short-circuited fixed-arity handlers defer arity errors", {
+  arities <- c(
+    `$` = "exactly two",
+    array = "two or three",
+    chol2inv = "exactly one",
+    ifelse = "exactly three",
+    rep.int = "exactly two"
+  )
+  bad_calls <- lapply(names(arities), \(op) as.call(list(as.name(op))))
+
+  for (i in seq_along(bad_calls)) {
+    bad_call <- bad_calls[[i]]
+    skipped <- function() NULL
+    body(skipped) <- call("{", call("&&", FALSE, bad_call))
+    reached <- function() NULL
+    body(reached) <- call("{", call("&&", TRUE, bad_call))
+
+    expect_identical(skipped(), FALSE)
+    expect_identical(quick(skipped)(), FALSE)
+    expect_error(
+      quick(reached)(),
+      paste0("requires ", arities[[i]], " argument")
+    )
+  }
+
+  explicit_null_array <- function() {
+    sum(array(1L, dim = 1L, dimnames = NULL))
+  }
+  expect_quick_identical(explicit_null_array, list())
+})
+
 test_that("short-circuited operators defer arity errors", {
   bad_calls <- lapply(
     c(
@@ -475,6 +506,54 @@ test_that("short-circuited elementwise shape errors are deferred", {
   runif(2)
   runif(3)
   expect_identical(actual_seed, .Random.seed)
+})
+
+test_that("short-circuited complex refusals are deferred", {
+  skipped_modulo <- function(z) {
+    declare(type(z = complex(1)))
+    FALSE && ((z %% z) == z)
+  }
+  reached_modulo <- function(z) {
+    declare(type(z = complex(1)))
+    TRUE && ((z %% z) == z)
+  }
+  skipped_matmul <- function(z) {
+    declare(type(z = complex(1, 1)))
+    FALSE && ((z %*% z) == 0i)
+  }
+  reached_matmul <- function(z) {
+    declare(type(z = complex(1, 1)))
+    TRUE && ((z %*% z) == 0i)
+  }
+
+  expect_quick_identical(skipped_modulo, list(1 + 1i))
+  expect_error(quick(reached_modulo)(1 + 1i), "unimplemented complex operation")
+  z <- matrix(1 + 1i, 1L, 1L)
+  expect_quick_identical(skipped_matmul, list(z))
+  expect_error(
+    quick(reached_matmul)(z),
+    "linear algebra in quickr is double-only"
+  )
+})
+
+test_that("lazy multi-argument reductions defer operand errors", {
+  skipped_and <- function() {
+    FALSE && (sum(logical(2) & logical(3), 1L) > 0)
+  }
+  reached_and <- function() {
+    TRUE && (sum(logical(2) & logical(3), 1L) > 0)
+  }
+  skipped_ifelse <- function() {
+    ifelse(FALSE, sum(logical(2) & logical(3), 1L) > 0, TRUE)
+  }
+  reached_ifelse <- function() {
+    ifelse(TRUE, sum(logical(2) & logical(3), 1L) > 0, TRUE)
+  }
+
+  expect_quick_identical(skipped_and, list())
+  expect_error(quick(reached_and)(), "elementwise vector operations")
+  expect_quick_identical(skipped_ifelse, list())
+  expect_error(quick(reached_ifelse)(), "elementwise vector operations")
 })
 
 test_that("short-circuited BLAS shape errors are deferred", {

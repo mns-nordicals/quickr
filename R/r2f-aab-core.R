@@ -267,6 +267,20 @@ finish_captured_operand <- function(operand, captured_hoist, hoist) {
   operand
 }
 
+capture_inheriting_deferred_errors <- function(hoist) {
+  captured_hoist <- hoist$capture()
+  captured_hoist$defer_static_shape_error <- isTRUE(
+    hoist$defer_static_shape_error
+  )
+  captured_hoist$defer_builtin_arity_error <- isTRUE(
+    hoist$defer_builtin_arity_error
+  )
+  captured_hoist$defer_static_mode_error <- isTRUE(
+    hoist$defer_static_mode_error
+  )
+  captured_hoist
+}
+
 lower_r2f_operand_in_order <- function(
   arg,
   scope,
@@ -283,16 +297,7 @@ lower_r2f_operand_in_order <- function(
     return(r2f(arg, scope, ..., hoist = hoist))
   }
 
-  captured_hoist <- hoist$capture()
-  captured_hoist$defer_static_shape_error <- isTRUE(
-    hoist$defer_static_shape_error
-  )
-  captured_hoist$defer_builtin_arity_error <- isTRUE(
-    hoist$defer_builtin_arity_error
-  )
-  captured_hoist$defer_static_mode_error <- isTRUE(
-    hoist$defer_static_mode_error
-  )
+  captured_hoist <- capture_inheriting_deferred_errors(hoist)
   operand <- r2f(arg, scope, ..., hoist = captured_hoist)
   if (reject_runtime_guard && captured_hoist$contains_runtime_guard()) {
     stop(runtime_guard_message, call. = FALSE)
