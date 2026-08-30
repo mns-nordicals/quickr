@@ -367,6 +367,23 @@ test_that("short-circuited elementwise shape errors are deferred", {
   expect_identical(actual_seed, .Random.seed)
 })
 
+test_that("short-circuited BLAS shape errors are deferred", {
+  skipped <- function(a, b) {
+    declare(type(a = double(2, 3)), type(b = double(4, 2)))
+    FALSE && (sum(a %*% b) > 0)
+  }
+  reached <- function(a, b) {
+    declare(type(a = double(2, 3)), type(b = double(4, 2)))
+    TRUE && (sum(a %*% b) > 0)
+  }
+
+  a <- matrix(as.double(1:6), 2, 3)
+  b <- matrix(as.double(1:8), 4, 2)
+  expect_quick_identical(skipped, list(a, b))
+  qfn <- quick(reached)
+  expect_error(qfn(a, b), "non-conformable arguments in %*%", fixed = TRUE)
+})
+
 test_that("&& and || accept one-element matrices", {
   matrix_and <- function(x, y) {
     declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
