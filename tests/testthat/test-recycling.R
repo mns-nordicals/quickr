@@ -583,6 +583,34 @@ test_that("matrix(scalar, m, n) materializes where an array is required", {
   expect_quick_identical(transposed, list())
 })
 
+test_that("matrix() rejects negative extents before materializing", {
+  static <- function() {
+    sum(matrix(1, -1L, 2L))
+  }
+  dynamic <- function(n, k) {
+    declare(type(n = integer(1)), type(k = integer(1)))
+    sum(matrix(1, n, k))
+  }
+
+  expect_error(
+    quick(static),
+    "matrix() dimensions must be non-negative",
+    fixed = TRUE
+  )
+  qdynamic <- quick(dynamic)
+  expect_error(
+    qdynamic(-1L, 2L),
+    "matrix() dimensions must be non-negative",
+    fixed = TRUE
+  )
+  expect_error(
+    qdynamic(2L, -1L),
+    "matrix() dimensions must be non-negative",
+    fixed = TRUE
+  )
+  expect_quick_identical(dynamic, list(2L, 3L))
+})
+
 test_that("matrix() materializes direct non-scalar fill constructors", {
   fn <- function() {
     matrix(numeric(2), 2, 2)

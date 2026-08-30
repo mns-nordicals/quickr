@@ -36,19 +36,56 @@ parent_call_name <- function(calls) {
 # Materialize `code` into a hoisted temporary and return the temporary.
 # `hoist` is always available in a handler: r2f() opens one per statement
 # before dispatching, and the constructor handlers forward what they got.
-materialize_via_hoist <- function(code, mode, dims, hoist) {
-  stopifnot(is.environment(hoist))
+materialize_via_hoist <- function(
+  code,
+  mode,
+  dims,
+  hoist,
+  allocate_at_point = FALSE
+) {
+  stopifnot(is.environment(hoist), is_bool(allocate_at_point))
   logical_storage <- inherits(code, Fortran) &&
     inherits(code@value, Variable) &&
     logical_as_int(code@value) &&
     !isTRUE(code@logical_booleanized)
-  tmp <- hoist$declare_tmp(
+  declare_tmp <- if (allocate_at_point) {
+    hoist$declare_tmp_at_point
+  } else {
+    hoist$declare_tmp
+  }
+  tmp <- declare_tmp(
     mode = mode,
     dims = dims,
     logical_as_int = logical_storage
   )
   hoist$emit(glue("{tmp@name} = {code}"))
   Fortran(tmp@name, tmp)
+}
+
+guard_matrix_dims <- function(dims, hoist, scope) {
+  stopifnot(is.list(dims))
+  message <- "matrix() dimensions must be non-negative"
+  for (dim in dims) {
+    if (is_scalar_integerish(dim)) {
+      if (dim < 0) {
+        stop(message, call. = FALSE)
+      }
+      next
+    }
+    if (is_scalar_na(dim)) {
+      next
+    }
+    dim_f <- dims2f(list(dim), scope)
+    if (nzchar(dim_f) && !grepl(":", dim_f, fixed = TRUE)) {
+      emit_quickr_error_if(
+        glue("{dim_f} < 0"),
+        message,
+        hoist,
+        scope
+      )
+    }
+  }
+  invisible()
 }
 
 # --- Handlers ---
@@ -302,6 +339,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   src <- r2f(args$data, scope, ..., hoist = hoist)
   dims <- r2dims(list(args$nrow, args$ncol), scope)
+  guard_matrix_dims(dims, hoist, scope)
   out_val <- Variable(mode = src@value@mode, dims = dims)
 
   # A scalar broadcasts natively on direct whole-array assignment, so keep
@@ -312,7 +350,13 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       src@value <- out_val
       return(src)
     }
-    return(materialize_via_hoist(src, src@value@mode, dims, hoist))
+    return(materialize_via_hoist(
+      src,
+      src@value@mode,
+      dims,
+      hoist,
+      allocate_at_point = TRUE
+    ))
   }
 
   rows <- dims[[1L]]
