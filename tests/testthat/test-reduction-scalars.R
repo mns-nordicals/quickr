@@ -79,7 +79,7 @@ test_that("multi-argument reductions preserve evaluation order", {
       x <<- x + 1
       0
     }
-    sum(x, bump())
+    sum(x, ((bump))())
   }
   expect_quick_identical(mutating, list(1))
 })
