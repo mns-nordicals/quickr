@@ -221,3 +221,28 @@ test_that("ifelse allocates impure branch temporaries only when selected", {
     expect_identical(actual_seed, expected_seed)
   }
 })
+
+test_that("ifelse point-allocates named impure branch temporaries", {
+  fn <- function(test, x) {
+    declare(type(test = logical(k, k)), type(x = double(n, k)))
+    ifelse(test, crossprod(x), 0)
+  }
+
+  code <- strsplit(as.character(r2f(fn)), "\n", fixed = TRUE)[[1L]]
+  branch_line <- grep("if (any(", code, fixed = TRUE)[[1L]]
+  where_line <- grep("^ *where .* = [[:alnum:]_]+$", code)[[1L]]
+  branch_name <- sub(".* = ([[:alnum:]_]+)$", "\\1", code[[where_line]])
+  allocation_line <- grep(
+    paste0("allocate(", branch_name, "("),
+    code,
+    fixed = TRUE
+  )
+  expect_length(allocation_line, 1L)
+  expect_lt(branch_line, allocation_line)
+
+  x <- matrix(as.double(1:6), 3, 2)
+  qfn <- quick(fn)
+  for (test in list(matrix(FALSE, 2, 2), matrix(TRUE, 2, 2))) {
+    expect_equal(qfn(test, x), fn(test, x))
+  }
+})
