@@ -374,6 +374,23 @@ r2dims <- function(r, scope) {
   lapply(r, r2size, scope)
 }
 
+size_expr_is_known_nonnegative <- function(x) {
+  if (is_scalar_integerish(x)) {
+    return(as.integer(x) >= 0L)
+  }
+  if (is_size_name(x)) {
+    return(TRUE)
+  }
+  if (!is.call(x) || !identical(x[[1L]], quote(`*`))) {
+    return(FALSE)
+  }
+  all(vapply(
+    as.list(x)[-1L],
+    size_expr_is_known_nonnegative,
+    logical(1L)
+  ))
+}
+
 get_size_name <- function(var, axis = NULL, name = var@name, rank = var@rank) {
   stopifnot(is.null(axis) || is_wholenumber(axis) && axis > 0)
   if (is.null(axis) || rank == 1 && axis == 1) {
