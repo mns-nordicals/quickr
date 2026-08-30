@@ -1,5 +1,3 @@
-skip_on_cran()
-
 test_that("min handles scalar arguments without reduction", {
   fn <- function(a, b, m) {
     declare(
