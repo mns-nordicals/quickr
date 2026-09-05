@@ -581,12 +581,15 @@ closure_free_names <- function(expr) {
       return(invisible(NULL))
     }
     if (
-      (is_call(e, "<-") || is_call(e, "=") || is_call(e, "<<-")) &&
+      (is_call(e, "<-") || is_call(e, "=")) &&
         length(e) == 3L &&
         is.symbol(e[[2L]])
     ) {
       bound <<- union(bound, as.character(e[[2L]]))
     }
+    # A `<<-` target is the host binding, not a binding of this closure, so it
+    # stays a capture: the closure may read it, and quickr writes through to
+    # the enclosing variable either way.
     if (is_call(e, "for") && length(e) == 4L) {
       bound <<- union(bound, as.character(e[[2L]]))
     }

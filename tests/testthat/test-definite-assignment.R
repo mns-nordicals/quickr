@@ -135,6 +135,20 @@ test_that("closure captures require initialization where the closure is used", {
     out
   }
   expect_error(quick(fn), "may be uninitialized")
+
+  # A superassignment target is the host binding, not a closure local.
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    f <- function() {
+      x <<- x + 1L
+      x
+    }
+    f()
+  }
+  expect_error(quick(fn), "may be uninitialized")
 })
 
 test_that("initialized captures keep compiling and returning R's result", {
@@ -161,4 +175,18 @@ test_that("initialized captures keep compiling and returning R's result", {
     out
   }
   expect_quick_identical(fn, list(TRUE, 3L), list(FALSE, 2L))
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    x <- 0L
+    if (flag) {
+      x <- 1L
+    }
+    f <- function() {
+      x <<- x + 1L
+      x
+    }
+    f()
+  }
+  expect_quick_identical(fn, TRUE, FALSE)
 })
