@@ -18,6 +18,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-block-scopes.R",
     "test-conformability-grid.R",
     "test-declare-type.R",
+    "test-definite-assignment.R",
     "test-drop.R",
     "test-errors.R",
     "test-evaluation-order.R",

@@ -408,3 +408,123 @@ register_r2f_handler(
 )
 
 register_r2f_handler("=", r2f_handlers[["<-"]])
+
+# A Fortran declaration does not establish an R binding. Check source-level
+# control flow before accepting reads of locals, including the final return.
+check_definite_assignment <- function(closure, scope, captured = character()) {
+  locals <- character()
+  collect <- function(expr) {
+    if (is_missing(expr) || !is.call(expr) || is_function_call(expr)) {
+      return(invisible(NULL))
+    }
+    if (
+      (is_call(expr, "<-") || is_call(expr, "=")) &&
+        length(expr) == 3L &&
+        is.symbol(expr[[2L]])
+    ) {
+      locals <<- union(locals, as.character(expr[[2L]]))
+    }
+    if (is_call(expr, "for") && length(expr) == 4L) {
+      locals <<- union(locals, as.character(expr[[2L]]))
+    }
+    if (!is_call(expr, "declare")) {
+      lapply(as.list(expr)[-1L], collect)
+    }
+    invisible(NULL)
+  }
+  collect(body(closure))
+
+  # NULL denotes a path that cannot reach the following statement.
+  join <- function(left, right) {
+    if (is.null(left)) {
+      return(right)
+    }
+    if (is.null(right)) {
+      return(left)
+    }
+    intersect(left, right)
+  }
+  walk <- function(expr, assigned) {
+    if (is.null(assigned) || is_missing(expr)) {
+      return(assigned)
+    }
+    if (is.symbol(expr)) {
+      name <- as.character(expr)
+      if (name %in% locals && !name %in% assigned) {
+        stop(
+          "local variable `",
+          name,
+          "` may be uninitialized; assign it before use on every path",
+          call. = FALSE
+        )
+      }
+      return(assigned)
+    }
+    if (!is.call(expr) || is_function_call(expr) || is_call(expr, "declare")) {
+      return(assigned)
+    }
+    if ((is_call(expr, "<-") || is_call(expr, "=")) && length(expr) == 3L) {
+      assigned <- walk(expr[[3L]], assigned)
+      if (is.null(assigned)) {
+        return(NULL)
+      }
+      if (is.symbol(expr[[2L]])) {
+        return(union(assigned, as.character(expr[[2L]])))
+      }
+      return(walk(expr[[2L]], assigned))
+    }
+    if (is_call(expr, "if") && length(expr) %in% c(3L, 4L)) {
+      assigned <- walk(expr[[2L]], assigned)
+      yes <- walk(expr[[3L]], assigned)
+      no <- if (length(expr) == 4L) walk(expr[[4L]], assigned) else assigned
+      return(join(yes, no))
+    }
+    if (is_call(expr, "for") && length(expr) == 4L) {
+      assigned <- walk(expr[[3L]], assigned)
+      iterator <- as.character(expr[[2L]])
+      after <- walk(expr[[4L]], union(assigned, iterator))
+      iterable <- unwrap_parens(expr[[3L]])
+      nonempty <- is_call(iterable, "seq_len") &&
+        length(iterable) == 2L &&
+        is_scalar_integerish(iterable[[2L]]) &&
+        iterable[[2L]] > 0L
+      if (is.symbol(iterable)) {
+        var <- get0(as.character(iterable), scope)
+        nonempty <- inherits(var, Variable) &&
+          all(vapply(var@dims, is_scalar_integerish, logical(1L))) &&
+          all(unlist(var@dims) > 0L)
+        if (nonempty) assigned <- union(assigned, iterator)
+      }
+      if (nonempty && !any(all.names(expr[[4L]]) %in% c("break", "next"))) {
+        return(union(assigned, setdiff(after, iterator)))
+      }
+      # The iterable may be empty; neither its variable nor body assignments
+      # establish bindings after the loop.
+      return(assigned)
+    }
+    if (is_call(expr, "while") && length(expr) == 3L) {
+      assigned <- walk(expr[[2L]], assigned)
+      walk(expr[[3L]], assigned)
+      return(assigned)
+    }
+    if (is_call(expr, "repeat") && length(expr) == 2L) {
+      walk(expr[[2L]], assigned)
+      # Conservatively require initialization before loops, including repeat:
+      # an earlier break/next can bypass an assignment in the body.
+      return(assigned)
+    }
+    if (is_call(expr, "break") || is_call(expr, "next")) {
+      return(NULL)
+    }
+    if ((is_call(expr, "&&") || is_call(expr, "||")) && length(expr) == 3L) {
+      assigned <- walk(expr[[2L]], assigned)
+      return(join(assigned, walk(expr[[3L]], assigned)))
+    }
+    for (arg in as.list(expr)[-1L]) {
+      assigned <- walk(arg, assigned)
+    }
+    assigned
+  }
+  walk(body(closure), union(names(formals(closure)), captured))
+  invisible(NULL)
+}

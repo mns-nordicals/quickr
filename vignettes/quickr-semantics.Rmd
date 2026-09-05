@@ -40,6 +40,14 @@ of these error messages differs from R's.
 The rest of this vignette is that contract in detail: first result
 *types*, then operand *shapes*, then the list of deliberate divergences.
 
+Local variables must be initialized before use on every control-flow path,
+including when they are returned. A binding created only in one arm of an
+`if` or inside a possibly empty loop is rejected if it is read afterward.
+Initialize it before the conditional or loop, or assign it in both arms of
+the `if`. This check is conservative: beyond statically nonempty iterables
+and literal positive `seq_len()` loops without `break` or `next`, it does
+not prove that a loop executes or that separate conditions imply one another.
+
 ## Types
 
 Value types follow R's promotion order for the supported atomic modes:

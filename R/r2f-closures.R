@@ -415,6 +415,11 @@ compile_internal_subroutine <- function(
     if (length(locals)) emit_decls(locals, proc_scope) else character()
   )
 
+  check_definite_assignment(
+    fun,
+    proc_scope,
+    captured = names(scope_vars(parent_scope))
+  )
   body_code <- str_flatten_lines(optional_inits, body_prefix, assign_code)
   used_iso_bindings <- iso_c_binding_symbols(
     vars = vars_declared,

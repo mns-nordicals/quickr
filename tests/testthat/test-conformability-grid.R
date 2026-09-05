@@ -121,7 +121,7 @@ grid_sym_ok_len <- function(partner) {
     3L
   }
 }
-make_grid_pair_fn <- function(sa, sb, family) {
+make_grid_pair_fn <- function(sa, sb, family, guard_only = FALSE) {
   decls <- c(
     vapply(
       names(grid_modes),
@@ -176,9 +176,11 @@ make_grid_pair_fn <- function(sa, sb, family) {
         stmts <- c(
           stmts,
           paste0(
-            "  if (grid_cell == 0L | grid_cell == ",
-            cell,
-            "L) ",
+            if (guard_only) {
+              paste0("  if (grid_cell == ", cell, "L) ")
+            } else {
+              "  "
+            },
             id,
             " <- ",
             expr
@@ -193,9 +195,15 @@ make_grid_pair_fn <- function(sa, sb, family) {
     paste(decls, collapse = ",\n    "),
     "\n  )\n",
     paste(stmts, collapse = "\n"),
-    "\n  list(\n    ",
-    paste(paste0(ids, " = ", ids), collapse = ",\n    "),
-    "\n  )\n}"
+    if (guard_only) {
+      "\n  grid_cell\n}"
+    } else {
+      paste0(
+        "\n  list(\n    ",
+        paste(paste0(ids, " = ", ids), collapse = ",\n    "),
+        "\n  )\n}"
+      )
+    }
   )
   fn <- eval(parse(text = src)[[1L]])
   attr(fn, "grid_cell_count") <- length(ids)
@@ -323,13 +331,21 @@ for (i in seq_along(grid_pair_names)) {
           }
 
           if (identical(verdict$outcome, "guard")) {
+            # Guard probes return only their initialized selector. Returning
+            # all results here would expose the unselected, unbound cells.
+            qguard <- quick(make_grid_pair_fn(
+              sa,
+              sb,
+              family,
+              guard_only = TRUE
+            ))
             bad_b <- if (identical(sb, "sym")) sym_b + 1L else sym_b
             bad_a <- if (identical(sb, "sym")) sym_a else sym_a + 1L
             args_bad <- grid_pair_args(sa, sb, family, "primary", bad_a, bad_b)
             for (grid_cell in seq_len(attr(fn, "grid_cell_count"))) {
               args_bad$grid_cell <- grid_cell
               expect_error(
-                do.call(qfn, args_bad),
+                do.call(qguard, args_bad),
                 verdict$guard_msg,
                 fixed = TRUE,
                 info = paste("guarded grid cell", grid_cell)
