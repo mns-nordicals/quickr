@@ -552,8 +552,16 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
       assigned <- walk(expr[[2L]], assigned)
       return(join(assigned, walk(expr[[3L]], assigned)))
     }
-    if (is.symbol(expr[[1L]])) {
-      read(as.character(expr[[1L]]), assigned)
+    # The callee may be parenthesized, as `maybe_lower_local_closure_call()`
+    # also allows, and is not visited by the argument walk below.
+    callee <- unwrap_parens(expr[[1L]])
+    if (is.symbol(callee)) {
+      read(as.character(callee), assigned)
+    } else {
+      assigned <- walk(callee, assigned)
+      if (is.null(assigned)) {
+        return(NULL)
+      }
     }
     for (arg in as.list(expr)[-1L]) {
       assigned <- walk(arg, assigned)

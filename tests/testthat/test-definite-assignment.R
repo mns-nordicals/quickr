@@ -149,6 +149,26 @@ test_that("closure captures require initialization where the closure is used", {
     f()
   }
   expect_error(quick(fn), "may be uninitialized")
+
+  # A parenthesized callee is a supported call form.
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    f <- function() x
+    (f)()
+  }
+  expect_error(quick(fn), "may be uninitialized")
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    (function() x)()
+  }
+  expect_error(quick(fn), "may be uninitialized")
 })
 
 test_that("initialized captures keep compiling and returning R's result", {
@@ -189,4 +209,12 @@ test_that("initialized captures keep compiling and returning R's result", {
     f()
   }
   expect_quick_identical(fn, TRUE, FALSE)
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    x <- 5L
+    f <- function() x
+    (f)()
+  }
+  expect_quick_identical(fn, TRUE)
 })
