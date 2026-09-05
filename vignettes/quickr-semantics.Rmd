@@ -47,6 +47,9 @@ Initialize it before the conditional or loop, or assign it in both arms of
 the `if`. This check is conservative: beyond statically nonempty iterables
 and literal positive `seq_len()` loops without `break` or `next`, it does
 not prove that a loop executes or that separate conditions imply one another.
+A local closure reads enclosing variables through Fortran host association,
+so the same requirement applies wherever the closure is reached: every
+enclosing variable it reads must already be initialized at that point.
 
 ## Types
 

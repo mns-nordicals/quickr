@@ -101,3 +101,64 @@ test_that("local closure returns require initialization", {
   }
   expect_error(quick(fn), "may be uninitialized")
 })
+
+test_that("closure captures require initialization where the closure is used", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    inner <- function() x
+    inner()
+  }
+  expect_error(quick(fn), "may be uninitialized")
+
+  fn <- function(flag, n) {
+    declare(type(flag = logical(1)), type(n = integer(1)))
+    out <- double(n)
+    if (flag) {
+      x <- 1
+    }
+    out <- sapply(seq_along(out), function(i) x)
+    out
+  }
+  expect_error(quick(fn), "may be uninitialized")
+
+  fn <- function(flag, n) {
+    declare(type(flag = logical(1)), type(n = integer(1)))
+    out <- double(n)
+    if (flag) {
+      x <- 1
+    }
+    f <- function(i) x
+    out <- sapply(seq_along(out), f)
+    out
+  }
+  expect_error(quick(fn), "may be uninitialized")
+})
+
+test_that("initialized captures keep compiling and returning R's result", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    } else {
+      x <- 2L
+    }
+    inner <- function() x
+    inner()
+  }
+  expect_quick_identical(fn, TRUE, FALSE)
+
+  fn <- function(flag, n) {
+    declare(type(flag = logical(1)), type(n = integer(1)))
+    out <- double(n)
+    x <- 0
+    if (flag) {
+      x <- 1
+    }
+    out <- sapply(seq_along(out), function(i) x + as.double(i))
+    out
+  }
+  expect_quick_identical(fn, list(TRUE, 3L), list(FALSE, 2L))
+})

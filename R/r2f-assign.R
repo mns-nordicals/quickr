@@ -413,6 +413,10 @@ register_r2f_handler("=", r2f_handlers[["<-"]])
 # control flow before accepting reads of locals, including the final return.
 check_definite_assignment <- function(closure, scope, captured = character()) {
   locals <- character()
+  # Names a local closure reads from the enclosing scope. A Fortran host
+  # association makes these readable regardless of the R control flow that
+  # created them, so they are checked wherever the closure is reached.
+  closure_captures <- list()
   collect <- function(expr) {
     if (is_missing(expr) || !is.call(expr) || is_function_call(expr)) {
       return(invisible(NULL))
@@ -444,26 +448,54 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     }
     intersect(left, right)
   }
+  require_assigned <- function(name, assigned) {
+    if (name %in% locals && !name %in% assigned) {
+      stop(
+        "local variable `",
+        name,
+        "` may be uninitialized; assign it before use on every path",
+        call. = FALSE
+      )
+    }
+    invisible(NULL)
+  }
+  read <- function(name, assigned) {
+    require_assigned(name, assigned)
+    for (capture in closure_captures[[name]] %||% character()) {
+      require_assigned(capture, assigned)
+    }
+    invisible(NULL)
+  }
   walk <- function(expr, assigned) {
     if (is.null(assigned) || is_missing(expr)) {
       return(assigned)
     }
     if (is.symbol(expr)) {
-      name <- as.character(expr)
-      if (name %in% locals && !name %in% assigned) {
-        stop(
-          "local variable `",
-          name,
-          "` may be uninitialized; assign it before use on every path",
-          call. = FALSE
-        )
+      read(as.character(expr), assigned)
+      return(assigned)
+    }
+    if (!is.call(expr)) {
+      return(assigned)
+    }
+    if (is_function_call(expr)) {
+      # An anonymous closure is reached where it appears, e.g. as a sapply()
+      # argument, so its captures must be initialized by that point.
+      for (capture in closure_free_names(expr)) {
+        require_assigned(capture, assigned)
       }
       return(assigned)
     }
-    if (!is.call(expr) || is_function_call(expr) || is_call(expr, "declare")) {
+    if (is_call(expr, "declare")) {
       return(assigned)
     }
     if ((is_call(expr, "<-") || is_call(expr, "=")) && length(expr) == 3L) {
+      if (is.symbol(expr[[2L]]) && is_function_call(expr[[3L]])) {
+        # A closure definition reads nothing yet; record its captures for the
+        # points where the binding is reached.
+        name <- as.character(expr[[2L]])
+        closure_captures[[name]] <<- closure_free_names(expr[[3L]])
+        return(union(assigned, name))
+      }
       assigned <- walk(expr[[3L]], assigned)
       if (is.null(assigned)) {
         return(NULL)
@@ -520,6 +552,9 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
       assigned <- walk(expr[[2L]], assigned)
       return(join(assigned, walk(expr[[3L]], assigned)))
     }
+    if (is.symbol(expr[[1L]])) {
+      read(as.character(expr[[1L]]), assigned)
+    }
     for (arg in as.list(expr)[-1L]) {
       assigned <- walk(arg, assigned)
     }
@@ -527,4 +562,37 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
   }
   walk(body(closure), union(names(formals(closure)), captured))
   invisible(NULL)
+}
+
+# Names a `function` expression reads from its enclosing scope: everything it
+# mentions that is neither one of its own formals nor assigned anywhere within,
+# including inside nested closures.
+closure_free_names <- function(expr) {
+  stopifnot(is_function_call(expr))
+  bound <- names(as.list(expr[[2L]]))
+  fn_body <- expr[[3L]]
+  collect <- function(e) {
+    if (is_missing(e) || !is.call(e)) {
+      return(invisible(NULL))
+    }
+    if (is_function_call(e)) {
+      bound <<- union(bound, names(as.list(e[[2L]])))
+      collect(e[[3L]])
+      return(invisible(NULL))
+    }
+    if (
+      (is_call(e, "<-") || is_call(e, "=") || is_call(e, "<<-")) &&
+        length(e) == 3L &&
+        is.symbol(e[[2L]])
+    ) {
+      bound <<- union(bound, as.character(e[[2L]]))
+    }
+    if (is_call(e, "for") && length(e) == 4L) {
+      bound <<- union(bound, as.character(e[[2L]]))
+    }
+    lapply(as.list(e)[-1L], collect)
+    invisible(NULL)
+  }
+  collect(fn_body)
+  setdiff(all.vars(fn_body), bound)
 }
