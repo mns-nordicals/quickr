@@ -767,3 +767,37 @@ test_that("unverifiable %*% dims compile and guard at runtime", {
     fixed = TRUE
   )
 })
+
+test_that("cross-product return allocations validate contracted dimensions", {
+  cross <- function(x, y) {
+    declare(type(x = double(NA, NA)), type(y = double(NA, NA)))
+    crossprod(x, y)
+  }
+  tcross <- function(x, y) {
+    declare(type(x = double(NA, NA)), type(y = double(NA, NA)))
+    tcrossprod(x, y)
+  }
+  x <- matrix(as.double(1:6), 2L, 3L)
+  y <- matrix(as.double(1:8), 2L, 4L)
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  # A regression must report a normal R allocation error, never attempt an
+  # 80 GB allocation in the test process.
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  for (fn in list(cross, tcross)) {
+    qfn <- quick(fn)
+    expect_error(qfn(x, t(x)), "non-conformable arguments")
+    if (identical(fn, tcross)) {
+      expect_equal(qfn(t(x), t(y)), fn(t(x), t(y)))
+    } else {
+      expect_equal(qfn(x, y), fn(x, y))
+    }
+    a <- matrix(1, 1L, 100000L)
+    b <- matrix(1, 2L, 100000L)
+    if (identical(fn, tcross)) {
+      a <- t(a)
+      b <- t(b)
+    }
+    expect_error(qfn(a, b), "non-conformable arguments")
+  }
+})

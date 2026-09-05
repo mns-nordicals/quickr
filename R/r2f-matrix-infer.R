@@ -132,10 +132,24 @@ infer_dest_crossprod_like <- function(args, scope, trans) {
   }
   y_dims <- matrix_dims_var(y)
   if (identical(trans, "T")) {
-    Variable("double", list(x_dims$cols, y_dims$cols))
+    out <- Variable("double", list(x_dims$cols, y_dims$cols))
+    left <- x_dims$rows
+    right <- y_dims$rows
+    op <- "crossprod"
   } else {
-    Variable("double", list(x_dims$rows, y_dims$rows))
+    out <- Variable("double", list(x_dims$rows, y_dims$rows))
+    left <- x_dims$cols
+    right <- y_dims$cols
+    op <- "tcrossprod"
   }
+  if (isTRUE(check_blas_dims(left, right)$unknown)) {
+    out@c_bridge_dim_check <- list(
+      left = left,
+      right = right,
+      message = paste("non-conformable arguments in", op)
+    )
+  }
+  out
 }
 
 # Infer destination dimensions for crossprod().
