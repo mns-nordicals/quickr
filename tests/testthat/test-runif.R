@@ -84,6 +84,47 @@ test_that("runif rejects non-scalar sample counts", {
   expect_identical(.Random.seed, expected_seed)
 })
 
+test_that("runif rejects non-scalar bounds", {
+  expect_error(
+    quick(function(n, b) {
+      declare(type(n = integer(1)), type(b = double(n)))
+      sum(runif(n, max = b))
+    }),
+    "runif() requires a scalar `max` bound",
+    fixed = TRUE
+  )
+  expect_error(
+    quick(function(n, b) {
+      declare(type(n = integer(1)), type(b = double(n)))
+      sum(runif(n, min = b, max = 10))
+    }),
+    "runif() requires a scalar `min` bound",
+    fixed = TRUE
+  )
+  expect_error(
+    quick(function(n) {
+      declare(type(n = integer(1)))
+      sum(runif(n, max = c(1, 2)))
+    }),
+    "runif() requires a scalar `max` bound",
+    fixed = TRUE
+  )
+
+  # A scalar bound still draws exactly `n` values and leaves R's RNG state
+  # where R leaves it.
+  fn <- function(n, a, b) {
+    declare(type(n = integer(1)), type(a = double(1)), type(b = double(1)))
+    runif(n, a, b)
+  }
+  qfn <- quick(fn)
+  set.seed(42)
+  expected <- fn(4L, 1, 3)
+  expected_seed <- .Random.seed
+  set.seed(42)
+  expect_identical(qfn(4L, 1, 3), expected)
+  expect_identical(.Random.seed, expected_seed)
+})
+
 test_that("runif with min/max", {
   fn <- function(n, a, b) {
     declare(

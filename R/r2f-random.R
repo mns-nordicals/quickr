@@ -39,14 +39,25 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   # and the implied-do re-evaluates the whole expression per element; hoist
   # non-trivial bounds (e.g. an impure runif(1)) so they are evaluated once.
   # (hoist_unless_name() leaves names and literals alone.)
-  bound <- function(r_arg) {
-    hoist_unless_name(r2f(r_arg, scope, ..., hoist = hoist), hoist)
+  #
+  # R recycles vector bounds elementwise across exactly `n` draws, while the
+  # implied-do below splices each bound into every element and would produce
+  # `n * length(bound)` values. Require scalar bounds instead of diverging.
+  scalar_bound <- function(value, arg) {
+    if (!passes_as_scalar(value@value)) {
+      stop(glue("runif() requires a scalar `{arg}` bound"), call. = FALSE)
+    }
+    value
+  }
+  bound <- function(r_arg, arg) {
+    value <- scalar_bound(r2f(r_arg, scope, ..., hoist = hoist), arg)
+    hoist_unless_name(value, hoist)
   }
 
   if (default_min && default_max) {
     get1rand <- "unif_rand()"
   } else if (default_min) {
-    max <- bound(max)
+    max <- bound(max, "max")
     get1rand <- glue("unif_rand() * {max}")
   } else {
     min <- lower_r2f_operand_in_order(
@@ -56,8 +67,9 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
       hoist = hoist,
       later_args = list(max)
     )
+    min <- scalar_bound(min, "min")
     min <- hoist_unless_name(min, hoist)
-    max <- bound(max)
+    max <- bound(max, "max")
     get1rand <- glue("({min} + (unif_rand() * ({max} - {min})))")
   }
 

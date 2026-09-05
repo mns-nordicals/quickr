@@ -420,6 +420,11 @@ When `min` and `max` are equal, R returns the bound without consuming an RNG
 value. quickr still draws and scales a uniform value, so the result is equal
 but the subsequent RNG state differs.
 
+quickr also requires scalar `min` and `max` bounds. R recycles vector bounds
+elementwise across the draws; quickr rejects a non-scalar bound at compile
+time rather than reshaping the result. Draw with scalar bounds and scale the
+result explicitly when the bounds vary per element.
+
 `runif()` is supported only in serial generated code. A loop or `sapply()`
 marked by `declare(parallel())` rejects it to avoid sharing R's RNG across
 threads.
