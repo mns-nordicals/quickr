@@ -9,6 +9,16 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
 
   min <- args$min %||% 0
   max <- args$max %||% 1
+  count_value <- lower_r2f_operand_in_order(
+    args$n,
+    scope,
+    ...,
+    hoist = hoist,
+    later_args = list(min, max)
+  )
+  if (!passes_as_scalar(count_value@value)) {
+    stop("runif() requires a scalar sample count", call. = FALSE)
+  }
   dims <- r2dims(args$n, scope)
   n <- dims[[1L]]
   count <- n
@@ -17,13 +27,7 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
     stop("runif() sample count must be non-negative", call. = FALSE)
   }
   if (!is_scalar_integerish(n)) {
-    count <- lower_r2f_operand_in_order(
-      args$n,
-      scope,
-      ...,
-      hoist = hoist,
-      later_args = list(min, max)
-    )
+    count <- count_value
     count_is_double <- identical(count@value@mode, "double")
     count <- trimws(as.character(count))
   }

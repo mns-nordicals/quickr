@@ -397,6 +397,12 @@ result that R rejects as computationally singular.
 
 ### `runif()` bound differences
 
+quickr requires a statically scalar `n` in `runif(n)`. R also accepts a
+vector and uses its length when that length exceeds one; quickr rejects
+non-scalar and unknown-length counts at compile time. Use an explicit
+scalar count, such as `length(x)`, when the number of draws is a vector's
+length.
+
 R returns `NaN` values with a warning when `runif()` is called with
 `min > max`. quickr applies its uniform scaling formula without checking
 the bound order and returns values between the two bounds. Check the bounds

@@ -46,6 +46,44 @@ test_that("runif generates random numbers", {
   )
 })
 
+test_that("runif rejects non-scalar sample counts", {
+  expect_error(
+    quick(function() {
+      sum(runif(c(5L, 3L)))
+    }),
+    "runif() requires a scalar sample count",
+    fixed = TRUE
+  )
+  expect_error(
+    quick(function(n) {
+      declare(type(n = integer(NA)))
+      runif(n)
+    }),
+    "runif() requires a scalar sample count",
+    fixed = TRUE
+  )
+  expect_error(
+    quick(function(n) {
+      declare(type(n = double(2)))
+      sum(runif(n))
+    }),
+    "runif() requires a scalar sample count",
+    fixed = TRUE
+  )
+
+  fn <- function() {
+    sum(runif(c(5L)))
+  }
+  qfn <- quick(fn)
+  expect_identical(set_seed_and_call(qfn), set_seed_and_call(fn))
+  set.seed(42)
+  expected <- fn()
+  expected_seed <- .Random.seed
+  set.seed(42)
+  expect_identical(qfn(), expected)
+  expect_identical(.Random.seed, expected_seed)
+})
+
 test_that("runif with min/max", {
   fn <- function(n, a, b) {
     declare(
