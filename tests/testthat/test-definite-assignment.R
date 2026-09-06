@@ -344,3 +344,79 @@ test_that("cyclic closure dependencies still check captures", {
   body(fn)[[3L]] <- quote(if (flag) x <- 1L else x <- 2L)
   expect_quick_identical(fn, TRUE, FALSE)
 })
+
+test_that("omitted closure defaults require initialized captures", {
+  uses <- list(
+    quote(f()),
+    quote((f)()),
+    quote(f(a = )),
+    quote((function(a = x) a)()),
+    quote(g())
+  )
+  for (use in uses) {
+    fn <- function(flag) {
+      declare(type(flag = logical(1)))
+      if (flag) {
+        x <- 1L
+      }
+      f <- function(a = x) a
+      g <- function() f()
+      0L
+    }
+    body(fn)[[6L]] <- use
+    expect_error(quick(fn), "local variable `x` may be uninitialized")
+    body(fn)[[3L]] <- quote(if (flag) x <- 1L else x <- 2L)
+    expect_quick_identical(fn, TRUE, FALSE)
+  }
+})
+
+test_that("supplied closure arguments do not read unused defaults", {
+  uses <- list(
+    quote(f(2L)),
+    quote(f(a = 2L)),
+    quote((f)(2L)),
+    quote((function(a = x) a)(2L))
+  )
+  for (use in uses) {
+    fn <- function(flag) {
+      declare(type(flag = logical(1)))
+      if (flag) {
+        x <- 1L
+      }
+      f <- function(a = x) a
+      0L
+    }
+    body(fn)[[5L]] <- use
+    expect_quick_identical(fn, TRUE, FALSE)
+  }
+})
+
+test_that("nested closure defaults preserve their enclosing scope", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    f <- function() {
+      g <- function(a = x + 1L) a
+      g()
+    }
+    f()
+  }
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+  body(fn)[[3L]] <- quote(if (flag) x <- 1L else x <- 2L)
+  expect_quick_identical(fn, TRUE, FALSE)
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    f <- function(x) {
+      g <- function(a = x + 1L) a
+      g()
+    }
+    f(2L)
+  }
+  expect_quick_identical(fn, TRUE, FALSE)
+})

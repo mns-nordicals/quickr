@@ -53,6 +53,10 @@ enclosing variable it reads must already be initialized at that point.
 This includes reads reached through other local closures. Nested functions
 have their own bindings: their arguments and local assignments do not
 initialize variables in an enclosing function.
+Default argument expressions are included in the capture checks. At a direct
+closure call, an explicitly supplied argument replaces its default and does
+not require that default's captures. Checks through other closure references
+remain conservative and include all defaults.
 
 ## Types
 

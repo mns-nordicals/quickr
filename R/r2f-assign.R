@@ -417,6 +417,7 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
   # association makes these readable regardless of the R control flow that
   # created them, so they are checked wherever the closure is reached.
   closure_captures <- list()
+  closure_definitions <- list()
   collect <- function(expr) {
     if (is_missing(expr) || !is.call(expr) || is_function_call(expr)) {
       return(invisible(NULL))
@@ -459,14 +460,19 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     }
     invisible(NULL)
   }
-  read <- function(name, assigned, seen = character()) {
+  read <- function(
+    name,
+    assigned,
+    seen = character(),
+    captures = closure_captures[[name]] %||% character()
+  ) {
     require_assigned(name, assigned)
     # Follow closure dependencies at this use point, checking each cycle only
     # once while still visiting its remaining captures.
     if (name %in% seen) {
       return(invisible(NULL))
     }
-    for (capture in closure_captures[[name]] %||% character()) {
+    for (capture in captures) {
       read(capture, assigned, union(seen, name))
     }
     invisible(NULL)
@@ -499,6 +505,7 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
         # points where the binding is reached.
         name <- as.character(expr[[2L]])
         closure_captures[[name]] <<- closure_free_names(expr[[3L]])
+        closure_definitions[[name]] <<- expr[[3L]]
         return(union(assigned, name))
       }
       assigned <- walk(expr[[3L]], assigned)
@@ -561,7 +568,21 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     # also allows, and is not visited by the argument walk below.
     callee <- unwrap_parens(expr[[1L]])
     if (is.symbol(callee)) {
-      read(as.character(callee), assigned)
+      name <- as.character(callee)
+      definition <- closure_definitions[[name]]
+      if (is.null(definition)) {
+        read(name, assigned)
+      } else {
+        read(
+          name,
+          assigned,
+          captures = closure_call_free_names(definition, expr)
+        )
+      }
+    } else if (is_function_call(callee)) {
+      for (capture in closure_call_free_names(callee, expr)) {
+        read(capture, assigned)
+      }
     } else {
       assigned <- walk(callee, assigned)
       if (is.null(assigned)) {
@@ -580,7 +601,7 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
 # Names a function needs from its enclosing scope, including callees and the
 # free names of nested functions. Each function owns its bindings: a nested
 # formal or assignment cannot bind a name read by its enclosing function.
-closure_free_names <- function(expr) {
+closure_free_names <- function(expr, supplied = character()) {
   stopifnot(is_function_call(expr))
   bound <- names(as.list(expr[[2L]]))
   fn_body <- expr[[3L]]
@@ -622,5 +643,22 @@ closure_free_names <- function(expr) {
     # Function names are dependencies too: calling g() may reach f()'s reads.
     unique(unlist(lapply(as.list(e), reads), use.names = FALSE))
   }
-  setdiff(reads(fn_body), bound)
+  defaults <- as.list(expr[[2L]])
+  defaults <- defaults[setdiff(names(defaults), supplied)]
+  # match_closure_call_args() lowers omitted defaults in the caller's scope.
+  # Bindings in the callee's body must not hide these caller-side reads.
+  union(
+    setdiff(reads(fn_body), bound),
+    unlist(lapply(defaults, reads), use.names = FALSE)
+  )
+}
+
+# Use R's argument matching, as the closure lowering does, to avoid requiring
+# captures from defaults replaced by explicitly supplied arguments.
+closure_call_free_names <- function(definition, call) {
+  fun <- as.function(c(as.list(definition[[2L]]), list(definition[[3L]])))
+  matched <- match.call(fun, call)
+  args <- as.list(matched)[-1L]
+  supplied <- names(args)[!vapply(args, is_missing, logical(1L))]
+  closure_free_names(definition, supplied = supplied)
 }
