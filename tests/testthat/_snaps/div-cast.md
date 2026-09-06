@@ -87,6 +87,7 @@
           Rf_error("length(b) must equal length(a),"
                    " but are %0.f and %0.f",
                     (double)b__len_, (double)a__len_);
+        if ((a__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = a__len_;
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
@@ -197,6 +198,7 @@
           Rf_error("length(b) must equal length(a),"
                    " but are %0.f and %0.f",
                     (double)b__len_, (double)a__len_);
+        if ((a__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = a__len_;
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
@@ -308,6 +310,7 @@
           Rf_error("length(b) must equal length(a),"
                    " but are %0.f and %0.f",
                     (double)b__len_, (double)a__len_);
+        if ((a__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = a__len_;
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
@@ -493,6 +496,7 @@
           Rf_error("length(b) must equal length(a),"
                    " but are %0.f and %0.f",
                     (double)b__len_, (double)a__len_);
+        if ((a__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = a__len_;
         SEXP out_ = PROTECT(Rf_allocVector(CPLXSXP, out___len_));
         Rcomplex* out___ = COMPLEX(out_);

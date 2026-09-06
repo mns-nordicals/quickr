@@ -823,3 +823,18 @@ test_that("local closure calls reject effectful argument promises", {
     fixed = TRUE
   )
 })
+
+test_that("returned matrix extents are checked before C allocation", {
+  fn <- function(n, k) {
+    declare(type(n = integer(1)), type(k = integer(1)))
+    matrix(1, n, k)
+  }
+  compiled <- quick(fn)
+  for (dims in list(c(-100000L, -100000L), c(-1L, 2L), c(2L, -1L))) {
+    expect_error(
+      do.call(compiled, as.list(dims)),
+      "dimensions must be non-negative"
+    )
+  }
+  expect_quick_identical(fn, list(2L, 3L), list(0L, 3L), list(2L, 0L))
+})

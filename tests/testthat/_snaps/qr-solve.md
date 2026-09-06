@@ -141,6 +141,7 @@
           Rf_error("length(b) must equal dim(a)[1],"
                    " but are %0.f and %0.f",
                     (double)b__len_, (double)a__dim_1_);
+        if ((a__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = a__dim_2_;
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
@@ -323,6 +324,8 @@
           Rf_error("dim(b)[1] must equal dim(a)[1],"
                    " but are %0.f and %0.f",
                     (double)b__dim_1_, (double)a__dim_1_);
+        if ((a__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((b__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = (a__dim_2_) * (b__dim_2_);
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);

@@ -276,6 +276,7 @@
           Rf_error("dim(emission_probs)[1] must equal length(states),"
                    " but are %0.f and %0.f",
                     (double)emission_probs__dim_1_, (double)states__len_);
+        if ((observations__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = observations__len_;
         SEXP out = PROTECT(Rf_allocVector(INTSXP, out__len_));
         int* out__ = INTEGER(out);
@@ -551,6 +552,7 @@
           Rf_error("dim(emission_probs)[1] must equal length(states),"
                    " but are %0.f and %0.f",
                     (double)emission_probs__dim_1_, (double)states__len_);
+        if ((observations__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = observations__len_;
         SEXP out = PROTECT(Rf_allocVector(INTSXP, out__len_));
         int* out__ = INTEGER(out);

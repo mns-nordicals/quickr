@@ -377,6 +377,14 @@ return_var_c_defs <- function(var, scope, c_hoist = NULL) {
   c_code <- c(
     decls,
     check_code,
+    # Validate each axis before multiplication: two negatives can otherwise
+    # become a positive allocation length before Fortran guards execute.
+    unlist(lapply(c_dims, function(d) {
+      if (is.null(d) || grepl("^[0-9]+$", d)) {
+        return(NULL)
+      }
+      glue('if (({d}) < 0) Rf_error("return dimensions must be non-negative");')
+    })),
     glue("const R_xlen_t {len_name} = {c_len};"),
     glue(switch(
       var@mode,

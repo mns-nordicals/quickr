@@ -96,6 +96,7 @@
         const double* const x__ = REAL(x);
         const R_xlen_t x__len_ = Rf_xlength(x);
         
+        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = x__len_;
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
@@ -227,6 +228,7 @@
         if (thresh__len_ != 1)
           Rf_error("length(thresh) must be 1, not %0.f",
                     (double)thresh__len_);
+        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = x__len_;
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
@@ -345,6 +347,7 @@
         const double* const x__ = REAL(x);
         const R_xlen_t x__len_ = Rf_xlength(x);
         
+        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = x__len_;
         SEXP out = PROTECT(Rf_allocVector(INTSXP, out__len_));
         int* out__ = INTEGER(out);
@@ -480,6 +483,8 @@
         const int x__dim_1_ = x__dim_[0];
         const int x__dim_2_ = x__dim_[1];
         
+        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
@@ -637,6 +642,8 @@
         if (thresh__len_ != 1)
           Rf_error("length(thresh) must be 1, not %0.f",
                     (double)thresh__len_);
+        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_);
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
@@ -799,6 +806,9 @@
           Rf_error("length(k) must be 1, not %0.f",
                     (double)k__len_);
         const int _as_int_k = Rf_asInteger(k);
+        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((_as_int_k) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (_as_int_k);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
@@ -951,6 +961,9 @@
         const int x__dim_2_ = x__dim_[1];
         const int x__dim_3_ = x__dim_[2];
         
+        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_3_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (x__dim_3_);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
@@ -1110,6 +1123,10 @@
         const int x__dim_3_ = x__dim_[2];
         const int x__dim_4_ = x__dim_[3];
         
+        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_3_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_4_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (x__dim_3_) * (x__dim_4_);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
@@ -1282,6 +1299,10 @@
           Rf_error("length(k) must be 1, not %0.f",
                     (double)k__len_);
         const int _as_int_k = Rf_asInteger(k);
+        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_3_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((_as_int_k) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (x__dim_3_) * (_as_int_k);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
@@ -1534,6 +1555,8 @@
         const int x__dim_1_ = x__dim_[0];
         const int x__dim_2_ = x__dim_[1];
         
+        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
+        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);

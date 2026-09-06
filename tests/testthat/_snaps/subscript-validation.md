@@ -65,6 +65,7 @@
           Rf_error("length(n) must be 1, not %0.f",
                     (double)n__len_);
         const int _as_int_n = Rf_asInteger(n);
+        if ((((((_as_int_n - 1)) < 0 ? -((_as_int_n - 1)) : ((_as_int_n - 1))) + 1)) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = ((((_as_int_n - 1)) < 0 ? -((_as_int_n - 1)) : ((_as_int_n - 1))) + 1);
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);

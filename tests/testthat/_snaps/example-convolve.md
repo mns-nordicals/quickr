@@ -101,6 +101,7 @@
         const double* const b__ = REAL(b);
         const R_xlen_t b__len_ = Rf_xlength(b);
         
+        if ((((a__len_ + b__len_) - 1)) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t ab__len_ = ((a__len_ + b__len_) - 1);
         SEXP ab = PROTECT(Rf_allocVector(REALSXP, ab__len_));
         double* ab__ = REAL(ab);

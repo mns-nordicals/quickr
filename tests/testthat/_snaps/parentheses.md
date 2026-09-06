@@ -211,6 +211,7 @@
           Rf_error("length(y) must equal length(x),"
                    " but are %0.f and %0.f",
                     (double)y__len_, (double)x__len_);
+        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = x__len_;
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);

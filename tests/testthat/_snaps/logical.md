@@ -114,6 +114,7 @@
         if (right__len_ != 1)
           Rf_error("length(right) must be 1, not %0.f",
                     (double)right__len_);
+        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = x__len_;
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
@@ -505,6 +506,7 @@
           Rf_error("length(b) must equal length(a),"
                    " but are %0.f and %0.f",
                     (double)b__len_, (double)a__len_);
+        if ((a__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = a__len_;
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
@@ -951,6 +953,7 @@
         const double* const y__ = REAL(y);
         const R_xlen_t y__len_ = Rf_xlength(y);
         
+        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = x__len_;
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);

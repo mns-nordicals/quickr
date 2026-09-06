@@ -139,6 +139,7 @@
         if (normalize__len_ != 1)
           Rf_error("length(normalize) must be 1, not %0.f",
                     (double)normalize__len_);
+        if ((((x__len_ - weights__len_) + 1)) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out__len_ = ((x__len_ - weights__len_) + 1);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);

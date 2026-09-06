@@ -472,6 +472,7 @@
         const int* const x__ = INTEGER(x);
         const R_xlen_t x__len_ = Rf_xlength(x);
         
+        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
         const R_xlen_t out___len_ = x__len_;
         SEXP out_ = PROTECT(Rf_allocVector(INTSXP, out___len_));
         int* out___ = INTEGER(out_);
