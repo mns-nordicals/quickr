@@ -838,3 +838,72 @@ test_that("returned matrix extents are checked before C allocation", {
   }
   expect_quick_identical(fn, list(2L, 3L), list(0L, 3L), list(2L, 0L))
 })
+
+test_that("return lengths use checked wide multiplication", {
+  fn <- function(n) {
+    declare(type(n = integer(1)))
+    matrix(1, n, n)
+  }
+  qfn <- quick(fn)
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  # 65536 squared wraps to zero with 32-bit multiplication. A correctly
+  # calculated length instead reaches R's bounded allocation failure.
+  expect_error(qfn(65536L), "vector memory limit")
+  expect_equal(qfn(2L), fn(2L))
+
+  cube <- function(n) {
+    declare(type(n = integer(1)))
+    array(1, c(n, n, n))
+  }
+  qcube <- quick(cube)
+  expect_error(
+    qcube(2097152L),
+    "return length exceeds R's vector limit",
+    fixed = TRUE
+  )
+  expect_equal(qcube(2L), cube(2L))
+
+  empty <- function(n, k) {
+    declare(type(n = integer(1)), type(k = integer(1)))
+    array(1, c(n, n, n, k))
+  }
+  qempty <- quick(empty)
+  expect_equal(qempty(2097152L, 0L), empty(2097152L, 0L))
+})
+
+test_that("all return lengths are validated before any result allocation", {
+  fn <- function(n, k) {
+    declare(type(n = integer(1)), type(k = integer(1)))
+    x <- matrix(1, n, n)
+    y <- matrix(1, k, k)
+    list(x, y)
+  }
+  qfn <- quick(fn)
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  expect_error(qfn(46000L, -1L), "return dimensions must be non-negative")
+  expect_equal(qfn(2L, 3L), fn(2L, 3L))
+})
+
+test_that("invalid return extents have distinct diagnostics", {
+  fn <- function(n, exponent) {
+    declare(type(n = integer(1)), type(exponent = integer(1)))
+    matrix(1, n^exponent, 0L)
+  }
+  qfn <- quick(fn)
+  expect_error(qfn(2L, 2048L), "return dimensions must be finite", fixed = TRUE)
+  expect_error(
+    qfn(-2L, 1L),
+    "return dimensions must be non-negative",
+    fixed = TRUE
+  )
+  expect_error(
+    qfn(50000L, 2L),
+    "return dimensions exceed the supported range",
+    fixed = TRUE
+  )
+  expect_equal(qfn(2L, 2L), fn(2L, 2L))
+})

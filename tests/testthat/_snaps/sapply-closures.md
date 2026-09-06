@@ -80,6 +80,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         double* const out__,
@@ -96,8 +120,7 @@
         const double* const x__ = REAL(x);
         const R_xlen_t x__len_ = Rf_xlength(x);
         
-        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = x__len_;
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__len_}, 1);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         
@@ -199,6 +222,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         const double* const thresh__,
@@ -228,8 +275,7 @@
         if (thresh__len_ != 1)
           Rf_error("length(thresh) must be 1, not %0.f",
                     (double)thresh__len_);
-        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = x__len_;
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__len_}, 1);
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
         
@@ -331,6 +377,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         int* const out__,
@@ -347,8 +417,7 @@
         const double* const x__ = REAL(x);
         const R_xlen_t x__len_ = Rf_xlength(x);
         
-        if ((x__len_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = x__len_;
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__len_}, 1);
         SEXP out = PROTECT(Rf_allocVector(INTSXP, out__len_));
         int* out__ = INTEGER(out);
         
@@ -459,6 +528,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         double* const out__,
@@ -483,9 +576,7 @@
         const int x__dim_1_ = x__dim_[0];
         const int x__dim_2_ = x__dim_[1];
         
-        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_);
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__dim_1_, x__dim_2_}, 2);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         {
@@ -605,6 +696,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         const double* const thresh__,
@@ -642,9 +757,7 @@
         if (thresh__len_ != 1)
           Rf_error("length(thresh) must be 1, not %0.f",
                     (double)thresh__len_);
-        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_);
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__dim_1_, x__dim_2_}, 2);
         SEXP out = PROTECT(Rf_allocVector(LGLSXP, out__len_));
         int* out__ = LOGICAL(out);
         {
@@ -768,6 +881,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         const int* const k__,
@@ -806,10 +943,7 @@
           Rf_error("length(k) must be 1, not %0.f",
                     (double)k__len_);
         const int _as_int_k = Rf_asInteger(k);
-        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((_as_int_k) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (_as_int_k);
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__dim_1_, x__dim_2_, _as_int_k}, 3);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         {
@@ -935,6 +1069,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         double* const out__,
@@ -961,10 +1119,7 @@
         const int x__dim_2_ = x__dim_[1];
         const int x__dim_3_ = x__dim_[2];
         
-        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_3_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (x__dim_3_);
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__dim_1_, x__dim_2_, x__dim_3_}, 3);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         {
@@ -1095,6 +1250,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         double* const out__,
@@ -1123,11 +1302,7 @@
         const int x__dim_3_ = x__dim_[2];
         const int x__dim_4_ = x__dim_[3];
         
-        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_3_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_4_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (x__dim_3_) * (x__dim_4_);
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__dim_1_, x__dim_2_, x__dim_3_, x__dim_4_}, 4);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         {
@@ -1259,6 +1434,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         const int* const k__,
@@ -1299,11 +1498,7 @@
           Rf_error("length(k) must be 1, not %0.f",
                     (double)k__len_);
         const int _as_int_k = Rf_asInteger(k);
-        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_3_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((_as_int_k) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_) * (x__dim_3_) * (_as_int_k);
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__dim_1_, x__dim_2_, x__dim_3_, _as_int_k}, 4);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         {
@@ -1531,6 +1726,30 @@
       #include <Rinternals.h>
       
       
+      #ifndef QUICKR_RETURN_LENGTH_DEFINED
+      #define QUICKR_RETURN_LENGTH_DEFINED
+      static R_xlen_t quickr_return_length(const double *dims, int rank) {
+        int empty = 0;
+        for (int i = 0; i < rank; ++i) {
+          if (!R_FINITE(dims[i]))
+            Rf_error("return dimensions must be finite");
+          if (dims[i] < 0)
+            Rf_error("return dimensions must be non-negative");
+          if (dims[i] > (rank > 1 ? 2147483647.0 : (double)R_XLEN_T_MAX))
+            Rf_error("return dimensions exceed the supported range");
+          if ((R_xlen_t)dims[i] == 0) empty = 1;
+        }
+        if (empty) return 0;
+        R_xlen_t length = 1;
+        for (int i = 0; i < rank; ++i) {
+          R_xlen_t extent = (R_xlen_t)dims[i];
+          if (extent > R_XLEN_T_MAX / length)
+            Rf_error("return length exceeds R's vector limit");
+          length *= extent;
+        }
+        return length;
+      }
+      #endif
       extern void fn(
         const double* const x__,
         double* const out__,
@@ -1555,9 +1774,7 @@
         const int x__dim_1_ = x__dim_[0];
         const int x__dim_2_ = x__dim_[1];
         
-        if ((x__dim_1_) < 0) Rf_error("return dimensions must be non-negative");
-        if ((x__dim_2_) < 0) Rf_error("return dimensions must be non-negative");
-        const R_xlen_t out__len_ = (x__dim_1_) * (x__dim_2_);
+        const R_xlen_t out__len_ = quickr_return_length((const double[]){x__dim_1_, x__dim_2_}, 2);
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         {

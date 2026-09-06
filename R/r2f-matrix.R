@@ -731,7 +731,7 @@ register_r2f_handler(
     )
   },
   dest_supported = TRUE,
-  dest_infer = infer_dest_solve
+  dest_infer = infer_dest_qr_solve
 )
 
 register_r2f_handler(

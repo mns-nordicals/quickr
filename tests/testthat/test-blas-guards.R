@@ -801,3 +801,135 @@ test_that("cross-product return allocations validate contracted dimensions", {
     expect_error(qfn(a, b), "non-conformable arguments")
   }
 })
+
+test_that("square-matrix return requirements precede C allocation", {
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  for (op in c("solve", "chol", "chol2inv")) {
+    fn <- function(a) {
+      declare(type(a = double(n, m)))
+      solve(a)
+    }
+    body(fn)[[3L]][[1L]] <- as.symbol(op)
+    qfn <- quick(fn)
+    expect_equal(qfn(diag(2)), fn(diag(2)))
+    expect_error(
+      qfn(matrix(1, 46000L, 1L)),
+      paste(op, "requires a square matrix")
+    )
+  }
+})
+
+test_that("solve return requirements check both squareness and RHS rows", {
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  fn <- function(a, b) {
+    declare(type(a = double(n, m)), type(b = double(k, p)))
+    solve(a, b)
+  }
+  qfn <- quick(fn)
+  expect_equal(qfn(diag(2), diag(2)), diag(2))
+  expect_error(
+    qfn(matrix(1, 1L, 46000L), matrix(1, 1L, 46000L)),
+    "solve requires a square matrix"
+  )
+  expect_error(
+    qfn(matrix(numeric(), 0L, 0L), matrix(1, 1L, 46000L)),
+    "non-conformable arguments in solve"
+  )
+})
+
+test_that("return shape requirements survive copies and precede list allocation", {
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  alias <- function(a) {
+    declare(type(a = double(n, m)))
+    x <- solve(a)
+    y <- x
+    y
+  }
+  listed <- function(a) {
+    declare(type(a = double(n, m)))
+    x <- tcrossprod(a)
+    y <- solve(a)
+    list(x, y)
+  }
+  for (fn in list(alias, listed)) {
+    qfn <- quick(fn)
+    expect_equal(qfn(diag(2)), fn(diag(2)))
+    expect_error(qfn(matrix(1, 46000L, 1L)), "solve requires a square matrix")
+  }
+})
+
+test_that("vector products and QR solves validate before oversized returns", {
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  matvec <- function(a, b) {
+    declare(type(a = double(n, m)), type(b = double(k)))
+    a %*% b
+  }
+  vecmat <- function(a, b) {
+    declare(type(a = double(k)), type(b = double(n, m)))
+    a %*% b
+  }
+  qr_fn <- function(a, b) {
+    declare(type(a = double(n, m)), type(b = double(k, p)))
+    qr.solve(a, b)
+  }
+  qmatvec <- quick(matvec)
+  qvecmat <- quick(vecmat)
+  qsolve <- quick(qr_fn)
+  expect_error(
+    qmatvec(matrix(numeric(), 100000000L, 0L), 1),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+  expect_error(
+    qvecmat(1, matrix(numeric(), 0L, 100000000L)),
+    "non-conformable arguments in %*%",
+    fixed = TRUE
+  )
+  expect_error(
+    qsolve(diag(1), matrix(numeric(), 0L, 100000000L)),
+    "non-conformable arguments in qr.solve",
+    fixed = TRUE
+  )
+  expect_equal(qmatvec(diag(2), c(1, 2)), matvec(diag(2), c(1, 2)))
+  expect_equal(qvecmat(c(1, 2), diag(2)), vecmat(c(1, 2), diag(2)))
+  a <- rbind(diag(2), c(1, 1))
+  b <- matrix(c(1, 2, 3), 3, 1)
+  expect_equal(qsolve(a, b), qr_fn(a, b))
+})
+
+test_that("return preflight preserves RNG effects and conditional execution", {
+  fn <- function(a) {
+    declare(type(a = double(n, m)))
+    noise <- runif(1L)
+    solve(a)
+  }
+  qfn <- quick(fn)
+  a <- matrix(1, 2, 1)
+  withr::local_seed(335)
+  expect_error(qfn(a), "solve requires a square matrix")
+  actual_seed <- .Random.seed
+  set.seed(335)
+  expect_error(fn(a), "square")
+  expect_identical(actual_seed, .Random.seed)
+
+  conditional <- function(a, flag) {
+    declare(type(a = double(n, m)), type(flag = logical(1)))
+    if (flag) {
+      out <- solve(a)
+    } else {
+      out <- matrix(0, nrow(a), nrow(a))
+    }
+    out
+  }
+  qconditional <- quick(conditional)
+  expect_equal(qconditional(a, FALSE), conditional(a, FALSE))
+  expect_equal(qconditional(diag(2), TRUE), conditional(diag(2), TRUE))
+})
