@@ -455,6 +455,7 @@ test_that("closure definitions cannot depend on runtime control flow", {
     ),
     quote(
       if (flag) {
+        # fmt: skip
         f = function() 2L
       }
     )
@@ -536,6 +537,7 @@ test_that("local function names have a single binding per scope", {
     }),
     quote({
       f <- function() 1L
+      # fmt: skip
       f = function() 2L
       f()
     }),
@@ -615,4 +617,53 @@ test_that("static closure registries still check initialization at use points", 
   expect_error(quick(fn), "local variable `x` may be uninitialized")
   body(fn)[[5L]] <- quote(if (flag) x <- 1L else x <- 2L)
   expect_quick_identical(fn, TRUE, FALSE)
+})
+
+test_that("closure defaults resolve matched formal arguments", {
+  fn <- function() {
+    a <- 2L
+    f <- function(a, b = a) b
+    f(1L)
+  }
+  expect_quick_identical(fn, list())
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      a <- 9L
+    }
+    f <- function(b = a + 1L, a = 2L, c = b + a) c
+    f()
+  }
+  expect_quick_identical(fn, TRUE, FALSE)
+
+  fn <- function() {
+    a <- 7L
+    f <- function(a, b = a + 1L) b
+    f(b = , a = a + 2L)
+  }
+  expect_quick_identical(fn, list())
+
+  fn <- function() {
+    f <- function(a = b, b = a) a
+    f()
+  }
+  expect_error(quick(fn), "recursive local closure default")
+})
+
+test_that("defaults affected by body assignments are refused", {
+  fn <- function() {
+    a <- 2L
+    f <- function(a, b = a) {
+      a <- 3L
+      b
+    }
+    f(1L)
+  }
+  expect_error(
+    quick(fn),
+    "defaults cannot depend on bindings assigned in the body"
+  )
+  body(fn)[[4L]] <- quote(f(1L, 4L))
+  expect_quick_identical(fn, list())
 })

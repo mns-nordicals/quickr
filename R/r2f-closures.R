@@ -854,7 +854,57 @@ match_closure_call_args <- function(
     )
   }
 
-  args_expr <- args_aligned
+  # Defaults see the callee's formal bindings. Expand their dependencies using
+  # matched actuals, leaving explicitly supplied expressions in caller scope.
+  supplied <- names(as.list(call_expr)[-1L])[
+    !vapply(as.list(call_expr)[-1L], is_missing, logical(1L))
+  ]
+  body_bindings <- character()
+  collect_body_bindings <- function(e) {
+    if (!is.call(e) || is_function_call(e)) {
+      return(invisible(NULL))
+    }
+    if (
+      any(vapply(
+        c("<-", "=", "<<-", "for"),
+        function(op) is_call(e, op),
+        logical(1L)
+      ))
+    ) {
+      body_bindings <<- union(body_bindings, all.vars(e[[2L]]))
+    }
+    lapply(as.list(e)[-1L], collect_body_bindings)
+    invisible(NULL)
+  }
+  collect_body_bindings(body(fun))
+  resolve_default <- function(nm, seen = character()) {
+    if (nm %in% supplied) {
+      return(args_aligned[[nm]])
+    }
+    if (nm %in% seen) {
+      stop("recursive local closure default argument: ", nm, call. = FALSE)
+    }
+    if (length(intersect(all.vars(args_aligned[[nm]]), body_bindings))) {
+      stop(
+        "local closure defaults cannot depend on bindings assigned in the body",
+        call. = FALSE
+      )
+    }
+    replace_formals <- function(e) {
+      if (is_missing(e)) {
+        return(e)
+      }
+      if (is.symbol(e) && as.character(e) %in% formal_names) {
+        return(resolve_default(as.character(e), c(seen, nm)))
+      }
+      if (!is.call(e)) {
+        return(e)
+      }
+      as.call(lapply(as.list(e), replace_formals))
+    }
+    replace_formals(args_aligned[[nm]])
+  }
+  args_expr <- setNames(lapply(formal_names, resolve_default), formal_names)
 
   # Local closures lower to Fortran procedures, so they cannot reproduce R's
   # lazy promise forcing for effectful or trapping actual expressions. Keep
@@ -1825,11 +1875,14 @@ closure_free_names <- function(expr, supplied = character()) {
   }
   defaults <- as.list(expr[[2L]])
   defaults <- defaults[setdiff(names(defaults), supplied)]
-  # match_closure_call_args() lowers omitted defaults in the caller's scope.
-  # Bindings in the callee's body must not hide these caller-side reads.
+  # Defaults resolve formal dependencies in the callee, while other names
+  # remain lexical captures. Body assignments must not hide these reads.
   union(
     setdiff(reads(fn_body), bound),
-    unlist(lapply(defaults, reads), use.names = FALSE)
+    setdiff(
+      unlist(lapply(defaults, reads), use.names = FALSE),
+      names(as.list(expr[[2L]]))
+    )
   )
 }
 

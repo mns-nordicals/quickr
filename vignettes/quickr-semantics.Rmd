@@ -56,7 +56,10 @@ initialize variables in an enclosing function.
 Default argument expressions are included in the capture checks. At a direct
 closure call, an explicitly supplied argument replaces its default and does
 not require that default's captures. Checks through other closure references
-remain conservative and include all defaults.
+remain conservative and include all defaults. Defaults that refer to other
+formals use their matched arguments, including chained defaults, rather than
+same-named bindings in the caller. Recursive default dependencies and defaults
+that depend on bindings assigned in the callee body are rejected.
 Local closure definitions must occur outside conditionals and loops in
 their enclosing function. They select a procedure at compile time; quickr
 rejects runtime selection or rebinding of a closure. Define the closure
