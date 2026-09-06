@@ -50,6 +50,9 @@ not prove that a loop executes or that separate conditions imply one another.
 A local closure reads enclosing variables through Fortran host association,
 so the same requirement applies wherever the closure is reached: every
 enclosing variable it reads must already be initialized at that point.
+This includes reads reached through other local closures. Nested functions
+have their own bindings: their arguments and local assignments do not
+initialize variables in an enclosing function.
 
 ## Types
 

@@ -459,10 +459,15 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     }
     invisible(NULL)
   }
-  read <- function(name, assigned) {
+  read <- function(name, assigned, seen = character()) {
     require_assigned(name, assigned)
+    # Follow closure dependencies at this use point, checking each cycle only
+    # once while still visiting its remaining captures.
+    if (name %in% seen) {
+      return(invisible(NULL))
+    }
     for (capture in closure_captures[[name]] %||% character()) {
-      require_assigned(capture, assigned)
+      read(capture, assigned, union(seen, name))
     }
     invisible(NULL)
   }
@@ -481,7 +486,7 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
       # An anonymous closure is reached where it appears, e.g. as a sapply()
       # argument, so its captures must be initialized by that point.
       for (capture in closure_free_names(expr)) {
-        require_assigned(capture, assigned)
+        read(capture, assigned)
       }
       return(assigned)
     }
@@ -572,20 +577,15 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
   invisible(NULL)
 }
 
-# Names a `function` expression reads from its enclosing scope: everything it
-# mentions that is neither one of its own formals nor assigned anywhere within,
-# including inside nested closures.
+# Names a function needs from its enclosing scope, including callees and the
+# free names of nested functions. Each function owns its bindings: a nested
+# formal or assignment cannot bind a name read by its enclosing function.
 closure_free_names <- function(expr) {
   stopifnot(is_function_call(expr))
   bound <- names(as.list(expr[[2L]]))
   fn_body <- expr[[3L]]
   collect <- function(e) {
-    if (is_missing(e) || !is.call(e)) {
-      return(invisible(NULL))
-    }
-    if (is_function_call(e)) {
-      bound <<- union(bound, names(as.list(e[[2L]])))
-      collect(e[[3L]])
+    if (is_missing(e) || !is.call(e) || is_function_call(e)) {
       return(invisible(NULL))
     }
     if (
@@ -605,5 +605,22 @@ closure_free_names <- function(expr) {
     invisible(NULL)
   }
   collect(fn_body)
-  setdiff(all.vars(fn_body), bound)
+  reads <- function(e) {
+    if (is_missing(e)) {
+      return(character())
+    }
+    if (is.symbol(e)) {
+      return(as.character(e))
+    }
+    if (!is.call(e) || is_call(e, "declare")) {
+      return(character())
+    }
+    if (is_function_call(e)) {
+      return(closure_free_names(e))
+    }
+    # Include the callee, including parenthesized and anonymous callees.
+    # Function names are dependencies too: calling g() may reach f()'s reads.
+    unique(unlist(lapply(as.list(e), reads), use.names = FALSE))
+  }
+  setdiff(reads(fn_body), bound)
 }

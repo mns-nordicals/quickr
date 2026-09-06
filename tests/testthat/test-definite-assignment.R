@@ -218,3 +218,129 @@ test_that("initialized captures keep compiling and returning R's result", {
   }
   expect_quick_identical(fn, TRUE)
 })
+
+test_that("nested closure bindings do not hide enclosing captures", {
+  bodies <- list(
+    quote({
+      g <- function(x) x
+      x
+    }),
+    quote({
+      g <- function() {
+        x <- 2L
+        x
+      }
+      x
+    }),
+    quote({
+      g <- function() {
+        for (x in seq_len(2L)) {}
+        0L
+      }
+      x
+    }),
+    quote({
+      g <- function() x
+      g()
+    })
+  )
+  for (expr in bodies) {
+    fn <- function(flag) {
+      declare(type(flag = logical(1)))
+      if (flag) {
+        x <- 1L
+      }
+      f <- function() {}
+      f()
+    }
+    body(fn)[[4L]][[3L]][[3L]] <- expr
+    expect_error(quick(fn), "local variable `x` may be uninitialized")
+
+    # The same lexical scopes remain legal with initialization in both arms.
+    body(fn)[[3L]] <- quote(if (flag) x <- 1L else x <- 2L)
+    expect_quick_identical(fn, TRUE, FALSE)
+  }
+})
+
+test_that("closure requirements propagate through calls and function arguments", {
+  uses <- list(
+    quote({
+      g()
+    }),
+    quote({
+      (g)()
+    }),
+    quote({
+      (function() g())()
+    }),
+    quote({
+      out <- integer(2L)
+      out <- sapply(seq_along(out), function(i) g())
+      out
+    })
+  )
+  for (use in uses) {
+    fn <- function(flag) {
+      declare(type(flag = logical(1)))
+      if (flag) {
+        x <- 1L
+      }
+      f <- function() x
+      g <- function() f()
+      0L
+    }
+    body(fn) <- as.call(c(as.list(body(fn))[1:5], as.list(use)[-1L]))
+    expect_error(quick(fn), "local variable `x` may be uninitialized")
+    body(fn)[[3L]] <- quote(if (flag) x <- 1L else x <- 2L)
+    expect_quick_identical(fn, TRUE, FALSE)
+  }
+})
+
+test_that("nested shadowing does not require an unrelated host binding", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    f <- function() {
+      g <- function(x) x + 1L
+      g(2L)
+    }
+    f()
+  }
+  expect_quick_identical(fn, TRUE, FALSE)
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    f <- function() {
+      g <- function() {
+        x <- 2L
+        x + 1L
+      }
+      g()
+    }
+    f()
+  }
+  expect_quick_identical(fn, TRUE, FALSE)
+})
+
+test_that("cyclic closure dependencies still check captures", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 1L
+    }
+    f <- function() {
+      # This creates a capture dependency on f without executing recursion.
+      g <- function() f()
+      x
+    }
+    f()
+  }
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+  body(fn)[[3L]] <- quote(if (flag) x <- 1L else x <- 2L)
+  expect_quick_identical(fn, TRUE, FALSE)
+})
