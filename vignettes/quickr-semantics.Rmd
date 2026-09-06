@@ -27,8 +27,8 @@ separately below.
 > Except for the documented non-error differences below,
 > `quick(f)(x)` either returns exactly what `f(x)` returns — same values,
 > same `typeof()`, same shape — or raises an error. Never a third thing.
-> The unchecked `NA` inputs and out-of-bounds runtime subscripts documented
-> below are outside this contract and have undefined behavior.
+> The unchecked `NA` inputs, NaN-derived logical results, and out-of-bounds
+> runtime subscripts documented below are outside this contract.
 
 When quickr cannot reproduce R's behavior, it refuses. It prefers to
 refuse at compile time, when `quick()` is called; when the decision
@@ -341,6 +341,14 @@ implement R's missing-value semantics, and compiled code does not detect
 `NA` in inputs — passing `NA` produces undefined results. (For doubles,
 `NaN` and `Inf` flow through most arithmetic as in R; double `%/%` can return `Inf` where R returns `NaN`,
 but no guarantees are made for code that branches on them.)
+
+Comparisons involving `NaN` do not implement R's logical `NA` result.
+For example, for a declared double scalar `x = NaN`, R evaluates `x == x`
+to `NA`, while compiled code evaluates it to `FALSE`. Equality and ordering
+comparisons involving `NaN`, and logical results derived from them, are
+outside the exact-result contract, even when the result is returned without
+branching. This applies both to input `NaN` values and to those produced by
+arithmetic inside the compiled function.
 
 ### No partial recycling
 
