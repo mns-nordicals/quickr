@@ -92,6 +92,7 @@
         UNPROTECT(1);
         return out_;
       }
+
 # ifelse guards unknown branch lengths at runtime
 
     Code
@@ -234,3 +235,4 @@
         UNPROTECT(1);
         return out_;
       }
+
