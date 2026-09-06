@@ -54,7 +54,11 @@ maybe_lower_local_closure_call <- function(
     }
 
     call_expr <- as.call(c(list(callable_unwrapped), as.list(e)[-1L]))
-    return(compile_call(call_expr, closure_obj, callable_name))
+    return(compile_call(
+      call_expr,
+      closure_obj,
+      closure_obj@proc_name %||% callable_name
+    ))
   }
 
   if (is_function_call(callable_unwrapped)) {
@@ -1093,6 +1097,7 @@ compile_closure_call_assignment <- function(
   if (!inherits(closure_obj, LocalClosure)) {
     stop("internal error: expected a LocalClosure")
   }
+  proc_name <- closure_obj@proc_name %||% closure_name
 
   target_var <- get0(target_name, scope)
   target_exists <- inherits(target_var, Variable)
@@ -1130,7 +1135,7 @@ compile_closure_call_assignment <- function(
   }
 
   proc <- compile_local_closure_proc(
-    closure_name,
+    proc_name,
     closure_obj,
     scope,
     formal_vars = formal_vars,
@@ -1159,7 +1164,7 @@ compile_closure_call_assignment <- function(
       res_var@name <- target_fortran_name
       res_var@logical_as_int <- TRUE
       proc <- compile_local_closure_proc(
-        closure_name,
+        proc_name,
         closure_obj,
         scope,
         formal_vars = formal_vars,
@@ -1259,7 +1264,7 @@ compile_sapply_assignment <- function(
     if (!inherits(closure_obj, LocalClosure)) {
       stop("unsupported FUN in sapply(): ", fun_name)
     }
-    proc_name <- fun_name
+    proc_name <- closure_obj@proc_name %||% fun_name
   } else if (is_function_call(fun_expr)) {
     proc_name <- scope_unique_proc(scope_root(scope), prefix = "closure")
     closure_obj <- as_local_closure(fun_expr, env, name = proc_name)

@@ -57,6 +57,14 @@ Default argument expressions are included in the capture checks. At a direct
 closure call, an explicitly supplied argument replaces its default and does
 not require that default's captures. Checks through other closure references
 remain conservative and include all defaults.
+Local closure definitions must occur outside conditionals and loops in
+their enclosing function. They select a procedure at compile time; quickr
+rejects runtime selection or rebinding of a closure. Define the closure
+before the control flow, and put any conditional behavior in its body.
+A local function name may be bound only once in its lexical scope, even in
+straight-line code. It cannot also be used for a variable, argument, or loop
+index in that scope. Use distinct names for distinct functions. Nested
+functions have separate scopes and may use the same local names.
 
 ## Types
 

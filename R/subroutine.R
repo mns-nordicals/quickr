@@ -5,6 +5,7 @@ new_fortran_subroutine <- function(
 ) {
   check_fortran_subroutine_name_valid(name)
   check_all_var_names_valid(closure)
+  check_static_closure_bindings(body(closure), names(formals(closure)))
 
   # translate body, and populate scope with variables
   body <- body(closure)

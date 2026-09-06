@@ -107,11 +107,19 @@ register_r2f_handler(
 
     # Local closure definition: `f <- function(i) ...`
     if (is_function_call(rhs)) {
-      scope[[name]] <- as_local_closure(
+      closure <- as_local_closure(
         rhs,
         environment(scope_closure(scope)),
         name = name
       )
+      # Nested R scopes share the root Fortran CONTAINS section. Give their
+      # procedures distinct names even when the R bindings shadow each other.
+      closure@proc_name <- if (scope_is_closure(scope)) {
+        scope_unique_proc(scope_root(scope), prefix = "nested_closure")
+      } else {
+        name
+      }
+      scope[[name]] <- closure
       return(Fortran(""))
     }
 
@@ -409,15 +417,71 @@ register_r2f_handler(
 
 register_r2f_handler("=", r2f_handlers[["<-"]])
 
+# Closure bindings select a fixed Fortran procedure at compile time. Reject
+# runtime selection and rebinding before lowering can overwrite compiler scope.
+check_static_closure_bindings <- function(expr, formals = character()) {
+  bindings <- formals
+  closure_names <- character()
+  scan <- function(e, conditional = FALSE) {
+    if (is_missing(e) || !is.call(e)) {
+      return(invisible(NULL))
+    }
+    if (is_function_call(e)) {
+      # Each nested function owns its bindings and control flow.
+      check_static_closure_bindings(e[[3L]], names(as.list(e[[2L]])))
+      return(invisible(NULL))
+    }
+    if (
+      (is_call(e, "<-") || is_call(e, "=")) &&
+        is.symbol(e[[2L]])
+    ) {
+      name <- as.character(e[[2L]])
+      bindings <<- c(bindings, name)
+      if (is_function_call(unwrap_parens(e[[3L]]))) {
+        if (conditional) {
+          stop(
+            "local closure definitions must be outside conditionals and loops",
+            call. = FALSE
+          )
+        }
+        closure_names <<- union(closure_names, name)
+      }
+    }
+    if (is_call(e, "for")) {
+      bindings <<- c(bindings, as.character(e[[2L]]))
+    }
+    conditional <- conditional ||
+      any(vapply(
+        c("if", "for", "while", "repeat", "ifelse", "&&", "||"),
+        function(name) is_call(e, name),
+        logical(1L)
+      ))
+    # Include anonymous callees as well as arguments and nested blocks.
+    lapply(as.list(e), scan, conditional = conditional)
+    invisible(NULL)
+  }
+  scan(expr)
+  rebound <- intersect(closure_names, bindings[duplicated(bindings)])
+  if (length(rebound)) {
+    stop(
+      "local closure `",
+      rebound[[1L]],
+      "` cannot be redefined or share its binding with a variable or argument",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
 # A Fortran declaration does not establish an R binding. Check source-level
 # control flow before accepting reads of locals, including the final return.
 check_definite_assignment <- function(closure, scope, captured = character()) {
   locals <- character()
-  # Names a local closure reads from the enclosing scope. A Fortran host
-  # association makes these readable regardless of the R control flow that
-  # created them, so they are checked wherever the closure is reached.
-  closure_captures <- list()
-  closure_definitions <- list()
+  # Closure bindings are static and unique within this lexical scope, so build
+  # their registry once before walking control flow.
+  # Fortran host association makes captures readable regardless of the R
+  # control flow that created them, so check them wherever a closure is reached.
+  closures <- list()
   collect <- function(expr) {
     if (is_missing(expr) || !is.call(expr) || is_function_call(expr)) {
       return(invisible(NULL))
@@ -427,7 +491,14 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
         length(expr) == 3L &&
         is.symbol(expr[[2L]])
     ) {
-      locals <<- union(locals, as.character(expr[[2L]]))
+      name <- as.character(expr[[2L]])
+      locals <<- union(locals, name)
+      if (is_function_call(expr[[3L]])) {
+        closures[[name]] <<- list(
+          definition = expr[[3L]],
+          captures = closure_free_names(expr[[3L]])
+        )
+      }
     }
     if (is_call(expr, "for") && length(expr) == 4L) {
       locals <<- union(locals, as.character(expr[[2L]]))
@@ -464,7 +535,7 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     name,
     assigned,
     seen = character(),
-    captures = closure_captures[[name]] %||% character()
+    captures = closures[[name]]$captures %||% character()
   ) {
     require_assigned(name, assigned)
     # Follow closure dependencies at this use point, checking each cycle only
@@ -501,12 +572,8 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     }
     if ((is_call(expr, "<-") || is_call(expr, "=")) && length(expr) == 3L) {
       if (is.symbol(expr[[2L]]) && is_function_call(expr[[3L]])) {
-        # A closure definition reads nothing yet; record its captures for the
-        # points where the binding is reached.
-        name <- as.character(expr[[2L]])
-        closure_captures[[name]] <<- closure_free_names(expr[[3L]])
-        closure_definitions[[name]] <<- expr[[3L]]
-        return(union(assigned, name))
+        # Defining a closure establishes its binding but reads no captures yet.
+        return(union(assigned, as.character(expr[[2L]])))
       }
       assigned <- walk(expr[[3L]], assigned)
       if (is.null(assigned)) {
@@ -569,7 +636,7 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     callee <- unwrap_parens(expr[[1L]])
     if (is.symbol(callee)) {
       name <- as.character(callee)
-      definition <- closure_definitions[[name]]
+      definition <- closures[[name]]$definition
       if (is.null(definition)) {
         read(name, assigned)
       } else {

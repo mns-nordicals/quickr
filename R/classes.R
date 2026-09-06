@@ -415,6 +415,7 @@ SvdResult := new_class(
 LocalClosure := new_class(
   properties = list(
     name = prop_string(default = NULL, allow_null = TRUE),
+    proc_name = prop_string(default = NULL, allow_null = TRUE),
     fun = class_function
   )
 )

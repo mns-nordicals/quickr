@@ -420,3 +420,199 @@ test_that("nested closure defaults preserve their enclosing scope", {
   }
   expect_quick_identical(fn, TRUE, FALSE)
 })
+
+test_that("closure definitions cannot depend on runtime control flow", {
+  branches <- list(
+    quote(
+      if (flag) {
+        z <- 0L
+        f <- function() 2L
+      }
+    ),
+    quote(
+      if (flag) {
+        f <- function() 2L
+      } else {
+        f <- function() 3L
+      }
+    ),
+    quote(
+      while (flag) {
+        f <- function() 2L
+        flag <- FALSE
+      }
+    ),
+    quote(
+      for (i in seq_len(n)) {
+        f <- function() 2L
+      }
+    ),
+    quote(
+      repeat {
+        f <- function() 2L
+        break
+      }
+    ),
+    quote(
+      if (flag) {
+        f = function() 2L
+      }
+    )
+  )
+  for (branch in branches) {
+    fn <- function(flag, n) {
+      declare(type(flag = logical(1)), type(n = integer(1)))
+      f <- function() 1L
+      NULL
+      f()
+    }
+    body(fn)[[4L]] <- branch
+    expect_error(quick(fn), "local closure definitions must be outside")
+  }
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    f <- function() {
+      g <- function() 1L
+      if (flag) {
+        z <- 0L
+        g <- function() 2L
+      }
+      g()
+    }
+    f()
+  }
+  expect_error(quick(fn), "local closure definitions must be outside")
+})
+
+test_that("static closures can be called conditionally and in loops", {
+  fn <- function(flag, n) {
+    declare(type(flag = logical(1)), type(n = integer(1)))
+    f <- function() {
+      g <- function() 2L
+      out <- 1L
+      if (flag) {
+        out <- g()
+      }
+      out
+    }
+    out <- 0L
+    if (flag) {
+      out <- f()
+    }
+    for (i in seq_len(n)) {
+      out <- out + f()
+    }
+    out
+  }
+  expect_quick_identical(
+    fn,
+    list(FALSE, 0L),
+    list(TRUE, 0L),
+    list(FALSE, 2L),
+    list(TRUE, 2L)
+  )
+
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    out <- 0L
+    if (flag) {
+      out <- (function() {
+        g <- function() 2L
+        g()
+      })()
+    }
+    out
+  }
+  expect_quick_identical(fn, TRUE, FALSE)
+})
+
+test_that("local function names have a single binding per scope", {
+  bodies <- list(
+    quote({
+      f <- function() 1L
+      f <- function() 2L
+      f()
+    }),
+    quote({
+      f <- function() 1L
+      f = function() 2L
+      f()
+    }),
+    quote({
+      f <- function() 1L
+      f <- 2L
+      f
+    }),
+    quote({
+      f <- 1L
+      f <- function() 2L
+      f()
+    }),
+    quote({
+      f <- function() 1L
+      for (f in seq_len(2L)) {}
+      0L
+    }),
+    quote({
+      g <- function() {
+        f <- function() 1L
+        f <- function() 2L
+        f()
+      }
+      g()
+    })
+  )
+  for (expr in bodies) {
+    fn <- function() {}
+    body(fn) <- expr
+    expect_error(quick(fn), "local closure `f` cannot be redefined")
+  }
+
+  fn <- function(f) {
+    declare(type(f = integer(1)))
+    f <- function() 1L
+    f()
+  }
+  expect_error(quick(fn), "local closure `f` cannot be redefined")
+})
+
+test_that("separate scopes may use the same local function name", {
+  fn <- function() {
+    f <- function() 1L
+    g <- function() {
+      f <- function() 2L
+      f()
+    }
+    f() + g()
+  }
+  expect_quick_identical(fn, list())
+
+  fn <- function(n) {
+    declare(type(n = integer(1)))
+    f <- function(i) i
+    g <- function() {
+      f <- function(i) i + 1L
+      out <- integer(n)
+      out <- sapply(seq_along(out), f)
+      sum(out)
+    }
+    g() + f(1L)
+  }
+  expect_quick_identical(fn, 2L, 3L)
+})
+
+test_that("static closure registries still check initialization at use points", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    f <- function() g()
+    g <- function() x
+    if (flag) {
+      x <- 1L
+    }
+    f()
+  }
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+  body(fn)[[5L]] <- quote(if (flag) x <- 1L else x <- 2L)
+  expect_quick_identical(fn, TRUE, FALSE)
+})
