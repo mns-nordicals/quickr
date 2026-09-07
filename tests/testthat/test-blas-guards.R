@@ -191,10 +191,11 @@ test_that("BLAS destinations are not reused across unproven shapes", {
   )
 })
 test_that("renamed BLAS return destinations remain output arguments", {
+  # Bound the return shape so its length validation cannot skip the RNG draw.
   fn <- function(a, b, n) {
     declare(
-      type(a = double(m, k)),
-      type(b = double(k, p)),
+      type(a = double(2, k)),
+      type(b = double(k, 2)),
       type(n = integer(1))
     )
     x <- runif(n)
@@ -906,8 +907,9 @@ test_that("vector products and QR solves validate before oversized returns", {
 })
 
 test_that("return preflight preserves RNG effects and conditional execution", {
+  # A fixed output size permits effects before computation-time shape errors.
   fn <- function(a) {
-    declare(type(a = double(n, m)))
+    declare(type(a = double(2, m)))
     noise <- runif(1L)
     solve(a)
   }
@@ -974,14 +976,15 @@ test_that("local closure results retain return allocation requirements", {
 })
 
 test_that("return preflight preserves output before shape errors", {
+  # Keep the output size valid independently of the input's column count.
   direct <- function(a) {
-    declare(type(a = double(n, m)))
+    declare(type(a = double(2, m)))
     marker <- 123L
     print(marker)
     solve(a)
   }
   nested <- function(a) {
-    declare(type(a = double(n, m)))
+    declare(type(a = double(2, m)))
     invert <- function(x) {
       marker <- 123L
       print(marker)

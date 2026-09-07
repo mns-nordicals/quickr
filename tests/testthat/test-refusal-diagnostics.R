@@ -223,3 +223,162 @@ test_that("rep.int refuses negative repetition counts in subscripts", {
     expect_error(qdynamic(c(1, 2), times), message, fixed = TRUE)
   }
 })
+
+test_that("logical axis masks require matching extents", {
+  rows <- function(x, pred) {
+    declare(type(x = double(n, k)), type(pred = logical(m)))
+    sum(x[pred, , drop = FALSE])
+  }
+  cols <- function(x, pred) {
+    declare(type(x = double(n, k)), type(pred = logical(m)))
+    sum(x[, pred, drop = FALSE])
+  }
+  write_rows <- function(x, pred) {
+    declare(type(x = double(n, k)), type(pred = logical(m)))
+    out <- x
+    out[pred, ] <- 0
+    sum(out)
+  }
+  write_cols <- function(x, pred) {
+    declare(type(x = double(n, k)), type(pred = logical(m)))
+    out <- x
+    out[, pred] <- 0
+    sum(out)
+  }
+  x <- matrix(as.double(1:12), 4L, 3L)
+  for (fn in list(rows, cols)) {
+    qfn <- quick(fn)
+    extent <- if (identical(fn, rows)) nrow(x) else ncol(x)
+    pred <- rep(c(TRUE, FALSE), length.out = extent)
+    expect_identical(qfn(x, pred), fn(x, pred))
+    expect_identical(qfn(x, rep(FALSE, extent)), 0)
+    for (size in c(0L, 1L, extent - 1L, extent + 1L)) {
+      expect_error(
+        qfn(x, rep(TRUE, size)),
+        "logical mask extents must match indexed axis"
+      )
+    }
+  }
+  for (fn in list(write_rows, write_cols)) {
+    qfn <- quick(fn)
+    extent <- if (identical(fn, write_rows)) nrow(x) else ncol(x)
+    pred <- rep(c(TRUE, FALSE), length.out = extent)
+    expect_identical(qfn(x, pred), fn(x, pred))
+    expect_identical(qfn(x, rep(FALSE, extent)), sum(x))
+    expect_error(
+      qfn(x, rep(TRUE, extent - 1L)),
+      "logical mask extents must match indexed axis"
+    )
+    expect_error(
+      qfn(x, rep(TRUE, extent + 1L)),
+      "logical mask extents must match indexed axis"
+    )
+  }
+  expect_identical(quick(rows)(matrix(numeric(), 0L, 3L), logical()), 0)
+  expect_identical(quick(cols)(matrix(numeric(), 4L, 0L), logical()), 0)
+  fixed <- function(x, pred) {
+    declare(type(x = double(4, 3)), type(pred = logical(2)))
+    sum(x[pred, ])
+  }
+  expect_error(quick(fixed), "logical mask extents must match indexed axis")
+  singleton <- function(x, pred) {
+    declare(type(x = double(1, 3)), type(pred = logical(1)))
+    sum(x[pred, , drop = FALSE])
+  }
+  qsingleton <- quick(singleton)
+  expect_identical(qsingleton(x[1L, , drop = FALSE], TRUE), sum(x[1L, ]))
+  expect_identical(qsingleton(x[1L, , drop = FALSE], FALSE), 0)
+})
+
+test_that("unproven return sizes cannot skip preceding observable effects", {
+  printed <- function(n) {
+    declare(type(n = integer(1)))
+    marker <- 123L
+    print(marker)
+    matrix(1, n, n)
+  }
+  draws <- function(n) {
+    declare(type(n = integer(1)))
+    noise <- runif(1L)
+    matrix(1, n, n)
+  }
+  nested <- function(n) {
+    declare(type(n = integer(1)))
+    make <- function() {
+      marker <- 123L
+      print(marker)
+      out <- matrix(1, n, n)
+      out
+    }
+    make()
+  }
+  operand <- function(n) {
+    declare(type(n = integer(1)))
+    matrix(runif(1L), n, n)
+  }
+  listed <- function(n, m) {
+    declare(type(n = integer(1)), type(m = integer(1)))
+    first <- runif(n)
+    second <- numeric(m)
+    list(first, second)
+  }
+  conditional <- function(n, flag) {
+    declare(type(n = integer(1)), type(flag = logical(1)))
+    if (flag) {
+      noise <- runif(1L)
+    }
+    matrix(1, n, n)
+  }
+  for (fn in list(printed, draws, nested, operand, listed, conditional)) {
+    expect_error(
+      quick(fn),
+      "cannot validate return dimensions before RNG or output effects"
+    )
+  }
+})
+
+test_that("return sizes established before effects remain supported", {
+  initialized <- function(n) {
+    declare(type(n = integer(1)))
+    out <- matrix(1, n, n)
+    marker <- 123L
+    print(marker)
+    out
+  }
+  qinitialized <- quick(initialized)
+  output <- capture.output(expect_identical(
+    qinitialized(2L),
+    matrix(1, 2L, 2L)
+  ))
+  expect_match(paste(output, collapse = "\n"), "123")
+  output <- capture.output(expect_error(
+    qinitialized(-1L),
+    "return dimensions must be non-negative"
+  ))
+  expect_length(output, 0L)
+
+  draws <- function(n) {
+    declare(type(n = integer(1)))
+    runif(n)
+  }
+  qrandom <- quick(draws)
+  withr::local_seed(281)
+  expected <- draws(3L)
+  expected_seed <- .Random.seed
+  set.seed(281)
+  expect_identical(qrandom(3L), expected)
+  expect_identical(.Random.seed, expected_seed)
+  expect_error(qrandom(-1L), "return dimensions must be non-negative")
+  expect_identical(.Random.seed, expected_seed)
+
+  same_shape <- function(a) {
+    declare(type(a = double(n, m)))
+    marker <- 123L
+    print(marker)
+    a + 1
+  }
+  qsame <- quick(same_shape)
+  a <- matrix(as.double(1:6), 2L, 3L)
+  output <- capture.output(expect_identical(qsame(a), a + 1))
+  expect_match(paste(output, collapse = "\n"), "123")
+})

@@ -156,10 +156,7 @@ r2f_handlers[["["]] <- function(
         Fortran(":", Variable("integer", var@value@dims[[i]]))
       },
       logical1 = {
-        # we convert to a temp integer vector, doing the equivalent of R's which()
-        i <- scope_unique_var(scope, "integer")
-        f <- glue("pack([({i}, {i}=1, size({subscript}))], {subscript})")
-        return(Fortran(f, Variable("int", NA)))
+        logical_axis_subscript(var, subscript, i, scope, hoist)
       },
       integer0 = {
         if (drop) {
@@ -389,4 +386,30 @@ subscript_axis_extents <- function(var, n_idx) {
     return(list(prod(unlist(dims))))
   }
   rep(list(NULL), n_idx)
+}
+
+
+# Share per-axis logical-vector validation between reads and writes.
+logical_axis_subscript <- function(var, mask, axis, scope, hoist) {
+  mask <- booleanize_logical_as_int(mask)
+  guard_conformable_dims(
+    dim_or_one(var, axis),
+    dim_or_one(mask, 1L),
+    "logical mask extents must match indexed axis",
+    hoist,
+    scope,
+    left = var,
+    right = mask,
+    left_axis = axis,
+    right_axis = 1L,
+    checker = check_equal_dims
+  )
+  if (passes_as_scalar(mask@value)) {
+    f <- glue("pack([1], [{mask}])")
+  } else {
+    index <- scope_unique_var(scope, "integer")
+    register_openmp_private(scope, index@name)
+    f <- glue("pack([({index}, {index}=1, size({mask}))], {mask})")
+  }
+  Fortran(f, Variable("int", NA))
 }

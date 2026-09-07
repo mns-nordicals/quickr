@@ -458,6 +458,22 @@ result explicitly when the bounds vary per element.
 marked by `declare(parallel())` rejects it to avoid sharing R's RNG across
 threads.
 
+### Return allocation and observable effects
+
+C allocates returned arrays before the generated Fortran body runs. quickr
+therefore rejects functions whose return-size validation could skip earlier
+RNG or output effects. For example, drawing a random number or printing a
+value before returning `matrix(1, n, n)` with a runtime scalar `n` is refused
+at compile time: a negative `n` would otherwise raise an error before the
+earlier effect occurs.
+
+Fixed valid return sizes and unchanged input shapes remain supported, as do
+sizes established by a preceding unconditional assignment. Creating the
+matrix before printing makes its size validation precede the output in both
+R and quickr. A direct `runif(n)` result is also supported because its count
+is validated before drawing. The analysis is conservative for control flow
+and local closure calls, and checks every result in a returned list.
+
 ### Scalar transpose {#scalar-transpose}
 
 R's `t(x)` gives a scalar input `1x1` matrix dimensions. quickr returns the
@@ -480,8 +496,10 @@ defeat the purpose of compiling, so quickr's contract is:
   matching Fortran's own contract: reading or writing out of bounds is
   undefined behavior, as in C. It will not return `NA`-padded results
   the way R does.
-- A logical mask must match the indexed extent. quickr refuses the shorter
-  masks that R recycles.
+- A logical mask must match the indexed extent, including masks on individual
+  axes such as `m[mask, ]` and `m[, mask]`. quickr refuses both shorter masks
+  that R recycles and longer masks. Known mismatches are compile errors;
+  dynamic extents are checked before indexing.
 
 If you need R's bounds behavior, validate indices before the loop.
 

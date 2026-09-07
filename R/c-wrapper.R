@@ -67,6 +67,7 @@ make_c_bridge <- function(
   # definitions, so a later check cannot refer to a declaration in an earlier
   # result's allocation block.
   return_vars <- mget(unique(unname(return_var_names)), scope)
+  check_return_size_effect_order(closure, scope, return_vars, closure_arg_vars)
   for (return_var in return_vars) {
     return_var_r_name <- return_var@r_name %||% return_var@name
     if (preflight_safe && !return_var_r_name %in% closure_arg_names) {
@@ -400,6 +401,131 @@ return_var_c_checks <- function(var, scope, c_hoist) {
       glue('if ({left} != {right}) Rf_error("%s", "{check$message}");')
     )
   }))
+}
+
+# C allocates all results before entering Fortran. Reject programs where a
+# return-size error could therefore skip an observable effect. Shape facts
+# established before the effect (including an RNG result's own size check)
+# are sufficient; control flow and effectful local calls are conservative.
+check_return_size_effect_order <- function(closure, scope, returns, inputs) {
+  effect_names <- c("runif", "cat", "print")
+  if (!any(all.names(body(closure)) %in% effect_names)) {
+    return(invisible(NULL))
+  }
+  shape <- function(var) {
+    unlist(
+      dims2c(var@dims, scope, c_hoist = c_bridge_hoist()),
+      use.names = FALSE
+    )
+  }
+  input_shapes <- lapply(inputs, shape)
+  trusted_axes <- unlist(input_shapes, use.names = FALSE)
+  matrix_axes <- unlist(
+    input_shapes[lengths(input_shapes) > 1L],
+    use.names = FALSE
+  )
+  max_length <- if (.Machine$sizeof.pointer >= 8L) {
+    2^52
+  } else {
+    .Machine$integer.max
+  }
+  valid <- input_shapes
+  needed <- lapply(returns, shape)
+  proven <- function(dims) {
+    if (any(vapply(valid, identical, logical(1L), dims))) {
+      return(TRUE)
+    }
+    if (length(dims) == 1L && dims %in% trusted_axes) {
+      return(TRUE)
+    }
+    bounds <- vapply(
+      dims,
+      function(d) {
+        if (grepl("^[0-9]+$", d)) {
+          return(as.double(d))
+        }
+        if (d %in% matrix_axes) {
+          return(as.double(.Machine$integer.max))
+        }
+        Inf
+      },
+      numeric(1L)
+    )
+    all(is.finite(bounds) & bounds <= .Machine$integer.max) &&
+      prod(bounds) <= max_length
+  }
+  if (all(vapply(needed, proven, logical(1L)))) {
+    return(invisible(NULL))
+  }
+  effect <- function() {
+    if (!all(vapply(needed, proven, logical(1L)))) {
+      stop(
+        "cannot validate return dimensions before RNG or output effects; ",
+        "use fixed return dimensions, an input shape, or initialize the ",
+        "return shape before the effect",
+        call. = FALSE
+      )
+    }
+  }
+  has_effect <- function(e, seen = character()) {
+    nms <- all.names(e)
+    if (any(nms %in% effect_names)) {
+      return(TRUE)
+    }
+    any(vapply(
+      setdiff(nms, seen),
+      function(nm) {
+        callee <- get0(nm, scope)
+        inherits(callee, LocalClosure) &&
+          (has_effect(body(callee@fun), c(seen, nm)) ||
+            has_effect(formals(callee@fun), c(seen, nm)))
+      },
+      logical(1L)
+    ))
+  }
+  walk <- function(e, target = NULL, guaranteed = TRUE) {
+    if (!is.call(e) || !is.symbol(e[[1L]])) {
+      return(invisible(NULL))
+    }
+    op <- as.character(e[[1L]])
+    if (op %in% c("function", "declare")) {
+      return(invisible(NULL))
+    }
+    args <- as.list(e)[-1L]
+    if (op %in% c("<-", "=") && is.symbol(e[[2L]])) {
+      var <- get0(as.character(e[[2L]]), scope, inherits = FALSE)
+      dims <- if (inherits(var, Variable)) {
+        tryCatch(shape(var), error = function(e) NULL)
+      } else {
+        NULL
+      }
+      walk(e[[3L]], target = dims, guaranteed = guaranteed)
+      if (guaranteed && !is.null(dims)) {
+        valid[[length(valid) + 1L]] <<- dims
+      }
+      return(invisible(NULL))
+    }
+    if (op %in% c("if", "for", "while", "repeat", "ifelse", "&&", "||")) {
+      guaranteed <- FALSE
+    }
+    for (arg in args) {
+      if (!is_missing(arg)) walk(arg, guaranteed = guaranteed)
+    }
+    if (inherits(get0(op, scope), LocalClosure) || is_sapply_call(e)) {
+      # Definitions are not evaluated here. Without a proof for the callee's
+      # effect order, require the result sizes to be safe at the call site.
+      if (has_effect(e)) effect()
+    } else if (op %in% effect_names) {
+      if (op == "runif" && guaranteed && !is.null(target)) {
+        # runif validates its count before consuming any random draws.
+        valid[[length(valid) + 1L]] <<- target
+      }
+      effect()
+    }
+    invisible(NULL)
+  }
+  walk(body(closure))
+  invisible(NULL)
 }
 
 return_var_c_defs <- function(var, scope, c_hoist = NULL) {
