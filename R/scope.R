@@ -112,6 +112,17 @@ new_scope <- function(closure, parent = emptyenv()) {
   state$kind <- if (is.null(closure)) "block" else "subroutine"
   state$return_names <- character()
   state$internal_procs <- list()
+  state$block_name_state <- if (
+    is.null(closure) &&
+      inherits(parent, "quickr_scope") &&
+      identical(scope_kind(parent), "block")
+  ) {
+    attr(parent, "state", exact = TRUE)$block_name_state
+  } else {
+    counter <- new.env(parent = emptyenv())
+    counter$i <- 0L
+    counter
+  }
 
   state$get_unique_var <- local({
     i <- 0L
@@ -123,7 +134,18 @@ new_scope <- function(closure, parent = emptyenv()) {
         subroutine = "tmp",
         "tmp"
       )
-      name <- paste0(prefix, i <<- i + 1L, "_")
+      if (identical(prefix, "btmp")) {
+        counter <- state$block_name_state
+        counter$i <- counter$i + 1L
+        name <- paste0(prefix, counter$i, "_")
+        return(scope[[name]] <- Variable(..., name = name))
+      }
+      repeat {
+        name <- paste0(prefix, i <<- i + 1L, "_")
+        if (is.null(get0(name, scope))) {
+          break
+        }
+      }
       (scope[[name]] <- Variable(..., name = name))
     }
   })

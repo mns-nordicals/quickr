@@ -40,6 +40,35 @@ new_hoist <- function(scope) {
     )
   }
 
+  capture <- function() {
+    captured <- character()
+    capture_emit <- function(...) {
+      captured <<- c(
+        captured,
+        as.character(unlist(c(character(), ...), use.names = FALSE))
+      )
+    }
+    capture_render <- function(code) {
+      str_flatten_lines(str_split_lines(captured, code))
+    }
+    capture_has_code <- function() length(captured) > 0L
+    list2env(
+      list(
+        emit = capture_emit,
+        declare_tmp = declare_tmp,
+        render = capture_render,
+        has_code = capture_has_code,
+        capture = capture,
+        capture_block = capture_block
+      ),
+      parent = emptyenv()
+    )
+  }
+
+  capture_block <- function() {
+    new_hoist(ensure_block_scope())
+  }
+
   render <- function(code) {
     code <- str_split_lines(code)
     if (!length(hoisted) && !has_block()) {
@@ -65,7 +94,9 @@ new_hoist <- function(scope) {
     list(
       emit = emit,
       declare_tmp = declare_tmp,
-      render = render
+      render = render,
+      capture = capture,
+      capture_block = capture_block
     ),
     parent = emptyenv()
   )
@@ -85,7 +116,8 @@ hoist_unless_name <- function(x, hoist) {
   tmp <- hoist$declare_tmp(
     mode = x@value@mode,
     dims = x@value@dims,
-    logical_as_int = logical_as_int(x@value)
+    logical_as_int = logical_as_int(x@value) &&
+      !isTRUE(x@logical_booleanized)
   )
   hoist$emit(glue("{tmp@name} = {x}"))
   Fortran(tmp@name, tmp)

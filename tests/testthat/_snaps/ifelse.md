@@ -26,7 +26,21 @@
         ! manifest end
       
       
-        out_ = merge(real(1_c_int, kind=c_double), a, (c/=0))
+        block
+          logical, allocatable :: btmp1_(:) ! logical
+          real(c_double), allocatable :: btmp2_(:)
+      
+          allocate(btmp1_(c__len_))
+          allocate(btmp2_(c__len_))
+          btmp1_ = (c/=0)
+          if (any(btmp1_)) then
+            where (btmp1_) btmp2_ = real(1_c_int, kind=c_double)
+          end if
+          if (any(.not. btmp1_)) then
+            where (.not. btmp1_) btmp2_ = a
+          end if
+          out_ = btmp2_
+        end block
       end subroutine
     Code
       cat(cwrapper)
@@ -113,17 +127,31 @@
         ! manifest end
       
       
-        if (size(a, 1) /= size((c/=0), 1)) then
+        block
+          logical, allocatable :: btmp1_(:) ! logical
+          real(c_double), allocatable :: btmp2_(:)
+      
+          allocate(btmp1_(c__len_))
+          allocate(btmp2_(c__len_))
+          btmp1_ = (c/=0)
+          if (any(btmp1_)) then
+            if (size(a, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-          return
-        end if
-        if (size(b, 1) /= size((c/=0), 1)) then
+              return
+            end if
+            where (btmp1_) btmp2_ = a
+          end if
+          if (any(.not. btmp1_)) then
+            if (size(b, 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("ifelse() `yes` and `no` must be scalars or match the shape of `test`; R-style recycling is not&
       & supported")
-          return
-        end if
-        out_ = merge(a, b, (c/=0))
+              return
+            end if
+            where (.not. btmp1_) btmp2_ = b
+          end if
+          out_ = btmp2_
+        end block
       
         contains
           subroutine quickr_set_error_msg(msg)

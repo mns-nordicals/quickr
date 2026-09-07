@@ -2080,7 +2080,18 @@
       
       
         y = (.not. (x/=0))
-        out = merge(1_c_int, 0_c_int, y)
+        block
+          integer(c_int), allocatable :: btmp1_(:)
+      
+          allocate(btmp1_(x__len_))
+          if (any(y)) then
+            where (y) btmp1_ = 1_c_int
+          end if
+          if (any(.not. y)) then
+            where (.not. y) btmp1_ = 0_c_int
+          end if
+          out = btmp1_
+        end block
       end subroutine
     Code
       cat(cwrapper)

@@ -43,6 +43,30 @@ test_that("ifelse promotes branches and shapes like test", {
   expect_quick_equal(fn2, list(c(TRUE, FALSE, TRUE), c(TRUE, TRUE, FALSE)))
 })
 
+test_that("ifelse keeps pure known-shape branches inline", {
+  fn <- function(test, a, b, no) {
+    declare(
+      type(test = logical(3)),
+      type(a = double(3)),
+      type(b = double(3)),
+      type(no = double(3))
+    )
+    ifelse(test, a + b, no)
+  }
+
+  fsub <- r2f(fn)
+  expect_false(grepl("btmp3_", as.character(fsub), fixed = TRUE))
+  expect_quick_identical(
+    fn,
+    list(
+      test = c(TRUE, FALSE, TRUE),
+      a = c(1, 2, 3),
+      b = c(4, 5, 6),
+      no = c(10, 20, 30)
+    )
+  )
+})
+
 test_that("ifelse with scalar test and array branch errors cleanly", {
   fn <- function(c, a) {
     declare(type(c = logical(1)), type(a = double(n)))
@@ -94,4 +118,69 @@ test_that("ifelse guards unknown branch lengths at runtime", {
 
   expect_error(qfn(cc, c(10, 20), b), "match the shape of `test`")
   expect_error(qfn(cc, a, c(1, 2, 3, 4)), "match the shape of `test`")
+})
+
+test_that("ifelse evaluates earlier branches before later shape errors", {
+  fn <- function(x) {
+    declare(type(x = double(n)))
+    ifelse(c(TRUE, FALSE, TRUE), runif(3), runif(3) + x)
+  }
+  qfn <- quick(fn)
+
+  set.seed(914)
+  expect_error(qfn(c(1, 2)), "elementwise vector operations")
+  actual_seed <- .Random.seed
+
+  set.seed(914)
+  runif(3)
+  runif(3)
+  expect_identical(actual_seed, .Random.seed)
+})
+
+test_that("ifelse does not evaluate unselected branches", {
+  fn <- function(test) {
+    declare(type(test = logical(3)))
+    ifelse(test, runif(3), runif(3))
+  }
+  qfn <- quick(fn)
+
+  for (test in list(rep(TRUE, 3), rep(FALSE, 3))) {
+    set.seed(613)
+    expected <- fn(test)
+    expected_seed <- .Random.seed
+
+    set.seed(613)
+    actual <- qfn(test)
+    actual_seed <- .Random.seed
+
+    expect_equal(actual, expected)
+    expect_identical(actual_seed, expected_seed)
+  }
+})
+
+test_that("ifelse allocates branch temporaries only when selected", {
+  fn <- function(test, n) {
+    declare(type(test = logical(3)), type(n = integer(1)))
+    ifelse(test, runif(n), 0)
+  }
+
+  fsub <- as.character(r2f(fn))
+  expect_lt(
+    regexpr("if (any(", fsub, fixed = TRUE)[[1L]],
+    regexpr("allocate(", fsub, fixed = TRUE)[[1L]]
+  )
+  qfn <- quick(fn)
+
+  for (test in list(rep(FALSE, 3), rep(TRUE, 3))) {
+    set.seed(826)
+    expected <- fn(test, 3L)
+    expected_seed <- .Random.seed
+
+    set.seed(826)
+    actual <- qfn(test, 3L)
+    actual_seed <- .Random.seed
+
+    expect_equal(actual, expected)
+    expect_identical(actual_seed, expected_seed)
+  }
 })

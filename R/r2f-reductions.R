@@ -31,17 +31,18 @@ register_r2f_handler(
       prod = "product"
     )
 
-    reduce_arg <- function(arg) {
+    reduce_arg <- function(arg, ordered = FALSE) {
       mask_hoist <- create_mask_hoist()
       # Nested reductions (e.g., min(max(...), ...)) can thread an existing
       # hoist_mask through `...`. We always want a single mask hoister per
       # reduction context, so we ignore any inherited one and install ours.
       dots <- list(...)
+      arg_hoist <- if (ordered) dots$hoist$capture() else dots$hoist
       x <- r2f(
         arg,
         scope,
         calls = dots$calls,
-        hoist = dots$hoist,
+        hoist = arg_hoist,
         hoist_mask = mask_hoist$try_set
       )
       if (mask_hoist$has_conflict()) {
@@ -57,24 +58,31 @@ register_r2f_handler(
         arith_join_mode(x),
         sprintf("%s()", last(dots$calls))
       )
-      if (x@value@is_scalar) {
-        return(x)
+      out <- if (x@value@is_scalar) {
+        x
+      } else {
+        hoisted_mask <- mask_hoist$get_hoisted()
+        s <- glue(
+          if (is.null(hoisted_mask)) {
+            "{intrinsic}({x})"
+          } else {
+            "{intrinsic}({x}, mask = {hoisted_mask})"
+          }
+        )
+        Fortran(s, Variable(x@value@mode))
       }
-      hoisted_mask <- mask_hoist$get_hoisted()
-      s <- glue(
-        if (is.null(hoisted_mask)) {
-          "{intrinsic}({x})"
-        } else {
-          "{intrinsic}({x}, mask = {hoisted_mask})"
-        }
-      )
-      Fortran(s, Variable(x@value@mode))
+
+      if (ordered) {
+        out <- hoist_unless_name(out, arg_hoist)
+        dots$hoist$emit(arg_hoist$render(character()))
+      }
+      out
     }
 
     if (length(args) == 1) {
       reduce_arg(args[[1]])
     } else {
-      args <- lapply(args, reduce_arg)
+      args <- lapply(args, reduce_arg, ordered = TRUE)
       # Fortran's max/min require uniform argument types; cast every operand
       # whose mode differs from the join. The + / * spellings for sum/prod
       # don't strictly need it, but one code path beats two. Logical
