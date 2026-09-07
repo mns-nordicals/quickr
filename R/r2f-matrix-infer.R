@@ -6,7 +6,8 @@ infer_symbol_var <- function(arg, scope) {
   if (!is.symbol(arg)) {
     return(NULL)
   }
-  var <- get0(as.character(arg), scope, inherits = FALSE)
+  # Closure formals live in a parent scope, as do host-associated captures.
+  var <- get0(as.character(arg), scope)
   if (inherits(var, Variable)) var else NULL
 }
 

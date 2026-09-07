@@ -56,12 +56,12 @@ make_c_bridge <- function(
   return_checks <- character()
   return_sizes <- character()
   # Input-only shape checks can move ahead of straight-line pure computation.
-  # Keep them in Fortran if that would skip RNG effects or reject an operation
+  # Keep them in Fortran if that would skip RNG/I/O effects or reject an operation
   # on a path that is not executed.
   preflight_safe <- !uses_rng &&
     !any(
       all.names(body(closure)) %in%
-        c("if", "for", "while", "repeat", "ifelse", "&&", "||")
+        c("if", "for", "while", "repeat", "ifelse", "&&", "||", "cat", "print")
     )
   # Generate all checks and their scalar conversions before any allocation
   # definitions, so a later check cannot refer to a declaration in an earlier

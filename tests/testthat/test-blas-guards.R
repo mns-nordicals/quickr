@@ -933,3 +933,69 @@ test_that("return preflight preserves RNG effects and conditional execution", {
   expect_equal(qconditional(a, FALSE), conditional(a, FALSE))
   expect_equal(qconditional(diag(2), TRUE), conditional(diag(2), TRUE))
 })
+
+test_that("local closure results retain return allocation requirements", {
+  old_limit <- mem.maxVSize()
+  withr::defer(mem.maxVSize(old_limit))
+  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+  assigned <- function(a) {
+    declare(type(a = double(n, m)))
+    invert <- function(x) {
+      y <- solve(x)
+      y
+    }
+    out <- invert(a)
+    out
+  }
+  nested <- function(a) {
+    declare(type(a = double(n, m)))
+    invert <- function(x) {
+      y <- solve(x)
+      y
+    }
+    outer <- function(z) invert(z)
+    outer(a)
+  }
+  existing <- function(a) {
+    declare(type(a = double(n, m)))
+    invert <- function(x) {
+      y <- solve(x)
+      y
+    }
+    out <- matrix(0, nrow(a), nrow(a))
+    out <- invert(a)
+    out
+  }
+  for (fn in list(assigned, nested, existing)) {
+    qfn <- quick(fn)
+    expect_equal(qfn(diag(2)), fn(diag(2)))
+    expect_error(qfn(matrix(1, 46000L, 1L)), "solve requires a square matrix")
+  }
+})
+
+test_that("return preflight preserves output before shape errors", {
+  direct <- function(a) {
+    declare(type(a = double(n, m)))
+    marker <- 123L
+    print(marker)
+    solve(a)
+  }
+  nested <- function(a) {
+    declare(type(a = double(n, m)))
+    invert <- function(x) {
+      marker <- 123L
+      print(marker)
+      y <- solve(x)
+      y
+    }
+    invert(a)
+  }
+  for (fn in list(direct, nested)) {
+    qfn <- quick(fn)
+    actual <- capture.output(expect_error(
+      qfn(matrix(1, 2L, 1L)),
+      "solve requires a square matrix"
+    ))
+    expect_match(paste(actual, collapse = "\n"), "123")
+  }
+})
