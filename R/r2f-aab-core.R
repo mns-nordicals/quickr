@@ -49,38 +49,31 @@ new_hoist <- function(scope) {
     )
   }
 
-  tmp_allocation_line <- function(var) {
-    local_var <- if (is.null(block_scope)) {
-      NULL
-    } else {
-      scope_var_by_fortran_name(block_scope, var@name)
-    }
-    if (is.null(local_var)) {
-      return(character())
-    }
+  allocate_tmp_at_point <- function(var, emit_at_point) {
     if (!block_tmp_allocatable(var, block_scope)) {
-      return(character())
-    }
-    if (var@name %in% point_allocated) {
-      return(character())
+      return(var)
     }
     point_allocated <<- c(point_allocated, var@name)
-    glue(
+    emit_at_point(glue(
       "allocate({var@name}({dims2f(var@dims, block_scope)}))"
-    )
-  }
-
-  allocate_tmp_at_point <- function(var, emit_at_point) {
-    line <- tmp_allocation_line(var)
-    if (length(line)) {
-      emit_at_point(line)
-    }
+    ))
     var
   }
 
   declare_tmp_at_point <- function(mode, dims, logical_as_int = FALSE) {
     var <- declare_tmp(mode, dims, logical_as_int)
     allocate_tmp_at_point(var, emit)
+  }
+
+  allocation_guard_at_point <- function(var) {
+    stopifnot(inherits(var, Variable))
+    if (!block_tmp_allocatable(var, block_scope)) {
+      return(character())
+    }
+    point_allocated <<- unique(c(point_allocated, var@name))
+    glue(
+      "if (.not. allocated({var@name})) allocate({var@name}({dims2f(var@dims, block_scope)}))"
+    )
   }
 
   capture <- function() {
@@ -96,14 +89,6 @@ new_hoist <- function(scope) {
       str_flatten_lines(str_split_lines(captured, code))
     }
     capture_has_code <- function() length(captured) > 0L
-    capture_allocate_existing_tmp_at_point <- function(var) {
-      line <- tmp_allocation_line(var)
-      if (length(line)) {
-        first_use <- which(grepl(var@name, captured, fixed = TRUE))[[1L]]
-        captured <<- append(captured, line, after = first_use - 1L)
-      }
-      var
-    }
     capture_declare_tmp_at_point <- function(
       mode,
       dims,
@@ -120,17 +105,22 @@ new_hoist <- function(scope) {
     list2env(
       list(
         emit = capture_emit,
+        allocation_guard_at_point = allocation_guard_at_point,
         declare_tmp = declare_tmp,
         declare_tmp_at_point = capture_declare_tmp_at_point,
-        allocate_tmp_at_point = capture_allocate_existing_tmp_at_point,
         render = capture_render,
         has_code = capture_has_code,
         mark_runtime_guard = capture_mark_runtime_guard,
         contains_runtime_guard = capture_contains_runtime_guard,
-        capture = capture
+        capture = capture,
+        capture_block = capture_block
       ),
       parent = emptyenv()
     )
+  }
+
+  capture_block <- function() {
+    new_hoist(ensure_block_scope())
   }
 
   render <- function(code) {
@@ -161,12 +151,14 @@ new_hoist <- function(scope) {
   list2env(
     list(
       emit = emit,
+      allocation_guard_at_point = allocation_guard_at_point,
       declare_tmp = declare_tmp,
       declare_tmp_at_point = declare_tmp_at_point,
       render = render,
       mark_runtime_guard = mark_runtime_guard,
       contains_runtime_guard = contains_runtime_guard,
-      capture = capture
+      capture = capture,
+      capture_block = capture_block
     ),
     parent = emptyenv()
   )
@@ -177,25 +169,13 @@ new_hoist <- function(scope) {
 # code more than once: Fortran evaluates intrinsic actual arguments before the
 # call, so repeating an expression duplicates its side effects (e.g. RNG
 # state via runif()).
-hoist_unless_name <- function(x, hoist, allocate_at_point = FALSE) {
-  stopifnot(
-    inherits(x, Fortran),
-    inherits(x@value, Variable),
-    is_bool(allocate_at_point)
-  )
+hoist_unless_name <- function(x, hoist) {
+  stopifnot(inherits(x, Fortran), inherits(x@value, Variable))
   code <- trimws(as.character(x))
   if (!is.null(x@value@name) && identical(code, x@value@name)) {
-    if (allocate_at_point) {
-      hoist$allocate_tmp_at_point(x@value)
-    }
     return(x)
   }
-  declare_tmp <- if (allocate_at_point) {
-    hoist$declare_tmp_at_point
-  } else {
-    hoist$declare_tmp
-  }
-  tmp <- declare_tmp(
+  tmp <- hoist$declare_tmp(
     mode = x@value@mode,
     dims = x@value@dims,
     logical_as_int = logical_as_int(x@value) &&

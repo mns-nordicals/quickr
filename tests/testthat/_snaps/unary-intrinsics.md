@@ -2083,11 +2083,12 @@
         block
           integer(c_int), allocatable :: btmp1_(:)
       
-          allocate(btmp1_(x__len_))
           if (any(y)) then
+            if (.not. allocated(btmp1_)) allocate(btmp1_(x__len_))
             where (y) btmp1_ = 1_c_int
           end if
           if (any(.not. y)) then
+            if (.not. allocated(btmp1_)) allocate(btmp1_(x__len_))
             where (.not. y) btmp1_ = 0_c_int
           end if
           out = btmp1_

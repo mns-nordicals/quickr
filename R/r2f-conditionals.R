@@ -128,7 +128,7 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   lower_branch <- function(arg) {
-    sub <- hoist$capture()
+    sub <- hoist$capture_block()
     branch <- r2f(arg, scope, ..., hoist = sub)
     if (
       !passes_as_scalar(mask@value) &&
@@ -138,7 +138,7 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
       # WHERE may evaluate only selected RHS elements. Materialize a branch
       # when full evaluation is observable or a runtime shape guard needs its
       # actual extent.
-      branch <- hoist_unless_name(branch, sub, allocate_at_point = TRUE)
+      branch <- hoist_unless_name(branch, sub)
     }
     list(value = branch, hoist = sub)
   }
@@ -187,8 +187,9 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
     for (i in seq_along(branches)) {
       selector <- selectors[[i]]
       hoist$emit(glue("if (any({selector})) then"))
-      assignment <- glue(
-        "where ({selector}) {result@name} = {branches[[i]]}"
+      assignment <- c(
+        hoist$allocation_guard_at_point(result),
+        glue("where ({selector}) {result@name} = {branches[[i]]}")
       )
       hoist$emit(indent(branch_hoists[[i]]$render(assignment)))
       hoist$emit("end if")
