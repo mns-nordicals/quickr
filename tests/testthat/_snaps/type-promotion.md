@@ -305,13 +305,16 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(x, out_, x__len_) bind(c)
-        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
+      subroutine fn(x, out_, x__len_, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
         ! sizes
         integer(c_ptrdiff_t), intent(in), value :: x__len_
+      
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
       
         ! args
         integer(c_int), intent(in) :: x(x__len_)
@@ -320,13 +323,44 @@
       
       
         block
-          integer(c_int) :: btmp1_
-          real(c_double) :: btmp2_
+          real(c_double) :: btmp1_
+          integer(c_int) :: btmp2_
       
-          btmp1_ = maxval(x)
-          btmp2_ = 2.5_c_double
-          out_ = max(real(btmp1_, kind=c_double), btmp2_)
+          btmp2_ = 0_c_int
+      
+          if (size(x, kind=c_ptrdiff_t) > 0_c_ptrdiff_t) then
+            if (btmp2_ == 0_c_int) then
+              btmp1_ = real(maxval(x), kind=c_double)
+              btmp2_ = 1_c_int
+            else
+              btmp1_ = max(btmp1_, real(maxval(x), kind=c_double))
+            end if
+          end if
+      
+          if (btmp2_ == 0_c_int) then
+            btmp1_ = 2.5_c_double
+            btmp2_ = 1_c_int
+          else
+            btmp1_ = max(btmp1_, 2.5_c_double)
+          end if
+          if (btmp2_ == 0_c_int) then
+            call quickr_set_error_msg("min()/max() of empty inputs are not supported")
+            return
+          end if
+          out_ = btmp1_
         end block
+      
+        contains
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -339,7 +373,8 @@
       extern void fn(
         const int* const x__, 
         double* const out___, 
-        const R_xlen_t x__len_);
+        const R_xlen_t x__len_, 
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // x
@@ -355,7 +390,18 @@
         SEXP out_ = PROTECT(Rf_allocVector(REALSXP, out___len_));
         double* out___ = REAL(out_);
         
-        fn(x__, out___, x__len_);
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
+        fn(
+          x__,
+          out___,
+          x__len_,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
         
         UNPROTECT(1);
         return out_;

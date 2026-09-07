@@ -468,6 +468,28 @@ test_that("tcrossprod uses vector length against matrix columns", {
   )
 })
 
+test_that("tcrossprod treats right-hand vectors as columns", {
+  static <- function(x, y) {
+    declare(type(x = double(2, 1)), type(y = double(3)))
+    tcrossprod(x, y)
+  }
+  dynamic <- function(x, y) {
+    declare(type(x = double(NA, NA)), type(y = double(NA)))
+    tcrossprod(x, y)
+  }
+
+  x <- matrix(as.double(1:2), nrow = 2L)
+  y <- as.double(1:3)
+  expect_quick_equal(static, list(x, y))
+
+  qfn <- quick(dynamic)
+  expect_equal(qfn(x, y), dynamic(x, y))
+
+  wide <- matrix(as.double(1:6), nrow = 2L)
+  expect_error(dynamic(wide, y), "non-conformable arguments", fixed = TRUE)
+  expect_error(qfn(wide, y), "non-conformable arguments", fixed = TRUE)
+})
+
 test_that("crossprod rejects incompatible destination dimensions", {
   crossprod_bad_dest <- function(x) {
     declare(type(x = double(4, 3)), type(out = double(2, 2)))

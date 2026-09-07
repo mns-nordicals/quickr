@@ -39,8 +39,15 @@ assignment_extract_fallthrough <- function(rhs) {
 assignment_fortran_name <- function(name, scope) {
   stopifnot(is_string(name))
   base <- fortranize_name(name)
-  if (scope_is_closure(scope) && inherits(get0(name, scope), Variable)) {
-    make_shadow_fortran_name(scope, base)
+  used <- unique(c(
+    scope_fortran_names(scope),
+    scope_generated_fortran_names(scope)
+  ))
+  if (
+    (scope_is_closure(scope) && inherits(get0(name, scope), Variable)) ||
+      tolower(base) %in% tolower(used)
+  ) {
+    make_shadow_fortran_name(scope, base, used = used)
   } else {
     base
   }

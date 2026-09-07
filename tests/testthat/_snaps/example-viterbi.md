@@ -133,6 +133,10 @@
               return
             end if
             probabilities = (trellis(:, (step - 1_c_int)) * transition_probs(:, current_state))
+            if (size(probabilities, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("min()/max() of empty inputs are not supported")
+              return
+            end if
             trellis(current_state, step) = (maxval(probabilities) * emission_probs(current_state, observations(step)))
             backpointer(current_state, step) = maxloc(probabilities, 1)
           end do
@@ -388,6 +392,10 @@
               return
             end if
             probabilities = (trellis(:, (step - 1_c_int)) * transition_probs(:, current_state))
+            if (size(probabilities, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+              call quickr_set_error_msg("min()/max() of empty inputs are not supported")
+              return
+            end if
             trellis(current_state, step) = (maxval(probabilities) * emission_probs(current_state, observations(step)))
             backpointer(current_state, step) = maxloc(probabilities, 1)
           end do

@@ -129,10 +129,16 @@ hoist_unless_name <- function(x, hoist) {
 finish_captured_operand <- function(operand, captured_hoist, hoist) {
   stopifnot(
     inherits(operand, Fortran),
-    inherits(operand@value, Variable),
     inherits(captured_hoist, "environment"),
     inherits(hoist, "environment")
   )
+
+  if (!inherits(operand@value, Variable)) {
+    if (captured_hoist$has_code()) {
+      hoist$emit(captured_hoist$render(character()))
+    }
+    return(operand)
+  }
 
   if (grepl("unif_rand()", as.character(operand), fixed = TRUE)) {
     tmp <- hoist$declare_tmp(
@@ -184,17 +190,22 @@ scope_fortran_names <- function(scope) {
   unique(out[nzchar(out)])
 }
 
-make_shadow_fortran_name <- function(scope, base, suffix = "__local_") {
+make_shadow_fortran_name <- function(
+  scope,
+  base,
+  suffix = "__local_",
+  used = scope_fortran_names(scope)
+) {
   stopifnot(inherits(scope, "quickr_scope"), is_string(base), is_string(suffix))
-  used <- scope_fortran_names(scope)
+  used <- tolower(used)
   candidate <- paste0(base, suffix)
-  if (!candidate %in% used) {
+  if (!tolower(candidate) %in% used) {
     return(candidate)
   }
   i <- 1L
   repeat {
     candidate <- paste0(base, suffix, i, "_")
-    if (!candidate %in% used) {
+    if (!tolower(candidate) %in% used) {
       return(candidate)
     }
     i <- i + 1L

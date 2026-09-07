@@ -183,6 +183,22 @@ test_that("nested elementwise operands preserve left-to-right evaluation", {
   expect_identical(quick(conformable)(), expected)
 })
 
+test_that("subscript operands preserve left-to-right evaluation", {
+  fn <- function(x) {
+    declare(type(x = double(2, 2)))
+    x[runif(1, 1, 3), runif(1, 1, 3) + 0]
+  }
+  qfn <- quick(fn)
+  x <- matrix(c(11, 21, 12, 22), 2, 2)
+
+  set.seed(106)
+  expected <- fn(x)
+  expected_next <- runif(1)
+  set.seed(106)
+  expect_identical(qfn(x), expected)
+  expect_identical(runif(1), expected_next)
+})
+
 test_that("matrix-matrix elementwise ops guard unknown dims per axis", {
   fn <- function(a, b) {
     declare(type(a = double(n, k)), type(b = double(m, j)))
@@ -496,6 +512,30 @@ test_that("omitted fill lengths default to zero", {
   }
 
   expect_quick_identical(fn, list())
+})
+
+test_that("array constructors reject empty fills for nonempty results", {
+  array_fn <- function() {
+    array(numeric(), dim = c(1L, 2L))
+  }
+  matrix_fn <- function() {
+    matrix(numeric(), nrow = 1L, ncol = 2L)
+  }
+
+  expect_error(quick(array_fn)(), "NA values, which are not supported")
+  expect_error(quick(matrix_fn)(), "NA values, which are not supported")
+})
+
+test_that("array constructors allow empty fills for empty results", {
+  array_fn <- function() {
+    array(numeric(), dim = c(0L, 2L))
+  }
+  matrix_fn <- function() {
+    matrix(numeric(), nrow = 0L, ncol = 2L)
+  }
+
+  expect_quick_identical(array_fn, list())
+  expect_quick_identical(matrix_fn, list())
 })
 
 test_that("matrix(scalar, m, n) materializes where an array is required", {
