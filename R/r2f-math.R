@@ -17,11 +17,10 @@ register_unary_intrinsic <- function(
     intrinsic <- last(list(...)$calls)
     if (
       intrinsic %in%
-        c("asin", "acos", "sqrt", "log") &&
+        c("asin", "acos", "sqrt", "exp", "log") &&
         isTRUE(hoist$defer_static_mode_error)
     ) {
-      # Prevent the compiler from evaluating a domain-invalid constant in a
-      # branch that may not run.
+      # Keep constant domain errors and overflow inside the selected branch.
       arg <- hoist_unless_name(arg, hoist)
     }
     val <- Variable(mode = mode_fun(arg), dims = arg@value@dims)

@@ -129,22 +129,6 @@ test_that("dispatch leaves unnamed handlers alone", {
   expect_identical(S7::S7_data(resolved), handler)
 })
 
-test_that("register_r2f_handler registers multiple names", {
-  handler <- function(e, scope, ...) NULL
-  withr::defer(
-    rm(list = c("multi_test_a", "multi_test_b"), envir = quickr:::r2f_handlers),
-    envir = environment()
-  )
-  quickr:::register_r2f_handler(
-    c("multi_test_a", "multi_test_b"),
-    handler
-  )
-  expect_identical(
-    quickr:::r2f_handlers[["multi_test_a"]],
-    quickr:::r2f_handlers[["multi_test_b"]]
-  )
-})
-
 test_that("quick compiles and calls a rebound namespace handler", {
   original <- quickr:::r2f_handlers[["sin"]]
   withr::defer(
@@ -163,4 +147,20 @@ test_that("quick compiles and calls a rebound namespace handler", {
     sin(x)
   }
   expect_quick_equal(fn, list(c(0, 1, 2)))
+})
+
+test_that("register_r2f_handler registers multiple names", {
+  handler <- function(e, scope, ...) NULL
+  withr::defer(
+    rm(list = c("multi_test_a", "multi_test_b"), envir = quickr:::r2f_handlers),
+    envir = environment()
+  )
+  quickr:::register_r2f_handler(
+    c("multi_test_a", "multi_test_b"),
+    handler
+  )
+  expect_identical(
+    quickr:::r2f_handlers[["multi_test_a"]],
+    quickr:::r2f_handlers[["multi_test_b"]]
+  )
 })

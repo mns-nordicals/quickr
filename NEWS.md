@@ -33,13 +33,12 @@
   vector where R returns a `1x1` matrix.
 
 - `&&` and `||` now behave like R's scalar control operators. They
-  require length-1 logical operands (longer operands are a compile-time
-  error, as they are a runtime error in R; use `&`/`|` for elementwise
-  logic), and they short-circuit: the right operand is evaluated only when
+  require length-1 logical operands (use `&`/`|` for elementwise logic),
+  and they short-circuit: the right operand is evaluated only when
   the left side does not decide the answer, so idioms like
   `while (i <= n && x[i] > 0)` are safe. Previously they compiled exactly
   like `&`/`|` — elementwise over vectors (returning answers where R
-  errors) and with both sides always evaluated.
+  errors) and with no short-circuit guarantee.
 
 - `solve(a, b)` now requires a square `a`, matching R. A rectangular `a`
   previously fell through to a least-squares solve (dgels), returning an

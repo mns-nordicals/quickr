@@ -200,6 +200,16 @@ scalarize_andor_operand <- function(
   scope,
   defer_error = FALSE
 ) {
+  if (is.null(x@value) && nzchar(trimws(as.character(x)))) {
+    # Statement-only handlers such as print() cannot supply an operand.
+    # Reject their use here before their emitted statements can be discarded.
+    stop(
+      "`",
+      op,
+      "` does not support statement-only operands; use a separate statement",
+      call. = FALSE
+    )
+  }
   if (is.null(x@value) || !identical(x@value@mode, "logical")) {
     message <- paste0("`", op, "` requires logical operands")
     if (!defer_error) {

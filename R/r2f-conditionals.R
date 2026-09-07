@@ -110,6 +110,12 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
 # --- Handlers ---
 
 r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
+  if (any(vapply(args, has_current_scope_assignment, logical(1L)))) {
+    stop(
+      "ifelse() does not support assignment expressions; assign on a separate line",
+      call. = FALSE
+    )
+  }
   mask <- lower_operands_in_order(
     args[1L],
     scope,
@@ -213,6 +219,18 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   mask <- booleanize_logical_as_int(mask)
+
+  selector <- unwrap_parens(args[[1L]])
+  if (is_bool(selector)) {
+    # R's scalar fast path retains the selected branch's mode.
+    selected <- if (selector) yes else no
+    result <- hoist$declare_tmp(
+      mode = selected$value@value@mode,
+      dims = mask@value@dims
+    )
+    hoist$emit(selected$hoist$render(glue("{result@name} = {selected$value}")))
+    return(Fortran(result@name, result))
+  }
 
   # Assign both branches into one result, promoting numeric modes. Raw values
   # have no numeric promotion but can be merged with the same raw mode.
