@@ -284,6 +284,20 @@ test_that("matrix multiplication avoids unsafe in-place aliasing", {
   expect_equal(out, fn(A_orig, B))
 })
 
+test_that("renamed matrix bindings avoid unsafe in-place aliasing", {
+  fn <- function(A, B) {
+    declare(type(A = double(2, 2)), type(B = double(2, 2)))
+    unused <- ifelse(c(TRUE, FALSE), c(1, 2), c(3, 4))
+    btmp1. <- A
+    btmp1. <- btmp1. %*% B
+    btmp1.
+  }
+
+  A <- matrix(c(1, 2, 3, 4), nrow = 2)
+  B <- matrix(c(2, 0, 1, -1), nrow = 2)
+  expect_quick_equal(fn, list(A, B))
+})
+
 test_that("matrix multiplication handles expression inputs without mutating sources", {
   fn <- function(A, B) {
     declare(type(A = double(2, 2)), type(B = double(2, 2)))
@@ -475,6 +489,10 @@ test_that("tcrossprod treats right-hand vectors as columns", {
     declare(type(x = double(NA, NA)), type(y = double(NA)))
     tcrossprod(x, y)
   }
+
+  code <- as.character(r2f(dynamic))
+  expect_match(code, "size(x, 2, kind=c_ptrdiff_t) /= 1", fixed = TRUE)
+  expect_false(grepl("size(y, 2", code, fixed = TRUE))
 
   x <- matrix(as.double(1:2), nrow = 2L)
   y <- as.double(1:3)

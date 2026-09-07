@@ -76,32 +76,26 @@ assert_rhs_rank <- function(
 # BLAS/LAPACK dimensions use equality semantics: equal zero contracted
 # dimensions are conformable and can still produce a non-empty result.
 check_blas_dims <- function(left, right) {
-  if (is_wholenumber(left) && is_wholenumber(right)) {
-    return(list(
-      ok = identical(as.integer(left), as.integer(right)),
-      unknown = FALSE,
-      reject_zero = FALSE
-    ))
-  }
-  if (!is_scalar_na(left) && !is_scalar_na(right)) {
-    left_norm <- fortranize_expr_symbols(left)
-    right_norm <- fortranize_expr_symbols(right)
-    if (identical(left_norm, right_norm)) {
-      return(list(ok = TRUE, unknown = FALSE, reject_zero = FALSE))
-    }
-  }
-  list(ok = TRUE, unknown = TRUE, reject_zero = FALSE)
+  check_equal_dims(left, right)
 }
 
-# Return the R symbol name if operand is a bare symbol; otherwise NULL.
+# Return the storage name if the operand is a bare named variable.
 symbol_name_or_null <- function(x) {
   stopifnot(inherits(x, Fortran))
+  code <- trimws(as.character(x))
+  if (
+    inherits(x@value, Variable) &&
+      !is.null(x@value@name) &&
+      identical(code, x@value@name)
+  ) {
+    return(x@value@name)
+  }
   r_expr <- unwrap_parens(x@r)
   if (is.symbol(r_expr)) {
     return(as.character(r_expr))
   }
-  if (length(x) == 1L && grepl("^[A-Za-z][A-Za-z0-9_]*$", x)) {
-    return(as.character(x))
+  if (length(x) == 1L && grepl("^[A-Za-z][A-Za-z0-9_]*$", code)) {
+    return(code)
   }
   NULL
 }
@@ -302,6 +296,46 @@ can_use_output <- function(
   !output_name %in% disallowed
 }
 
+allocate_reusable_local_output_at_point <- function(dest, scope, hoist) {
+  stopifnot(inherits(dest, Variable), inherits(scope, "quickr_scope"))
+  assert_hoist_env(hoist)
+
+  if (
+    !identical(scope_kind(scope), "subroutine") ||
+      isTRUE(dest@is_external) ||
+      !is.na(var_element_count(dest)) ||
+      !subroutine_local_allocatable(dest, scope)
+  ) {
+    return(invisible(dest))
+  }
+
+  return_names <- scope_get(scope, "return_names", character()) %||%
+    character()
+  return_fortran_names <- vapply(
+    return_names,
+    fortranize_name,
+    character(1L)
+  )
+  if (tolower(dest@name) %in% tolower(return_fortran_names)) {
+    return(invisible(dest))
+  }
+
+  point_allocated <- scope_get(
+    scope,
+    "point_allocated_local_names",
+    character()
+  )
+  scope_set(
+    scope,
+    "point_allocated_local_names",
+    unique(c(point_allocated, dest@name))
+  )
+  hoist$emit(glue(
+    "if (.not. allocated({dest@name})) allocate({dest@name}({dims2f(dest@dims, scope)}))"
+  ))
+  invisible(dest)
+}
+
 # Ensure a BLAS operand is named, hoisting into a temp if needed.
 ensure_blas_operand_name <- function(x, hoist) {
   name <- symbol_name_or_null(x)
@@ -405,6 +439,7 @@ gemm <- function(
       context = context
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     blas_call <- glue(
       "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {dest@name}, {blas_int(ldc_expr)})"
     )
@@ -414,7 +449,10 @@ gemm <- function(
     return(out)
   }
 
-  output_var <- hoist$declare_tmp(mode = "double", dims = list(m, n))
+  output_var <- hoist$declare_tmp_at_point(
+    mode = "double",
+    dims = list(m, n)
+  )
   blas_call <- glue(
     "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {output_var@name}, {blas_int(ldc_expr)})"
   )
@@ -462,6 +500,7 @@ gemv <- function(
       context = context
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     # Assign output to output destination
     blas_call <- glue(
       "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {dest@name}, 1_c_int)"
@@ -473,7 +512,7 @@ gemv <- function(
     return(out)
   }
   # Else assign to a temporary variable
-  output_var <- hoist$declare_tmp(mode = "double", dims = out_dims)
+  output_var <- hoist$declare_tmp_at_point(mode = "double", dims = out_dims)
   blas_call <- glue(
     "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {output_var@name}, 1_c_int)"
   )
@@ -712,12 +751,13 @@ triangular_solve <- function(
       allow_alias = B_input_name
     )
   ) {
+    allocate_reusable_local_output_at_point(dest, scope, hoist)
     hoist$emit(glue("{dest@name} = {B}"))
     B_name <- dest@name
     out_var <- dest
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(
+    out_var <- hoist$declare_tmp_at_point(
       mode = B@value@mode %||% "double",
       dims = B@value@dims
     )
@@ -779,6 +819,13 @@ lapack_solve <- function(
     call_high = FALSE
   )
 
+  # R's solve() rejects a rectangular coefficient matrix before checking
+  # whether the right-hand side is conformable. Least squares remains
+  # qr.solve()'s path.
+  if (!identical(context, "qr.solve")) {
+    assert_square_matrix(a_dims, A, context, hoist, scope)
+  }
+
   guard_conformable_dims(
     m,
     dim_or_one(B, 1L),
@@ -797,37 +844,46 @@ lapack_solve <- function(
 
   nrhs <- if (b_rank == 1L) 1L else dim_or_one(B, 2L)
 
-  # solve(a, b) with a rectangular `a` deliberately falls through to the
-  # least-squares branch below -- a divergence from base R (which requires
-  # a square `a`), locked by the "least-squares" tests in
-  # test-matrix-lapack.R. Squareness is a routing decision here, not a
-  # correctness guard: unknown squareness routes to dgels, which solves
-  # square systems exactly too.
-  if (dims_match(m, n) && !identical(context, "qr.solve")) {
-    A_work <- hoist$declare_tmp(mode = "double", dims = list(m, m))
+  # Both lowerings write a solution shaped by R's contract: length follows
+  # ncol(a), width follows the right-hand side. Each branch resolves the
+  # output target at its own write point (declaration order matters for
+  # the emitted block) with the one shared spelling below.
+  expected_dims <- if (b_rank == 1L) list(n) else list(n, nrhs)
+  dest_usable <- function() {
+    can_use_output(
+      dest,
+      input_names = c(A_name, B_input_name),
+      expected_dims = expected_dims,
+      context = context,
+      allow_alias = B_input_name
+    )
+  }
+
+  if (!identical(context, "qr.solve")) {
+    A_work <- hoist$declare_tmp_at_point(mode = "double", dims = list(m, n))
     hoist$emit(glue("{A_work@name} = {A_name}"))
 
-    expected_dims <- if (b_rank == 1L) list(n) else list(n, nrhs)
-    writes_to_dest <- FALSE
-    if (
-      can_use_output(
-        dest,
-        input_names = c(A_name, B_input_name),
-        expected_dims = expected_dims,
-        context = context,
-        allow_alias = B_input_name
-      )
-    ) {
-      out_var <- dest
-      out_name <- dest@name
-      writes_to_dest <- TRUE
+    use_dest <- dest_usable()
+    out_var <- if (use_dest) {
+      allocate_reusable_local_output_at_point(dest, scope, hoist)
+      dest
     } else {
-      out_var <- hoist$declare_tmp(mode = "double", dims = expected_dims)
-      out_name <- out_var@name
+      hoist$declare_tmp_at_point(mode = "double", dims = expected_dims)
     }
-    hoist$emit(glue("{out_name} = {B_input_name}"))
+    out_name <- out_var@name
+    # The output length follows ncol(a) (R's contract) while `b` follows
+    # nrow(a); the two are only runtime-equal. When ncol is statically 1
+    # the output declares as a scalar, so a symbolic-length `b` must be
+    # copied elementwise, not by whole-array assignment.
+    b_src <- if (passes_as_scalar(out_var) && !passes_as_scalar(B@value)) {
+      subs <- str_flatten_commas(rep("1", b_rank))
+      glue("{B_input_name}({subs})")
+    } else {
+      B_input_name
+    }
+    hoist$emit(glue("{out_name} = {b_src}"))
 
-    ipiv <- hoist$declare_tmp(mode = "integer", dims = list(m))
+    ipiv <- hoist$declare_tmp_at_point(mode = "integer", dims = list(m))
     info <- hoist$declare_tmp(mode = "integer", dims = NULL)
 
     hoist$emit(glue(
@@ -845,19 +901,14 @@ lapack_solve <- function(
       hoist = hoist,
       scope = scope
     )
-
-    out <- Fortran(out_name, out_var)
-    if (writes_to_dest) {
-      out@writes_to_dest <- TRUE
-    }
-    return(out)
-  }
-
-  if (identical(context, "qr.solve")) {
-    A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
+  } else {
+    A_work <- hoist$declare_tmp_at_point(mode = "double", dims = list(m, n))
     hoist$emit(glue("{A_work@name} = {A_name}"))
 
-    B_work <- hoist$declare_tmp(mode = "double", dims = list(m, nrhs))
+    B_work <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(m, nrhs)
+    )
     m_f <- dims2f(list(m), scope)
     if (!nzchar(m_f)) {
       m_f <- "1"
@@ -873,9 +924,9 @@ lapack_solve <- function(
       hoist$emit(glue("{B_work@name}(1:{m_f}, 1:{nrhs_f}) = {B_input_name}"))
     }
 
-    qraux <- hoist$declare_tmp(mode = "double", dims = list(n))
-    jpvt <- hoist$declare_tmp(mode = "integer", dims = list(n))
-    work <- hoist$declare_tmp(mode = "double", dims = list(n, 2L))
+    qraux <- hoist$declare_tmp_at_point(mode = "double", dims = list(n))
+    jpvt <- hoist$declare_tmp_at_point(mode = "integer", dims = list(n))
+    work <- hoist$declare_tmp_at_point(mode = "double", dims = list(n, 2L))
     rank <- hoist$declare_tmp(mode = "integer", dims = NULL)
     idx <- hoist$declare_tmp(mode = "integer", dims = NULL)
 
@@ -899,7 +950,7 @@ end do"
       scope = scope
     )
 
-    coef_work <- hoist$declare_tmp(
+    coef_work <- hoist$declare_tmp_at_point(
       mode = "double",
       dims = list(mn, nrhs)
     )
@@ -916,24 +967,14 @@ end do"
       scope = scope
     )
 
-    expected_dims <- if (b_rank == 1L) list(n) else list(n, nrhs)
-    writes_to_dest <- FALSE
-    if (
-      can_use_output(
-        dest,
-        input_names = c(A_name, B_input_name),
-        expected_dims = expected_dims,
-        context = context,
-        allow_alias = B_input_name
-      )
-    ) {
-      out_var <- dest
-      out_name <- dest@name
-      writes_to_dest <- TRUE
+    use_dest <- dest_usable()
+    out_var <- if (use_dest) {
+      allocate_reusable_local_output_at_point(dest, scope, hoist)
+      dest
     } else {
-      out_var <- hoist$declare_tmp(mode = "double", dims = expected_dims)
-      out_name <- out_var@name
+      hoist$declare_tmp_at_point(mode = "double", dims = expected_dims)
     }
+    out_name <- out_var@name
 
     if (passes_as_scalar(out_var)) {
       hoist$emit(glue("{out_name} = {coef_work@name}(1, 1)"))
@@ -960,125 +1001,10 @@ end do"
         ))
       }
     }
-
-    out <- Fortran(out_name, out_var)
-    if (writes_to_dest) {
-      out@writes_to_dest <- TRUE
-    }
-    return(out)
-  }
-
-  A_work <- hoist$declare_tmp(mode = "double", dims = list(m, n))
-  hoist$emit(glue("{A_work@name} = {A_name}"))
-
-  max_mn <- call("max", m, n)
-
-  B_work <- hoist$declare_tmp(mode = "double", dims = list(max_mn, nrhs))
-  m_f <- dims2f(list(m), scope)
-  if (!nzchar(m_f)) {
-    m_f <- "1"
-  }
-  n_f <- dims2f(list(n), scope)
-  if (!nzchar(n_f)) {
-    n_f <- "1"
-  }
-  nrhs_f <- dims2f(list(nrhs), scope)
-  if (!nzchar(nrhs_f)) {
-    nrhs_f <- "1"
-  }
-  hoist$emit(glue("{B_work@name} = 0.0_c_double"))
-  if (b_rank == 1L) {
-    hoist$emit(glue("{B_work@name}(1:{m_f}, 1) = {B_input_name}"))
-  } else {
-    hoist$emit(glue("{B_work@name}(1:{m_f}, 1:{nrhs_f}) = {B_input_name}"))
-  }
-
-  info <- hoist$declare_tmp(mode = "integer", dims = NULL)
-
-  mn <- call("min", m, n)
-  if (identical(context, "qr.solve")) {
-    jpvt <- hoist$declare_tmp(mode = "integer", dims = list(n))
-    hoist$emit(glue("{jpvt@name} = 0_c_int"))
-
-    rcond <- if (is.null(tol)) "1e-7_c_double" else as.character(tol)
-    rank <- hoist$declare_tmp(mode = "integer", dims = NULL)
-
-    lwork <- call(
-      "max",
-      1L,
-      call("+", mn, call("max", mn, nrhs)),
-      call("+", call("*", 2L, mn), call("*", 64L, call("+", n, 1L))),
-      call("+", mn, call("*", 2L, n))
-    )
-    work <- hoist$declare_tmp(mode = "double", dims = list(lwork))
-
-    hoist$emit(glue(
-      "call dgelsy({blas_int(m)}, {blas_int(n)}, {blas_int(nrhs)}, {A_work@name}, {blas_int(m)}, {B_work@name}, {blas_int(max_mn)}, {jpvt@name}, {rcond}, {rank@name}, {work@name}, {blas_int(lwork)}, {info@name})"
-    ))
-    emit_quickr_error_if(
-      condition = glue("{info@name} < 0_c_int"),
-      message = "Lapack routine dgelsy: illegal argument",
-      hoist = hoist,
-      scope = scope
-    )
-    emit_quickr_error_if(
-      condition = glue("{info@name} > 0_c_int"),
-      message = "Lapack routine dgelsy failed to converge",
-      hoist = hoist,
-      scope = scope
-    )
-    emit_quickr_error_if(
-      condition = glue("{rank@name} < {blas_int(n)}"),
-      message = "rank deficient matrix in qr.solve",
-      hoist = hoist,
-      scope = scope
-    )
-  } else {
-    lwork <- call("max", 1L, call("+", mn, call("max", mn, nrhs)))
-    work <- hoist$declare_tmp(mode = "double", dims = list(lwork))
-
-    hoist$emit(glue(
-      "call dgels('N', {blas_int(m)}, {blas_int(n)}, {blas_int(nrhs)}, {A_work@name}, {blas_int(m)}, {B_work@name}, {blas_int(max_mn)}, {work@name}, {blas_int(lwork)}, {info@name})"
-    ))
-    emit_quickr_error_if(
-      condition = glue("{info@name} < 0_c_int"),
-      message = "Lapack routine dgels: illegal argument",
-      hoist = hoist,
-      scope = scope
-    )
-  }
-
-  expected_dims <- if (b_rank == 1L) list(n) else list(n, nrhs)
-  writes_to_dest <- FALSE
-  if (
-    can_use_output(
-      dest,
-      input_names = c(A_name, B_input_name),
-      expected_dims = expected_dims,
-      context = context,
-      allow_alias = B_input_name
-    )
-  ) {
-    out_var <- dest
-    out_name <- dest@name
-    writes_to_dest <- TRUE
-  } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = expected_dims)
-    out_name <- out_var@name
-  }
-
-  if (b_rank == 1L) {
-    if (passes_as_scalar(out_var)) {
-      hoist$emit(glue("{out_name} = {B_work@name}(1, 1)"))
-    } else {
-      hoist$emit(glue("{out_name} = {B_work@name}(1:{n_f}, 1)"))
-    }
-  } else {
-    hoist$emit(glue("{out_name} = {B_work@name}(1:{n_f}, 1:{nrhs_f})"))
   }
 
   out <- Fortran(out_name, out_var)
-  if (writes_to_dest) {
+  if (use_dest) {
     out@writes_to_dest <- TRUE
   }
   out
@@ -1109,17 +1035,21 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
   hoist$emit(glue("{out_name} = {A_name}"))
 
-  ipiv <- hoist$declare_tmp(mode = "integer", dims = list(n))
+  ipiv <- hoist$declare_tmp_at_point(mode = "integer", dims = list(n))
   info <- hoist$declare_tmp(mode = "integer", dims = NULL)
-  work <- hoist$declare_tmp(mode = "double", dims = list(n))
+  work <- hoist$declare_tmp_at_point(mode = "double", dims = list(n))
 
   hoist$emit(glue(
     "call dgetrf({blas_int(n)}, {blas_int(n)}, {out_name}, {blas_int(n)}, {ipiv@name}, {info@name})"
@@ -1184,9 +1114,13 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 
@@ -1248,9 +1182,13 @@ lapack_chol2inv <- function(
   ) {
     out_var <- dest
     out_name <- dest@name
+    allocate_reusable_local_output_at_point(out_var, scope, hoist)
     writes_to_dest <- TRUE
   } else {
-    out_var <- hoist$declare_tmp(mode = "double", dims = list(n, n))
+    out_var <- hoist$declare_tmp_at_point(
+      mode = "double",
+      dims = list(n, n)
+    )
     out_name <- out_var@name
   }
 

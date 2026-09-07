@@ -11,6 +11,7 @@ new_hoist <- function(scope) {
   hoisted <- character()
   has_runtime_guard <- FALSE
   block_scope <- NULL
+  point_allocated <- character()
 
   emit <- function(...) {
     hoisted <<- c(
@@ -48,6 +49,33 @@ new_hoist <- function(scope) {
     )
   }
 
+  allocate_tmp_at_point <- function(var, emit_at_point) {
+    if (!block_tmp_allocatable(var, block_scope)) {
+      return(var)
+    }
+    point_allocated <<- c(point_allocated, var@name)
+    emit_at_point(glue(
+      "allocate({var@name}({dims2f(var@dims, block_scope)}))"
+    ))
+    var
+  }
+
+  declare_tmp_at_point <- function(mode, dims, logical_as_int = FALSE) {
+    var <- declare_tmp(mode, dims, logical_as_int)
+    allocate_tmp_at_point(var, emit)
+  }
+
+  allocation_guard_at_point <- function(var) {
+    stopifnot(inherits(var, Variable))
+    if (!block_tmp_allocatable(var, block_scope)) {
+      return(character())
+    }
+    point_allocated <<- unique(c(point_allocated, var@name))
+    glue(
+      "if (.not. allocated({var@name})) allocate({var@name}({dims2f(var@dims, block_scope)}))"
+    )
+  }
+
   capture <- function() {
     captured <- character()
     captured_runtime_guard <- FALSE
@@ -61,6 +89,14 @@ new_hoist <- function(scope) {
       str_flatten_lines(str_split_lines(captured, code))
     }
     capture_has_code <- function() length(captured) > 0L
+    capture_declare_tmp_at_point <- function(
+      mode,
+      dims,
+      logical_as_int = FALSE
+    ) {
+      var <- declare_tmp(mode, dims, logical_as_int)
+      allocate_tmp_at_point(var, capture_emit)
+    }
     capture_mark_runtime_guard <- function() {
       captured_runtime_guard <<- TRUE
       invisible()
@@ -69,7 +105,9 @@ new_hoist <- function(scope) {
     list2env(
       list(
         emit = capture_emit,
+        allocation_guard_at_point = allocation_guard_at_point,
         declare_tmp = declare_tmp,
+        declare_tmp_at_point = capture_declare_tmp_at_point,
         render = capture_render,
         has_code = capture_has_code,
         mark_runtime_guard = capture_mark_runtime_guard,
@@ -96,7 +134,11 @@ new_hoist <- function(scope) {
     if (has_block()) {
       block_vars <- scope_vars(block_scope)
       decls <- emit_decls(block_vars, block_scope)
-      allocs <- block_tmp_allocation_lines(block_vars, block_scope)
+      prologue_vars <- keep(
+        block_vars,
+        \(var) !var@name %in% point_allocated
+      )
+      allocs <- block_tmp_allocation_lines(prologue_vars, block_scope)
       if (length(allocs)) {
         stmts <- c(allocs, stmts)
       }
@@ -109,7 +151,9 @@ new_hoist <- function(scope) {
   list2env(
     list(
       emit = emit,
+      allocation_guard_at_point = allocation_guard_at_point,
       declare_tmp = declare_tmp,
+      declare_tmp_at_point = declare_tmp_at_point,
       render = render,
       mark_runtime_guard = mark_runtime_guard,
       contains_runtime_guard = contains_runtime_guard,

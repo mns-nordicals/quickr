@@ -991,7 +991,7 @@ crossprod_like <- function(
     } else {
       1L
     },
-    right_axis = if (y@value@rank == 1L && opB == "N") {
+    right_axis = if (y@value@rank == 1L) {
       NULL
     } else if (opB == "N") {
       1L

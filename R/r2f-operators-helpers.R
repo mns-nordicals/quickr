@@ -167,12 +167,33 @@ is_one_by_one <- function(x) {
 # check_elementwise_lengths(): no zero-length policy, no symbol
 # normalization -- callers use it for routing/declaration decisions, not
 # for the conformability contract.
-# Used by: r2f-matrix.R (bind_common_dim), r2f-matrix-blas.R (solve routing)
+# Used by: r2f-matrix.R (bind_common_dim)
 dims_match <- function(left, right) {
   if (is_wholenumber(left) && is_wholenumber(right)) {
     return(identical(as.integer(left), as.integer(right)))
   }
   identical(left, right)
+}
+
+# Equality-only dimension checks permit matching zero extents. This is the
+# conformability contract for BLAS operands and shape-preserving operations
+# such as ifelse(); arithmetic uses the stricter nonempty checker below.
+check_equal_dims <- function(left, right) {
+  if (is_wholenumber(left) && is_wholenumber(right)) {
+    return(list(
+      ok = identical(as.integer(left), as.integer(right)),
+      unknown = FALSE,
+      reject_zero = FALSE
+    ))
+  }
+  if (!is_scalar_na(left) && !is_scalar_na(right)) {
+    left_norm <- fortranize_expr_symbols(left)
+    right_norm <- fortranize_expr_symbols(right)
+    if (identical(left_norm, right_norm)) {
+      return(list(ok = TRUE, unknown = FALSE, reject_zero = FALSE))
+    }
+  }
+  list(ok = TRUE, unknown = TRUE, reject_zero = FALSE)
 }
 
 # Three-valued conformability verdict for one axis of an elementwise op:
