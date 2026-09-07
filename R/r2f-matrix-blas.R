@@ -37,6 +37,18 @@ assert_rank_leq2 <- function(x, message) {
   invisible(TRUE)
 }
 
+# The routines emitted in this file are the double-precision BLAS/LAPACK
+# entry points. Logical and integer operands are converted explicitly; raw
+# and complex storage must never be passed to a `d*` routine.
+blas_double_operand <- function(x, context) {
+  stopifnot(inherits(x, Fortran), is_string(context))
+  x <- maybe_cast_double(x)
+  if (!identical(x@value@mode, "double")) {
+    stop(context, " does not support ", x@value@mode, " inputs", call. = FALSE)
+  }
+  x
+}
+
 # Assert right-hand side rank is vector or matrix.
 assert_rhs_rank <- function(
   rank,
@@ -61,15 +73,69 @@ assert_rhs_rank <- function(
   invisible(TRUE)
 }
 
-# Assert conformability and warn on unknown.
-assert_conformable_dims <- function(left, right, context, err_msg) {
-  stopifnot(is_string(context), is_string(err_msg))
-  conform <- check_conformable(left, right)
+# Render one side of a dim-comparison guard: a literal dim as the literal,
+# anything else as the operand's actual extent. size() is an inquiry, so
+# applying it to operand expression text does not evaluate the operand.
+guard_dim_f <- function(dim, operand, axis = NULL) {
+  if (is_wholenumber(dim)) {
+    return(as.character(as.integer(dim)))
+  }
+  if (is.null(axis)) {
+    glue("size({operand})")
+  } else {
+    glue("size({operand}, {axis})")
+  }
+}
+
+# The one conformability policy for BLAS/LAPACK lowerings: a statically
+# known mismatch is a compile error; dims that cannot be compared
+# statically get a statement-level runtime guard emitted before the BLAS
+# call; provably equal dims, including equal zero dims, need nothing. Never
+# warn-and-proceed. `axis` NULL compares the operand's whole size (rank-1
+# operands). Unlike elementwise operations, a zero contracted dimension can
+# still produce a non-empty BLAS result.
+check_blas_dims <- function(left, right) {
+  if (is_wholenumber(left) && is_wholenumber(right)) {
+    return(list(
+      ok = identical(as.integer(left), as.integer(right)),
+      unknown = FALSE
+    ))
+  }
+  if (!is_scalar_na(left) && !is_scalar_na(right)) {
+    left_norm <- fortranize_expr_symbols(left)
+    right_norm <- fortranize_expr_symbols(right)
+    if (identical(left_norm, right_norm)) {
+      return(list(ok = TRUE, unknown = FALSE))
+    }
+  }
+  list(ok = TRUE, unknown = TRUE)
+}
+
+guard_conformable_dims <- function(
+  left_dim,
+  right_dim,
+  message,
+  hoist,
+  scope,
+  left,
+  right,
+  left_axis = NULL,
+  right_axis = NULL
+) {
+  stopifnot(is_string(message))
+  conform <- check_blas_dims(left_dim, right_dim)
   if (!conform$ok) {
-    stop(err_msg, call. = FALSE)
+    stop(message, call. = FALSE)
   }
   if (conform$unknown) {
-    warn_conformability_unknown(left, right, context)
+    emit_quickr_error_if(
+      glue(
+        "{guard_dim_f(left_dim, left, left_axis)} /= {guard_dim_f(right_dim, right, right_axis)}"
+      ),
+      message,
+      hoist,
+      scope
+    )
   }
   invisible(TRUE)
 }
@@ -176,33 +242,21 @@ check_conformable <- function(left, right) {
   list(ok = TRUE, unknown = TRUE)
 }
 
-warn_conformability_unknown <- function(left, right, context) {
-  left_txt <- if (is.null(left)) "NULL" else deparse(left)
-  right_txt <- if (is.null(right)) "NULL" else deparse(right)
-  warning(
-    "cannot verify conformability in ",
-    context,
-    " at compile time: ",
-    left_txt,
-    " vs ",
-    right_txt,
-    call. = FALSE
+# Enforce that `dims` describe a square matrix: a known mismatch is a
+# compile error; unverifiable dims get a runtime guard on the operand's
+# actual extents.
+assert_square_matrix <- function(dims, operand, context, hoist, scope) {
+  guard_conformable_dims(
+    dims$rows,
+    dims$cols,
+    paste0(context, " requires a square matrix"),
+    hoist,
+    scope,
+    left = operand,
+    right = operand,
+    left_axis = 1L,
+    right_axis = 2L
   )
-  invisible(FALSE)
-}
-
-# Assert that dimensions represent a square matrix (rows == cols).
-# Throws an error if dimensions are known to be non-conformable,
-# and warns if conformability cannot be verified at compile time.
-assert_square_matrix <- function(rows, cols, context) {
-  conform <- check_conformable(rows, cols)
-  if (!conform$ok) {
-    stop(context, " requires a square matrix", call. = FALSE)
-  }
-  if (conform$unknown) {
-    warn_conformability_unknown(rows, cols, context)
-  }
-  invisible(TRUE)
 }
 
 # ---- BLAS emitters ----
@@ -297,6 +351,32 @@ blas_int <- function(x) {
   glue("int({x_str}, kind=c_int)")
 }
 
+# Emit a BLAS call for positive contractions and fill the result with zero
+# without calling BLAS when the contracted dimension is zero.
+emit_blas_contraction <- function(call, output, contracted_dim, hoist) {
+  stopifnot(is_string(call), is_string(output))
+  assert_hoist_env(hoist)
+
+  if (is_wholenumber(contracted_dim)) {
+    if (as.integer(contracted_dim) == 0L) {
+      hoist$emit(glue("{output} = 0.0_c_double"))
+    } else {
+      hoist$emit(call)
+    }
+    return(invisible(TRUE))
+  }
+
+  hoist$emit(glue(
+    "
+if ({blas_int(contracted_dim)} == 0_c_int) then
+  {output} = 0.0_c_double
+else
+  {call}
+end if"
+  ))
+  invisible(TRUE)
+}
+
 # Centralized GEMM emission with optional destination
 # gemm: centralized BLAS GEMM emission.
 # - 'hoist' is required and provided by r2f(); handlers thread it through so
@@ -318,6 +398,8 @@ gemm <- function(
   context = "gemm"
 ) {
   assert_hoist_env(hoist)
+  left <- blas_double_operand(left, context)
+  right <- blas_double_operand(right, context)
   A_name <- ensure_blas_operand_name(left, hoist)
   B_name <- ensure_blas_operand_name(right, hoist)
 
@@ -329,18 +411,20 @@ gemm <- function(
       context = context
     )
   ) {
-    hoist$emit(glue(
+    blas_call <- glue(
       "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {dest@name}, {blas_int(ldc_expr)})"
-    ))
+    )
+    emit_blas_contraction(blas_call, dest@name, k, hoist)
     out <- Fortran(dest@name, dest)
     out@writes_to_dest <- TRUE
     return(out)
   }
 
   output_var <- hoist$declare_tmp(mode = "double", dims = list(m, n))
-  hoist$emit(glue(
+  blas_call <- glue(
     "call dgemm('{opA}','{opB}', {blas_int(m)}, {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {B_name}, {blas_int(ldb)}, 0.0_c_double, {output_var@name}, {blas_int(ldc_expr)})"
-  ))
+  )
+  emit_blas_contraction(blas_call, output_var@name, k, hoist)
   Fortran(output_var@name, output_var)
 }
 
@@ -362,6 +446,8 @@ gemv <- function(
   context = "gemv"
 ) {
   assert_hoist_env(hoist)
+  A <- blas_double_operand(A, context)
+  x <- blas_double_operand(x, context)
   A_name <- ensure_blas_operand_name(A, hoist)
   x_name <- ensure_blas_operand_name(x, hoist)
 
@@ -374,18 +460,22 @@ gemv <- function(
     )
   ) {
     # Assign output to output destination
-    hoist$emit(glue(
+    blas_call <- glue(
       "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {dest@name}, 1_c_int)"
-    ))
+    )
+    contracted_dim <- if (transA == "N") n else m
+    emit_blas_contraction(blas_call, dest@name, contracted_dim, hoist)
     out <- Fortran(dest@name, dest)
     out@writes_to_dest <- TRUE
     return(out)
   }
   # Else assign to a temporary variable
   output_var <- hoist$declare_tmp(mode = "double", dims = out_dims)
-  hoist$emit(glue(
+  blas_call <- glue(
     "call dgemv('{transA}', {blas_int(m)}, {blas_int(n)}, 1.0_c_double, {A_name}, {blas_int(lda)}, {x_name}, 1_c_int, 0.0_c_double, {output_var@name}, 1_c_int)"
-  ))
+  )
+  contracted_dim <- if (transA == "N") n else m
+  emit_blas_contraction(blas_call, output_var@name, contracted_dim, hoist)
   Fortran(output_var@name, output_var)
 }
 
@@ -449,6 +539,7 @@ syrk <- function(
   context = "syrk"
 ) {
   assert_hoist_env(hoist)
+  X <- blas_double_operand(X, context)
   X_name <- ensure_blas_operand_name(X, hoist)
 
   x_dims <- matrix_dims(X)
@@ -508,8 +599,8 @@ outer_mul <- function(
 ) {
   assert_hoist_env(hoist)
 
-  x <- maybe_cast_double(x)
-  y <- maybe_cast_double(y)
+  x <- blas_double_operand(x, context)
+  y <- blas_double_operand(y, context)
 
   if (x@value@rank > 1L || y@value@rank > 1L) {
     stop("outer() only supports vectors or scalars")
@@ -560,19 +651,19 @@ triangular_solve <- function(
 ) {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
-  B <- maybe_cast_double(B)
+  A <- blas_double_operand(A, context)
+  B <- blas_double_operand(B, context)
 
   assert_rank2_matrix(A, "triangular solve expects a matrix")
 
+  # Runtime shape checks use SIZE(), which does not evaluate expressions.
+  # Name operands in call order before any guard so error paths preserve R's
+  # argument evaluation and each operand is evaluated once.
+  A <- hoist_unless_name(A, hoist)
+  B <- hoist_unless_name(B, hoist)
+
   a_dims <- matrix_dims(A)
-  conform <- check_conformable(a_dims$rows, a_dims$cols)
-  if (!conform$ok) {
-    stop("non-conformable arguments in triangular solve", call. = FALSE)
-  }
-  if (conform$unknown) {
-    warn_conformability_unknown(a_dims$rows, a_dims$cols, "triangular solve")
-  }
+  assert_square_matrix(a_dims, A, "triangular solve", hoist, scope)
   n <- a_dims$rows
 
   b_rank <- B@value@rank
@@ -581,23 +672,17 @@ triangular_solve <- function(
     err_scalar = "triangular solve expects a vector or matrix right-hand side",
     err_high = "triangular solve only supports vector or matrix right-hand sides"
   )
-  if (b_rank == 1L) {
-    b_len <- dim_or_one(B, 1L)
-    assert_conformable_dims(
-      n,
-      b_len,
-      context = "triangular solve",
-      err_msg = "non-conformable arguments in triangular solve"
-    )
-  } else {
-    b_rows <- dim_or_one(B, 1L)
-    assert_conformable_dims(
-      n,
-      b_rows,
-      context = "triangular solve",
-      err_msg = "non-conformable arguments in triangular solve"
-    )
-  }
+  guard_conformable_dims(
+    n,
+    dim_or_one(B, 1L),
+    "non-conformable arguments in triangular solve",
+    hoist,
+    scope,
+    left = A,
+    right = B,
+    left_axis = 1L,
+    right_axis = if (b_rank == 1L) NULL else 1L
+  )
 
   A_name <- ensure_blas_operand_name(A, hoist)
   B_input_name <- symbol_name_or_null(B)
@@ -654,10 +739,13 @@ lapack_solve <- function(
 ) {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
-  B <- maybe_cast_double(B)
+  A <- blas_double_operand(A, context)
+  B <- blas_double_operand(B, context)
 
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
+
+  A <- hoist_unless_name(A, hoist)
+  B <- hoist_unless_name(B, hoist)
 
   a_dims <- matrix_dims(A)
   m <- a_dims$rows
@@ -675,29 +763,29 @@ lapack_solve <- function(
     call_high = FALSE
   )
 
-  if (b_rank == 1L) {
-    b_len <- dim_or_one(B, 1L)
-    assert_conformable_dims(
-      m,
-      b_len,
-      context = context,
-      err_msg = paste0("non-conformable arguments in ", context)
-    )
-  } else {
-    b_rows <- dim_or_one(B, 1L)
-    assert_conformable_dims(
-      m,
-      b_rows,
-      context = context,
-      err_msg = paste0("non-conformable arguments in ", context)
-    )
-  }
+  guard_conformable_dims(
+    m,
+    dim_or_one(B, 1L),
+    paste0("non-conformable arguments in ", context),
+    hoist,
+    scope,
+    left = A,
+    right = B,
+    left_axis = 1L,
+    right_axis = if (b_rank == 1L) NULL else 1L
+  )
 
   A_name <- ensure_blas_operand_name(A, hoist)
   B_input_name <- ensure_blas_operand_name(B, hoist)
 
   nrhs <- if (b_rank == 1L) 1L else dim_or_one(B, 2L)
 
+  # solve(a, b) with a rectangular `a` deliberately falls through to the
+  # least-squares branch below -- a divergence from base R (which requires
+  # a square `a`), locked by the "least-squares" tests in
+  # test-matrix-lapack.R. Squareness is a routing decision here, not a
+  # correctness guard: unknown squareness routes to dgels, which solves
+  # square systems exactly too.
   square <- check_conformable(m, n)
   if (square$ok && !square$unknown && !identical(context, "qr.solve")) {
     A_work <- hoist$declare_tmp(mode = "double", dims = list(m, m))
@@ -983,11 +1071,12 @@ end do"
 lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
+  A <- blas_double_operand(A, context)
   assert_rank2_matrix(A, paste0(context, " expects a matrix for `a`"))
+  A <- hoist_unless_name(A, hoist)
 
   a_dims <- matrix_dims(A)
-  assert_square_matrix(a_dims$rows, a_dims$cols, context)
+  assert_square_matrix(a_dims, A, context, hoist, scope)
   n <- a_dims$rows
 
   A_name <- ensure_blas_operand_name(A, hoist)
@@ -1057,11 +1146,12 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
 lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   assert_hoist_env(hoist)
 
-  A <- maybe_cast_double(A)
+  A <- blas_double_operand(A, context)
   assert_rank2_matrix(A, paste0(context, " expects a matrix"))
+  A <- hoist_unless_name(A, hoist)
 
   a_dims <- matrix_dims(A)
-  assert_square_matrix(a_dims$rows, a_dims$cols, context)
+  assert_square_matrix(a_dims, A, context, hoist, scope)
   n <- a_dims$rows
 
   A_name <- ensure_blas_operand_name(A, hoist)
@@ -1120,11 +1210,12 @@ lapack_chol2inv <- function(
 ) {
   assert_hoist_env(hoist)
 
-  R <- maybe_cast_double(R)
+  R <- blas_double_operand(R, context)
   assert_rank2_matrix(R, paste0(context, " expects a matrix"))
+  R <- hoist_unless_name(R, hoist)
 
   r_dims <- matrix_dims(R)
-  assert_square_matrix(r_dims$rows, r_dims$cols, context)
+  assert_square_matrix(r_dims, R, context, hoist, scope)
   n <- r_dims$rows
 
   R_name <- ensure_blas_operand_name(R, hoist)
@@ -1332,7 +1423,7 @@ lapack_svd <- function(
   assert_hoist_env(hoist)
   stopifnot(inherits(d, Variable), inherits(u, Variable), inherits(v, Variable))
 
-  A <- maybe_cast_double(A)
+  A <- blas_double_operand(A, context)
   dims <- svd_dims(A, context = context)
   m <- dims$m
   n <- dims$n

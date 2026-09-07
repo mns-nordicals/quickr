@@ -12,7 +12,7 @@ test_that("CRAN smoke budget stays small", {
 })
 
 test_that("non-smoke test files skip on CRAN", {
-  always_run_files <- "test-recycling.R"
+  always_run_files <- c("test-blas-guards.R", "test-recycling.R")
   test_files <- list.files(
     test_path(),
     pattern = "^test-.*\\.R$",
