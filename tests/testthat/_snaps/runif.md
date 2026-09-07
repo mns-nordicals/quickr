@@ -225,7 +225,7 @@
       
           allocate(btmp1_(x__len_))
           btmp1_ = [(unif_rand(), tmp1_=1, x__len_)]
-          if (size(x, kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(x, kind=c_ptrdiff_t) /= size(btmp1_, kind=c_ptrdiff_t)) then
+          if (size(x, kind=c_ptrdiff_t) == 0 .or. size(x, kind=c_ptrdiff_t) /= size(btmp1_, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
             return

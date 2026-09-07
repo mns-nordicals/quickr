@@ -135,14 +135,13 @@ register_r2f_handler(
 
 # ---- binary logical operators ----
 
-# TODO: the scalar || probably need some more type checking.
 # TODO: gfortran supports implicit casting that of logical to integer when
 # assigning a logical to a variable declared integer, converting `.true.` to `1`,
 # but this is not a standard language feature, and Intel's `ifort` uses `-1` for `.true`.
 # We should explicitly use
 #   `merge(1_c_int, 0_c_int, <lgl>)` to cast logical to int.
 register_r2f_handler(
-  c("&", "&&", "|", "||"),
+  c("&", "|"),
   function(args, scope, ..., hoist = NULL) {
     # `&&` and `||` deliberately retain the pre-existing eager lowering in
     # this stack step. Their scalar, short-circuit lowering is isolated in
@@ -165,17 +164,80 @@ register_r2f_handler(
       scalarize_one_by_one = FALSE
     )
 
-    operator <- switch(
-      last(list(...)$calls),
-      `&` = ,
-      `&&` = ".and.",
-      `|` = ,
-      `||` = ".or."
-    )
+    operator <- switch(last(list(...)$calls), `&` = ".and.", `|` = ".or.")
 
     s <- glue("{left} {operator} {right}")
     val <- conform(left@value, right@value)
     val@mode <- "logical"
     Fortran(s, val)
+  }
+)
+
+scalarize_andor_operand <- function(x, op, hoist, scope) {
+  if (is.null(x@value) || !identical(x@value@mode, "logical")) {
+    stop("`", op, "` requires logical operands", call. = FALSE)
+  }
+
+  message <- paste0(
+    "`",
+    op,
+    "` requires length-1 operands; use `",
+    if (op == "&&") "&" else "|",
+    "` for elementwise operations"
+  )
+  if (passes_as_scalar(x@value)) {
+    return(booleanize_logical_as_int(x))
+  }
+
+  dims <- lapply(x@value@dims, r2size, scope = scope)
+  if (
+    any(vapply(
+      dims,
+      \(dim) is_wholenumber(dim) && !dim_is_one(dim),
+      logical(1L)
+    ))
+  ) {
+    stop(
+      message,
+      call. = FALSE
+    )
+  }
+  if (is.null(hoist)) {
+    stop("internal error: `", op, "` requires hoist context", call. = FALSE)
+  }
+
+  if (isTRUE(x@logical_booleanized)) {
+    tmp <- hoist$declare_tmp(mode = "logical", dims = x@value@dims)
+    hoist$emit(glue("{tmp@name} = {x}"))
+    x <- Fortran(tmp@name, tmp)
+  } else {
+    x <- hoist_unless_name(x, hoist)
+  }
+
+  if (!all(vapply(dims, dim_is_one, logical(1L)))) {
+    emit_quickr_error_if(
+      glue("size({x}, kind=c_ptrdiff_t) /= 1_c_ptrdiff_t"),
+      message,
+      hoist,
+      scope
+    )
+  }
+  idxs <- rep("1", x@value@rank)
+  Fortran(
+    glue("{x}({str_flatten_commas(idxs)})"),
+    Variable("logical")
+  )
+}
+
+register_r2f_handler(
+  c("&&", "||"),
+  function(args, scope, ..., hoist = NULL) {
+    op <- last(list(...)$calls)
+    stopifnot(length(args) == 2L, op %in% c("&&", "||"))
+    .[left, right] <- lapply(args, r2f, scope, ..., hoist = hoist)
+    left <- scalarize_andor_operand(left, op, hoist, scope)
+    right <- scalarize_andor_operand(right, op, hoist, scope)
+    operator <- if (op == "&&") ".and." else ".or."
+    Fortran(glue("{left} {operator} {right}"), Variable("logical"))
   }
 )

@@ -45,8 +45,7 @@
       & supported")
           return
         end if
-      if (size((x >= left), kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size((x >= left), kind=c_ptrdiff_t) /= size((x <= right),&
-      & kind=c_ptrdiff_t)) then
+      if (size((x >= left), kind=c_ptrdiff_t) == 0 .or. size((x >= left), kind=c_ptrdiff_t) /= size((x <= right), kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
           return
@@ -433,12 +432,12 @@
         ! manifest end
       
       
-        if (size(a, kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+        if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
           return
         end if
-        if (size(a, kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
+        if (size(a, kind=c_ptrdiff_t) == 0 .or. size(a, kind=c_ptrdiff_t) /= size(b, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
           return
@@ -448,8 +447,8 @@
       & supported")
           return
         end if
-      if (size(((a /= b)), kind=c_ptrdiff_t) == 0_c_ptrdiff_t .or. size(((a /= b)), kind=c_ptrdiff_t) /= size((abs((a - b)) <=&
-      & 3.0_c_double), kind=c_ptrdiff_t)) then
+      if (size(((a /= b)), kind=c_ptrdiff_t) == 0 .or. size(((a /= b)), kind=c_ptrdiff_t) /= size((abs((a - b)) <= 3.0_c_double),&
+      & kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
           return

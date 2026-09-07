@@ -1,7 +1,5 @@
 # Unit test for ifelse translation
 
-skip_on_cran()
-
 test_that("ifelse", {
   fn <- function(a, b) {
     declare(

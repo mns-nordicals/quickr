@@ -1,7 +1,5 @@
 # Unit tests for logical operations
 
-skip_on_cran()
-
 test_that("between", {
   between <- function(x, left, right) {
     declare({
@@ -109,4 +107,56 @@ test_that("parentheses preserve logical precedence", {
   expect_translation_snapshots(fn_b)
   expect_quick_identical(fn_a, !!!cases)
   expect_quick_identical(fn_b, !!!cases)
+})
+
+test_that("&& and || require length-1 operands", {
+  vector_matrix_and <- function(x, y) {
+    declare(type(x = logical(2)), type(y = logical(2, 2)))
+    x && y
+  }
+  expect_error(quick(vector_matrix_and), "requires length-1 operands")
+
+  matrix_vector_or <- function(x, y) {
+    declare(type(x = logical(2, 2)), type(y = logical(2)))
+    x || y
+  }
+  expect_error(quick(matrix_vector_or), "requires length-1 operands")
+})
+
+test_that("&& and || guard unknown operand lengths at runtime", {
+  and_fn <- function(x, y) {
+    declare(type(x = logical(NA)), type(y = logical(1)))
+    x && y
+  }
+  qand <- quick(and_fn)
+  expect_identical(qand(TRUE, FALSE), FALSE)
+  expect_error(qand(c(TRUE, FALSE), TRUE), "requires length-1 operands")
+
+  or_fn <- function(x, y) {
+    declare(type(x = logical(1)), type(y = logical(NA)))
+    x || y
+  }
+  qor <- quick(or_fn)
+  expect_identical(qor(FALSE, TRUE), TRUE)
+  expect_error(qor(FALSE, c(FALSE, TRUE)), "requires length-1 operands")
+})
+
+test_that("&& and || accept one-element matrices", {
+  matrix_and <- function(x, y) {
+    declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
+    x && y
+  }
+  expect_quick_identical(
+    matrix_and,
+    list(matrix(TRUE, 1, 1), matrix(FALSE, 1, 1))
+  )
+
+  matrix_or <- function(x, y) {
+    declare(type(x = logical(1, 1)), type(y = logical(1, 1)))
+    x || y
+  }
+  expect_quick_identical(
+    matrix_or,
+    list(matrix(FALSE, 1, 1), matrix(TRUE, 1, 1))
+  )
 })

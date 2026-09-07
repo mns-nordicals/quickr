@@ -101,6 +101,15 @@ test_that("double BLAS entry points reject raw storage", {
   expect_error(quick(fn), "does not support raw")
 })
 
+test_that("tcrossprod materializes scalar-backed array operands", {
+  fn <- function(n) {
+    declare(type(n = integer(1)))
+    tcrossprod(array(0, dim = n))
+  }
+
+  expect_quick_identical(fn, list(3L))
+})
+
 test_that("vector-matrix %*% guards an unknown vector length", {
   fn <- function(x, m) {
     declare(type(x = double(NA)), type(m = double(3, 3)))
@@ -217,6 +226,110 @@ test_that("%*% returns zeros for a symbolic empty contracted dimension", {
     fn,
     list(matrix(double(), 2, 0), matrix(double(), 0, 3), 0L)
   )
+})
+
+test_that("symmetric products return zeros for known empty contractions", {
+  cross_vec <- function(x) {
+    declare(type(x = double(0)))
+    crossprod(x)
+  }
+  cross_mat <- function(x) {
+    declare(type(x = double(0, 2)))
+    crossprod(x)
+  }
+  tcross_mat <- function(x) {
+    declare(type(x = double(2, 0)))
+    tcrossprod(x)
+  }
+  cross_symbolic <- function(x, n) {
+    declare(type(x = double(n, 2)), type(n = integer(1)))
+    crossprod(x)
+  }
+  tcross_symbolic <- function(x, n) {
+    declare(type(x = double(2, n)), type(n = integer(1)))
+    tcrossprod(x)
+  }
+
+  expect_quick_identical(cross_vec, list(double()))
+  expect_quick_identical(cross_mat, list(matrix(double(), 0, 2)))
+  expect_quick_identical(tcross_mat, list(matrix(double(), 2, 0)))
+  expect_quick_identical(cross_symbolic, list(matrix(double(), 0, 2), 0L))
+  expect_quick_identical(tcross_symbolic, list(matrix(double(), 2, 0), 0L))
+})
+
+test_that("matrix BLAS rejects known zero-sized outputs", {
+  matrix_matrix <- function(a, b) {
+    declare(type(a = double(0, 2)), type(b = double(2, 3)))
+    a %*% b
+  }
+  matrix_vector <- function(a, x) {
+    declare(type(a = double(0, 2)), type(x = double(2)))
+    a %*% x
+  }
+  tcross_vec <- function(x) {
+    declare(type(x = double(0)))
+    tcrossprod(x)
+  }
+  cross_mat <- function(x) {
+    declare(type(x = double(0, 0)))
+    crossprod(x)
+  }
+  outer_left <- function(x, y) {
+    declare(type(x = double(0)), type(y = double(2)))
+    outer(x, y)
+  }
+  outer_right <- function(x, y) {
+    declare(type(x = double(2)), type(y = double(0)))
+    x %o% y
+  }
+
+  expect_error(quick(matrix_matrix), "zero-sized outputs are not supported")
+  expect_error(quick(matrix_vector), "zero-sized outputs are not supported")
+  expect_error(quick(tcross_vec), "zero-sized outputs are not supported")
+  expect_error(quick(cross_mat), "zero-sized outputs are not supported")
+  expect_error(quick(outer_left), "zero-sized outputs are not supported")
+  expect_error(quick(outer_right), "zero-sized outputs are not supported")
+})
+
+test_that("matrix BLAS guards unknown output extents at runtime", {
+  matrix_matrix <- function(a, b) {
+    declare(type(a = double(NA, 2)), type(b = double(2, 3)))
+    a %*% b
+  }
+  matrix_vector <- function(a, x) {
+    declare(type(a = double(NA, 2)), type(x = double(2)))
+    a %*% x
+  }
+  cross_mat <- function(x) {
+    declare(type(x = double(2, NA)))
+    crossprod(x)
+  }
+  tcross_mat <- function(x) {
+    declare(type(x = double(NA, 2)))
+    tcrossprod(x)
+  }
+  outer_fn <- function(x, y) {
+    declare(type(x = double(NA)), type(y = double(NA)))
+    outer(x, y)
+  }
+
+  q_matrix_matrix <- expect_no_warning(quick(matrix_matrix))
+  q_matrix_vector <- expect_no_warning(quick(matrix_vector))
+  q_cross_mat <- expect_no_warning(quick(cross_mat))
+  q_tcross_mat <- expect_no_warning(quick(tcross_mat))
+  q_outer <- expect_no_warning(quick(outer_fn))
+  message <- "zero-sized outputs are not supported"
+
+  expect_error(
+    q_matrix_matrix(matrix(double(), 0, 2), matrix(double(), 2, 3)),
+    message
+  )
+  expect_error(q_matrix_vector(matrix(double(), 0, 2), double(2)), message)
+  expect_error(q_cross_mat(matrix(double(), 2, 0)), message)
+  expect_error(q_tcross_mat(matrix(double(), 0, 2)), message)
+  expect_equal(q_outer(as.double(1:2), as.double(3:4)), outer(1:2, 3:4))
+  expect_error(q_outer(double(), as.double(1:2)), message)
+  expect_error(q_outer(as.double(1:2), double()), message)
 })
 
 test_that("NA dims are never treated as equal", {

@@ -433,6 +433,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
       source_len <- out@value@dims[[1L]]
       source_may_be_empty <- !is_wholenumber(source_len) || source_len == 0
       if (source_may_be_empty) {
+        # Base R pads an empty source with NA; quickr does not support NA values.
         source_len_f <- dims2f(list(source_len), scope)
         if (!nzchar(source_len_f) || grepl(":", source_len_f, fixed = TRUE)) {
           stop("array() fill length must be known", call. = FALSE)

@@ -1,7 +1,5 @@
 # Unit tests for cbind() and rbind()
 
-skip_on_cran()
-
 expect_bind_equal <- function(fn, ...) {
   qfn := quick(fn)
   args_list <- rlang::list2(...)

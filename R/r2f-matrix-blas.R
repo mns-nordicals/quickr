@@ -73,71 +73,24 @@ assert_rhs_rank <- function(
   invisible(TRUE)
 }
 
-# Render one side of a dim-comparison guard: a literal dim as the literal,
-# anything else as the operand's actual extent. size() is an inquiry, so
-# applying it to operand expression text does not evaluate the operand.
-guard_dim_f <- function(dim, operand, axis = NULL) {
-  if (is_wholenumber(dim)) {
-    return(as.character(as.integer(dim)))
-  }
-  if (is.null(axis)) {
-    glue("size({operand})")
-  } else {
-    glue("size({operand}, {axis})")
-  }
-}
-
-# The one conformability policy for BLAS/LAPACK lowerings: a statically
-# known mismatch is a compile error; dims that cannot be compared
-# statically get a statement-level runtime guard emitted before the BLAS
-# call; provably equal dims, including equal zero dims, need nothing. Never
-# warn-and-proceed. `axis` NULL compares the operand's whole size (rank-1
-# operands). Unlike elementwise operations, a zero contracted dimension can
-# still produce a non-empty BLAS result.
+# BLAS/LAPACK dimensions use equality semantics: equal zero contracted
+# dimensions are conformable and can still produce a non-empty result.
 check_blas_dims <- function(left, right) {
   if (is_wholenumber(left) && is_wholenumber(right)) {
     return(list(
       ok = identical(as.integer(left), as.integer(right)),
-      unknown = FALSE
+      unknown = FALSE,
+      reject_zero = FALSE
     ))
   }
   if (!is_scalar_na(left) && !is_scalar_na(right)) {
     left_norm <- fortranize_expr_symbols(left)
     right_norm <- fortranize_expr_symbols(right)
     if (identical(left_norm, right_norm)) {
-      return(list(ok = TRUE, unknown = FALSE))
+      return(list(ok = TRUE, unknown = FALSE, reject_zero = FALSE))
     }
   }
-  list(ok = TRUE, unknown = TRUE)
-}
-
-guard_conformable_dims <- function(
-  left_dim,
-  right_dim,
-  message,
-  hoist,
-  scope,
-  left,
-  right,
-  left_axis = NULL,
-  right_axis = NULL
-) {
-  stopifnot(is_string(message))
-  conform <- check_blas_dims(left_dim, right_dim)
-  if (!conform$ok) {
-    stop(message, call. = FALSE)
-  }
-  if (conform$unknown) {
-    emit_quickr_error_if(
-      glue(
-        "{guard_dim_f(left_dim, left, left_axis)} /= {guard_dim_f(right_dim, right, right_axis)}"
-      ),
-      message,
-      hoist,
-      scope
-    )
-  }
-  invisible(TRUE)
+  list(ok = TRUE, unknown = TRUE, reject_zero = FALSE)
 }
 
 # Return the R symbol name if operand is a bare symbol; otherwise NULL.
@@ -230,18 +183,6 @@ effective_dims <- function(dims, trans) {
   }
 }
 
-# Return conformability status (ok/unknown) without side-effects.
-check_conformable <- function(left, right) {
-  if (is_wholenumber(left) && is_wholenumber(right)) {
-    ok <- identical(as.integer(left), as.integer(right))
-    return(list(ok = ok, unknown = FALSE))
-  }
-  if (identical(left, right)) {
-    return(list(ok = TRUE, unknown = FALSE))
-  }
-  list(ok = TRUE, unknown = TRUE)
-}
-
 # Enforce that `dims` describe a square matrix: a known mismatch is a
 # compile error; unverifiable dims get a runtime guard on the operand's
 # actual extents.
@@ -255,11 +196,48 @@ assert_square_matrix <- function(dims, operand, context, hoist, scope) {
     left = operand,
     right = operand,
     left_axis = 1L,
-    right_axis = 2L
+    right_axis = 2L,
+    checker = check_blas_dims
   )
 }
 
 # ---- BLAS emitters ----
+
+# Generated function results cannot currently represent zero-sized arrays.
+# Reject a known zero output during translation and guard unknown output
+# extents at runtime before emitting a BLAS call with an invalid leading
+# dimension. A zero contracted dimension remains supported when every output
+# extent is nonzero.
+assert_nonempty_blas_output <- function(
+  dim,
+  operand,
+  axis,
+  context,
+  hoist,
+  scope
+) {
+  stopifnot(
+    inherits(operand, Fortran),
+    is.numeric(axis),
+    length(axis) == 1L,
+    is_string(context)
+  )
+  message <- paste0(context, " zero-sized outputs are not supported")
+  if (is_wholenumber(dim)) {
+    if (as.integer(dim) == 0L) {
+      stop(message, call. = FALSE)
+    }
+    return(invisible(TRUE))
+  }
+
+  emit_quickr_error_if(
+    glue("{guard_dim_f(dim, operand, axis)} == 0_c_ptrdiff_t"),
+    message,
+    hoist,
+    scope
+  )
+  invisible(TRUE)
+}
 
 # Check that destination dimensions match expected output dimensions.
 assert_dest_dims_compatible <- function(dest, expected_dims, context) {
@@ -400,6 +378,22 @@ gemm <- function(
   assert_hoist_env(hoist)
   left <- blas_double_operand(left, context)
   right <- blas_double_operand(right, context)
+  assert_nonempty_blas_output(
+    m,
+    left,
+    if (opA == "N") 1L else 2L,
+    context,
+    hoist,
+    scope
+  )
+  assert_nonempty_blas_output(
+    n,
+    right,
+    if (opB == "N") 2L else 1L,
+    context,
+    hoist,
+    scope
+  )
   A_name <- ensure_blas_operand_name(left, hoist)
   B_name <- ensure_blas_operand_name(right, hoist)
 
@@ -448,6 +442,15 @@ gemv <- function(
   assert_hoist_env(hoist)
   A <- blas_double_operand(A, context)
   x <- blas_double_operand(x, context)
+  output_dim <- if (transA == "N") m else n
+  assert_nonempty_blas_output(
+    output_dim,
+    A,
+    if (transA == "N") 1L else 2L,
+    context,
+    hoist,
+    scope
+  )
   A_name <- ensure_blas_operand_name(A, hoist)
   x_name <- ensure_blas_operand_name(x, hoist)
 
@@ -540,8 +543,6 @@ syrk <- function(
 ) {
   assert_hoist_env(hoist)
   X <- blas_double_operand(X, context)
-  X_name <- ensure_blas_operand_name(X, hoist)
-
   x_dims <- matrix_dims(X)
 
   # For trans = "T": C = t(X) %*% X, so C is k x k where k = ncol(X)
@@ -554,6 +555,16 @@ syrk <- function(
     k <- x_dims$cols
   }
   lda <- x_dims$rows
+  X_name <- ensure_blas_operand_name(X, hoist)
+  X <- Fortran(X_name, X@value)
+  assert_nonempty_blas_output(
+    n,
+    X,
+    if (trans == "T") 2L else 1L,
+    context,
+    hoist,
+    scope
+  )
 
   # Output is symmetric n x n matrix
   writes_to_dest <- FALSE
@@ -576,9 +587,10 @@ syrk <- function(
     out_name <- out_var@name
   }
 
-  hoist$emit(glue(
+  blas_call <- glue(
     "call dsyrk('U', '{trans}', {blas_int(n)}, {blas_int(k)}, 1.0_c_double, {X_name}, {blas_int(lda)}, 0.0_c_double, {out_name}, {blas_int(n)})"
-  ))
+  )
+  emit_blas_contraction(blas_call, out_name, k, hoist)
   symmetrize_upper_to_lower(out_name, n, hoist = hoist)
 
   out <- Fortran(out_name, out_var)
@@ -608,6 +620,9 @@ outer_mul <- function(
 
   m <- dim_or_one(x, 1L)
   n <- dim_or_one(y, 1L)
+
+  assert_nonempty_blas_output(m, x, 1L, context, hoist, scope)
+  assert_nonempty_blas_output(n, y, 1L, context, hoist, scope)
 
   x_name <- ensure_blas_operand_name(x, hoist)
   y_name <- ensure_blas_operand_name(y, hoist)
@@ -681,7 +696,8 @@ triangular_solve <- function(
     left = A,
     right = B,
     left_axis = 1L,
-    right_axis = if (b_rank == 1L) NULL else 1L
+    right_axis = if (b_rank == 1L) NULL else 1L,
+    checker = check_blas_dims
   )
 
   A_name <- ensure_blas_operand_name(A, hoist)
@@ -772,7 +788,8 @@ lapack_solve <- function(
     left = A,
     right = B,
     left_axis = 1L,
-    right_axis = if (b_rank == 1L) NULL else 1L
+    right_axis = if (b_rank == 1L) NULL else 1L,
+    checker = check_blas_dims
   )
 
   A_name <- ensure_blas_operand_name(A, hoist)
@@ -786,8 +803,7 @@ lapack_solve <- function(
   # test-matrix-lapack.R. Squareness is a routing decision here, not a
   # correctness guard: unknown squareness routes to dgels, which solves
   # square systems exactly too.
-  square <- check_conformable(m, n)
-  if (square$ok && !square$unknown && !identical(context, "qr.solve")) {
+  if (dims_match(m, n) && !identical(context, "qr.solve")) {
     A_work <- hoist$declare_tmp(mode = "double", dims = list(m, m))
     hoist$emit(glue("{A_work@name} = {A_name}"))
 

@@ -81,7 +81,8 @@ register_r2f_handler(
         scope,
         left = left,
         right = right,
-        left_axis = if (left_trans == "N") 2L else 1L
+        left_axis = if (left_trans == "N") 2L else 1L,
+        checker = check_blas_dims
       )
       out_len <- if (left_trans == "N") left_dims$rows else left_dims$cols
       return(gemv(
@@ -110,7 +111,8 @@ register_r2f_handler(
         scope,
         left = left,
         right = right,
-        right_axis = if (transA == "N") 2L else 1L
+        right_axis = if (transA == "N") 2L else 1L,
+        checker = check_blas_dims
       )
       out_len <- if (transA == "N") right_dims$rows else right_dims$cols
       return(gemv(
@@ -151,7 +153,8 @@ register_r2f_handler(
         1L
       } else {
         2L
-      }
+      },
+      checker = check_blas_dims
     )
 
     # Matrix-Matrix
@@ -308,17 +311,10 @@ bind_common_dim <- function(dim_list, scalar_flags, context, label) {
   }
   if (length(non_scalar) > 1L) {
     for (idx in non_scalar[-1L]) {
-      conform <- check_conformable(target, dim_list[[idx]])
-      if (!conform$ok) {
-        stop(
-          context,
-          " requires inputs with a common ",
-          label,
-          " count",
-          call. = FALSE
-        )
-      }
-      if (conform$unknown) {
+      # A dim that is not provably equal to the common one is an error
+      # either way: the declaration needs the dim, so "unknown" cannot be
+      # deferred to a runtime guard here.
+      if (!dims_match(target, dim_list[[idx]])) {
         stop(
           context,
           " requires inputs with a common ",
@@ -1001,7 +997,8 @@ crossprod_like <- function(
       1L
     } else {
       2L
-    }
+    },
+    checker = check_blas_dims
   )
 
   m <- x_eff$rows

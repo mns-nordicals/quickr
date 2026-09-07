@@ -9,6 +9,7 @@
 
 new_hoist <- function(scope) {
   hoisted <- character()
+  has_runtime_guard <- FALSE
   block_scope <- NULL
 
   emit <- function(...) {
@@ -17,6 +18,13 @@ new_hoist <- function(scope) {
       as.character(unlist(c(character(), ...), use.names = FALSE))
     )
   }
+
+  mark_runtime_guard <- function() {
+    has_runtime_guard <<- TRUE
+    invisible()
+  }
+
+  contains_runtime_guard <- function() has_runtime_guard
 
   has_block <- function() !is.null(block_scope)
 
@@ -42,6 +50,7 @@ new_hoist <- function(scope) {
 
   capture <- function() {
     captured <- character()
+    captured_runtime_guard <- FALSE
     capture_emit <- function(...) {
       captured <<- c(
         captured,
@@ -52,12 +61,19 @@ new_hoist <- function(scope) {
       str_flatten_lines(str_split_lines(captured, code))
     }
     capture_has_code <- function() length(captured) > 0L
+    capture_mark_runtime_guard <- function() {
+      captured_runtime_guard <<- TRUE
+      invisible()
+    }
+    capture_contains_runtime_guard <- function() captured_runtime_guard
     list2env(
       list(
         emit = capture_emit,
         declare_tmp = declare_tmp,
         render = capture_render,
         has_code = capture_has_code,
+        mark_runtime_guard = capture_mark_runtime_guard,
+        contains_runtime_guard = capture_contains_runtime_guard,
         capture = capture,
         capture_block = capture_block
       ),
@@ -95,6 +111,8 @@ new_hoist <- function(scope) {
       emit = emit,
       declare_tmp = declare_tmp,
       render = render,
+      mark_runtime_guard = mark_runtime_guard,
+      contains_runtime_guard = contains_runtime_guard,
       capture = capture,
       capture_block = capture_block
     ),
@@ -133,6 +151,10 @@ finish_captured_operand <- function(operand, captured_hoist, hoist) {
     inherits(hoist, "environment")
   )
 
+  if (captured_hoist$contains_runtime_guard()) {
+    hoist$mark_runtime_guard()
+  }
+
   if (!inherits(operand@value, Variable)) {
     if (captured_hoist$has_code()) {
       hoist$emit(captured_hoist$render(character()))
@@ -156,13 +178,27 @@ finish_captured_operand <- function(operand, captured_hoist, hoist) {
   operand
 }
 
-lower_r2f_operand_in_order <- function(arg, scope, ..., hoist) {
+lower_r2f_operand_in_order <- function(
+  arg,
+  scope,
+  ...,
+  hoist,
+  reject_runtime_guard = FALSE,
+  runtime_guard_message = NULL
+) {
+  stopifnot(
+    is_bool(reject_runtime_guard),
+    !reject_runtime_guard || is_string(runtime_guard_message)
+  )
   if (is.symbol(arg) || is_scalar_atomic(arg)) {
     return(r2f(arg, scope, ..., hoist = hoist))
   }
 
   captured_hoist <- hoist$capture()
   operand <- r2f(arg, scope, ..., hoist = captured_hoist)
+  if (reject_runtime_guard && captured_hoist$contains_runtime_guard()) {
+    stop(runtime_guard_message, call. = FALSE)
+  }
   finish_captured_operand(operand, captured_hoist, hoist)
 }
 
