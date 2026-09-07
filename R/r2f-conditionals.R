@@ -112,7 +112,7 @@ check_ifelse_branch_shape <- function(branch, mask, hoist, scope) {
 r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   if (any(vapply(args, has_current_scope_assignment, logical(1L)))) {
     stop(
-      "ifelse() does not support assignment expressions; assign on a separate line",
+      "ifelse() does not support assignment expressions or declarations; use separate statements",
       call. = FALSE
     )
   }

@@ -103,6 +103,51 @@ test_that("lazy branches reject for bindings in the current scope", {
   expect_quick_identical(closure_local, list(FALSE), list(TRUE))
 })
 
+test_that("lazy branches reject declarations in the current scope", {
+  expressions <- alist(
+    FALSE &&
+      {
+        declare(type(x = logical(1)))
+        x
+      },
+    TRUE ||
+      {
+        declare(type(x = logical(1)))
+        x
+      },
+    ifelse(
+      FALSE,
+      {
+        declare(type(x = logical(1)))
+        x
+      },
+      TRUE
+    ),
+    ifelse(TRUE, TRUE, {
+      declare(type(x = logical(1)))
+      x
+    })
+  )
+  for (expr in expressions) {
+    fn <- eval(bquote(function() {
+      out <- .(expr)
+      x
+    }))
+    expect_error(
+      quick(fn),
+      "does not support assignment expressions",
+      fixed = TRUE
+    )
+  }
+
+  separate <- function(flag) {
+    declare(type(flag = logical(1)), type(x = logical(1)))
+    x <- TRUE
+    flag && x
+  }
+  expect_quick_identical(separate, list(FALSE), list(TRUE))
+})
+
 test_that("constant scalar ifelse selectors retain the selected raw mode", {
   yes <- function(x) {
     declare(type(x = raw(1)))

@@ -551,12 +551,16 @@ lazy_builtin_arity_error <- function(e, scope, recursive = TRUE) {
   NULL
 }
 
+# Bindings and compiler annotations must be separate statements. Function
+# literals own their scopes, so their bodies do not affect this check.
 has_current_scope_assignment <- function(e) {
   if (!is.call(e) || is_function_call(e)) {
     return(FALSE)
   }
-  # A for loop binds its iterator in the current scope, just like assignment.
-  if (is.symbol(e[[1L]]) && as.character(e[[1L]]) %in% c("<-", "=", "for")) {
+  if (
+    is.symbol(e[[1L]]) &&
+      as.character(e[[1L]]) %in% c("<-", "=", "for", "declare")
+  ) {
     return(TRUE)
   }
   any(vapply(as.list(e), has_current_scope_assignment, logical(1L)))
@@ -576,7 +580,7 @@ compile_andor <- function(
     stop(
       "`",
       op,
-      "` does not support assignment expressions; assign on a separate line",
+      "` does not support assignment expressions or declarations; use separate statements",
       call. = FALSE
     )
   }
