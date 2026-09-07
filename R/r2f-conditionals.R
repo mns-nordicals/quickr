@@ -205,8 +205,8 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   tsource <- yes$value
   fsource <- no$value
 
-  # R: the result is shaped like `test` (branches only contribute values).
-  # A scalar test with array branches is not representable with merge().
+  # Scalar tests require scalar branches in quickr, even with a constant
+  # selector. The selected-mode fast path below preserves this shape restriction.
   if (
     passes_as_scalar(mask@value) &&
       !(passes_as_scalar(tsource@value) && passes_as_scalar(fsource@value))

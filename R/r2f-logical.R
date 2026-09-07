@@ -555,7 +555,8 @@ has_current_scope_assignment <- function(e) {
   if (!is.call(e) || is_function_call(e)) {
     return(FALSE)
   }
-  if (is.symbol(e[[1L]]) && as.character(e[[1L]]) %in% c("<-", "=")) {
+  # A for loop binds its iterator in the current scope, just like assignment.
+  if (is.symbol(e[[1L]]) && as.character(e[[1L]]) %in% c("<-", "=", "for")) {
     return(TRUE)
   }
   any(vapply(as.list(e), has_current_scope_assignment, logical(1L)))

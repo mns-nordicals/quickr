@@ -49,6 +49,60 @@ test_that("lazy branches compile overflowing exp constants", {
   expect_quick_identical(select, list(FALSE), list(TRUE))
 })
 
+test_that("lazy branches reject for bindings in the current scope", {
+  and <- function() {
+    out <- FALSE &&
+      {
+        for (x in 1L:1L) {}
+        NULL
+      }
+    x
+  }
+  or <- function() {
+    out <- TRUE ||
+      {
+        for (x in 1L:1L) {}
+        NULL
+      }
+    x
+  }
+  yes <- function() {
+    out <- ifelse(
+      FALSE,
+      {
+        for (x in 1L:1L) {}
+        NULL
+      },
+      1L
+    )
+    x
+  }
+  no <- function() {
+    out <- ifelse(TRUE, 1L, {
+      for (x in 1L:1L) {}
+      NULL
+    })
+    x
+  }
+  for (fn in list(and, or, yes, no)) {
+    expect_error(
+      quick(fn),
+      "does not support assignment expressions",
+      fixed = TRUE
+    )
+  }
+
+  closure_local <- function(flag) {
+    declare(type(flag = logical(1)))
+    flag &&
+      (function() {
+        for (x in 1L:1L) {}
+        x > 0L
+      })()
+  }
+  expect_quick_identical(closure_local, list(FALSE), list(TRUE))
+})
+
 test_that("constant scalar ifelse selectors retain the selected raw mode", {
   yes <- function(x) {
     declare(type(x = raw(1)))
