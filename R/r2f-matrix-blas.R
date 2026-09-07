@@ -1064,6 +1064,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
 
   a_dims <- matrix_dims(A)
   assert_square_matrix(a_dims, A, context, hoist, scope)
+  out_dims <- A@value@dims
   n <- a_dims$rows
   assert_nonempty_blas_output(n, A, 1L, context, hoist, scope)
 
@@ -1074,7 +1075,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
     can_use_output(
       dest,
       input_names = A_name,
-      expected_dims = list(n, n),
+      expected_dims = out_dims,
       context = context,
       allow_alias = A_name
     )
@@ -1086,7 +1087,7 @@ lapack_inverse <- function(A, scope, hoist, dest = NULL, context = "solve") {
   } else {
     out_var <- hoist$declare_tmp_at_point(
       mode = "double",
-      dims = list(n, n)
+      dims = out_dims
     )
     out_name <- out_var@name
   }
@@ -1144,6 +1145,7 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
 
   a_dims <- matrix_dims(A)
   assert_square_matrix(a_dims, A, context, hoist, scope)
+  out_dims <- A@value@dims
   n <- a_dims$rows
   assert_nonempty_blas_output(n, A, 1L, context, hoist, scope)
 
@@ -1154,7 +1156,7 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
     can_use_output(
       dest,
       input_names = A_name,
-      expected_dims = list(n, n),
+      expected_dims = out_dims,
       context = context,
       allow_alias = A_name
     )
@@ -1166,7 +1168,7 @@ lapack_chol <- function(A, scope, hoist, dest = NULL, context = "chol") {
   } else {
     out_var <- hoist$declare_tmp_at_point(
       mode = "double",
-      dims = list(n, n)
+      dims = out_dims
     )
     out_name <- out_var@name
   }
@@ -1213,6 +1215,7 @@ lapack_chol2inv <- function(
 
   r_dims <- matrix_dims(R)
   assert_square_matrix(r_dims, R, context, hoist, scope)
+  out_dims <- R@value@dims
   n <- r_dims$rows
   assert_nonempty_blas_output(n, R, 1L, context, hoist, scope)
 
@@ -1223,7 +1226,7 @@ lapack_chol2inv <- function(
     can_use_output(
       dest,
       input_names = R_name,
-      expected_dims = list(n, n),
+      expected_dims = out_dims,
       context = context,
       allow_alias = R_name
     )
@@ -1235,7 +1238,7 @@ lapack_chol2inv <- function(
   } else {
     out_var <- hoist$declare_tmp_at_point(
       mode = "double",
-      dims = list(n, n)
+      dims = out_dims
     )
     out_name <- out_var@name
   }
