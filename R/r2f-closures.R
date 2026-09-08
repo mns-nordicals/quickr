@@ -1424,7 +1424,9 @@ compile_sapply_assignment <- function(
     ) {
       stop('sapply() that returns arrays requires `simplify = "array"`.')
     }
-    out_dims <- if (res_var@rank == 0L) {
+    # Length-one vectors also use scalar procedure arguments and simplify to
+    # a vector, without an extra result axis.
+    out_dims <- if (passes_as_scalar(res_var)) {
       list(iterable_len_expr)
     } else {
       c(res_var@dims, list(iterable_len_expr))

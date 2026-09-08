@@ -289,15 +289,11 @@ test_that("serial local closures share R's RNG state", {
     draw(2)
   }
   mapped <- function() {
-    out <- numeric(3L)
-    out <- sapply(seq_len(3L), function(i) runif(1L))
-    out
+    sapply(seq_len(3L), function(i) runif(1L))
   }
   nested_map <- function() {
     draw <- function() runif(1L)
-    out <- numeric(3L)
-    out <- sapply(seq_len(3L), function(i) draw())
-    out
+    sapply(seq_len(3L), function(i) draw())
   }
 
   withr::local_seed(735)
