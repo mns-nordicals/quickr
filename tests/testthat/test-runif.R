@@ -247,3 +247,149 @@ test_that("runif evaluates bounds before rejecting a dynamic count", {
   qfn <- quick(fn)
   expect_equal(set_seed_and_call(fn, 1L, 1), set_seed_and_call(qfn, 1L, 1))
 })
+
+test_that("serial local closures share R's RNG state", {
+  direct <- function() {
+    draw <- function() runif(1L)
+    draw()
+  }
+  assigned <- function() {
+    draw <- function() runif(3L)
+    out <- draw()
+    out
+  }
+  nested <- function() {
+    draw <- function() runif(1L)
+    twice <- function() {
+      first <- draw()
+      second <- draw()
+      c(first, second)
+    }
+    twice()
+  }
+  statement <- function() {
+    draw <- function() {
+      noise <- runif(1L)
+      NULL
+    }
+    draw()
+    1L
+  }
+  default <- function() {
+    draw <- function(x = NULL) {
+      if (is.null(x)) {
+        x <- runif(1L)
+      }
+      x
+    }
+    draw()
+  }
+  supplied <- function() {
+    draw <- function(x = runif(1L)) x
+    draw(2)
+  }
+  mapped <- function() {
+    out <- numeric(3L)
+    out <- sapply(seq_len(3L), function(i) runif(1L))
+    out
+  }
+  nested_map <- function() {
+    draw <- function() runif(1L)
+    out <- numeric(3L)
+    out <- sapply(seq_len(3L), function(i) draw())
+    out
+  }
+
+  withr::local_seed(735)
+  for (fn in list(
+    direct,
+    assigned,
+    nested,
+    statement,
+    default,
+    supplied,
+    mapped,
+    nested_map
+  )) {
+    qfn <- quick(fn)
+    set.seed(735)
+    expected <- list(fn(), fn())
+    expected_seed <- .Random.seed
+    expected_next <- runif(3L)
+    set.seed(735)
+    expect_identical(list(qfn(), qfn()), expected)
+    expect_identical(.Random.seed, expected_seed)
+    expect_identical(runif(3L), expected_next)
+  }
+})
+
+test_that("conditional closure draws consume RNG only on executed paths", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    draw <- function() runif(1L)
+    if (flag) {
+      out <- draw()
+    } else {
+      out <- 0
+    }
+    out
+  }
+  qfn <- quick(fn)
+  withr::local_seed(735)
+  for (flag in c(FALSE, TRUE)) {
+    set.seed(735)
+    expected <- fn(flag)
+    expected_seed <- .Random.seed
+    set.seed(735)
+    expect_identical(qfn(flag), expected)
+    expect_identical(.Random.seed, expected_seed)
+  }
+})
+
+test_that("closure RNG state is published before a runtime error", {
+  fn <- function(a) {
+    declare(type(a = double(n, m)))
+    draw <- function() runif(1L)
+    compute <- function(x) {
+      noise <- draw()
+      sum(solve(x))
+    }
+    compute(a)
+  }
+  qfn <- quick(fn)
+  a <- matrix(1, 2L, 1L)
+  withr::local_seed(735)
+  expect_error(fn(a), "square")
+  expected_seed <- .Random.seed
+  expected_next <- runif(3L)
+  set.seed(735)
+  expect_error(qfn(a), "solve requires a square matrix")
+  expect_identical(.Random.seed, expected_seed)
+  expect_identical(runif(3L), expected_next)
+})
+
+test_that("parallel loops reject RNG calls hidden in local closures", {
+  mapped <- function() {
+    draw <- function() runif(1L)
+    declare(parallel())
+    out <- sapply(seq_len(3L), function(i) draw())
+    out
+  }
+  looped <- function() {
+    draw <- function() runif(1L)
+    outer <- function() draw()
+    out <- numeric(3L)
+    declare(parallel())
+    for (i in seq_len(3L)) {
+      out[i] <- outer()
+    }
+    out
+  }
+  for (fn in list(mapped, looped)) {
+    expect_error(
+      quick(fn),
+      "runif() is not supported inside parallel loops",
+      fixed = TRUE
+    )
+  }
+})

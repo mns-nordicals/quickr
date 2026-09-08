@@ -5,7 +5,6 @@
 
 r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
   scope_mark_uses_rng(scope)
-  mark_openmp_scope_uses_rng(scope)
 
   min <- args$min %||% 0
   max <- args$max %||% 1
