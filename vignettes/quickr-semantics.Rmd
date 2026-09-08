@@ -500,6 +500,10 @@ defeat the purpose of compiling, so quickr's contract is:
   axes such as `m[mask, ]` and `m[, mask]`. quickr refuses both shorter masks
   that R recycles and longer masks. Known mismatches are compile errors;
   dynamic extents are checked before indexing.
+- Literal `TRUE` subscripts select the full axis. Other scalar logical
+  expressions, including literal `FALSE`, are compile errors in reads and
+  writes. Declared logical vectors, including length-one vectors, follow the
+  mask extent checks above.
 
 If you need R's bounds behavior, validate indices before the loop.
 

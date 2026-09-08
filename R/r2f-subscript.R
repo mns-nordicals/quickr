@@ -55,6 +55,7 @@ r2f_handlers[["["]] <- function(
         hoist = hoist,
         later_args = later_idx_args
       )
+      check_scalar_logical_subscript(sub, idx)
       if (sub@value@mode == "double") {
         # Fortran subscripts must be integers; coerce numeric expressions
         Fortran(
@@ -388,6 +389,22 @@ subscript_axis_extents <- function(var, n_idx) {
   rep(list(NULL), n_idx)
 }
 
+
+# A scalar mask is recycled over the indexed extent in R. Only literal TRUE
+# can safely become a full section without a value-dependent result shape.
+# Validate before mask hoisting as well as before constructing designators.
+check_scalar_logical_subscript <- function(subscript, expr) {
+  if (
+    subscript@value@mode == "logical" &&
+      subscript@value@rank == 0L &&
+      !identical(unwrap_parens(expr), TRUE)
+  ) {
+    stop(
+      "scalar logical subscripts other than literal TRUE are not supported",
+      call. = FALSE
+    )
+  }
+}
 
 # Share per-axis logical-vector validation between reads and writes.
 logical_axis_subscript <- function(var, mask, axis, scope, hoist) {

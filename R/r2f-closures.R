@@ -1572,6 +1572,7 @@ compile_subset_designator <- function(
       Fortran(":", Variable("integer", base_var@dims[[i]]))
     } else {
       sub <- r2f(idx, scope, ..., hoist = hoist)
+      check_scalar_logical_subscript(sub, idx)
       if (sub@value@mode == "double") {
         Fortran(
           glue("int({sub}, kind=c_ptrdiff_t)"),

@@ -224,6 +224,63 @@ test_that("rep.int refuses negative repetition counts in subscripts", {
   }
 })
 
+test_that("scalar logical masks refuse value-dependent selections", {
+  vector <- function(x) {
+    declare(type(x = double(n)))
+    pred <- x[1L] > 0
+    SELECTION
+  }
+  matrix <- function(x) {
+    declare(type(x = double(n, k)))
+    pred <- x[1L, 1L] > 0
+    SELECTION
+  }
+  selections <- list(
+    quote(x[MASK]),
+    quote(sum(x[MASK])),
+    quote({
+      x[MASK] <- 0
+      x
+    }),
+    quote(x[MASK, ]),
+    quote(sum(x[, MASK, drop = FALSE])),
+    quote({
+      x[MASK, ] <- 0
+      x
+    }),
+    quote({
+      x[, MASK] <- 0
+      x
+    })
+  )
+  make_fn <- function(template, selection, mask) {
+    selection <- do.call(substitute, list(selection, list(MASK = mask)))
+    statements <- if (identical(selection[[1L]], quote(`{`))) {
+      as.list(selection)[-1L]
+    } else {
+      list(selection)
+    }
+    body(template) <- as.call(c(as.list(body(template))[-4L], statements))
+    template
+  }
+  for (i in seq_along(selections)) {
+    template <- if (i <= 3L) vector else matrix
+    for (mask in list(FALSE, quote((FALSE)), quote(pred), quote(!TRUE))) {
+      fn <- make_fn(template, selections[[i]], mask)
+      expect_error(
+        quick(fn),
+        "scalar logical subscripts other than literal TRUE are not supported",
+        fixed = TRUE
+      )
+    }
+    for (mask in list(TRUE, quote((TRUE)))) {
+      fn <- make_fn(template, selections[[i]], mask)
+      x <- if (i <= 3L) as.double(1:4) else base::matrix(as.double(1:12), 4L)
+      expect_quick_identical(fn, list(x))
+    }
+  }
+})
+
 test_that("logical axis masks require matching extents", {
   rows <- function(x, pred) {
     declare(type(x = double(n, k)), type(pred = logical(m)))
