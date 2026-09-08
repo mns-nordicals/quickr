@@ -374,6 +374,73 @@ test_that("1x1 matrix with a symbolic-length vector keeps R's shape", {
   expect_identical(qrev(3, matrix(2)), rev_fn(3, matrix(2)))
   expect_error(qrev(c(1, 2, 3), matrix(2)), "matrix first dimension")
 })
+test_that("c() accepts single scalar arguments without changing their types", {
+  direct <- function(i) {
+    declare(type(i = integer(1)))
+    c(i)
+  }
+  expect_quick_identical(direct, list(3L), list(-2L))
+
+  modes <- function(i, x, z, p) {
+    declare(
+      type(i = integer(1)),
+      type(x = double(1)),
+      type(z = complex(1)),
+      type(p = logical(1))
+    )
+    ci <- c(i)
+    cx <- c(x)
+    cz <- c(z)
+    cp <- c(p)
+    list(ci, cx, cz, cp)
+  }
+  expect_quick_identical(
+    modes,
+    list(2L, 1.5, 2 + 3i, TRUE),
+    list(-1L, -2.5, -1 - 2i, FALSE)
+  )
+})
+
+test_that("scalar c() preserves nested expressions and closure results", {
+  fn <- function(i) {
+    declare(type(i = integer(1)))
+    wrap <- function(x) c(x)
+    nested <- c(c(i + 1L)) * 2L
+    out <- wrap(nested)
+    c(out, c(i + 2L) * 3L)
+  }
+  expect_quick_identical(fn, list(3L), list(-2L))
+
+  fills <- function() {
+    ci <- c(integer(1L))
+    cx <- c(numeric(1L))
+    cp <- c(logical(1L))
+    list(ci, cx, cp)
+  }
+  expect_quick_identical(fills, list())
+})
+
+test_that("scalar c() evaluates effectful arguments once and in order", {
+  fn <- function() {
+    c(c(runif(1L)), c(runif(1L)) * 2)
+  }
+  qfn <- quick(fn)
+  withr::local_seed(913)
+  expected <- fn()
+  expected_seed <- .Random.seed
+  set.seed(913)
+  expect_identical(qfn(), expected)
+  expect_identical(.Random.seed, expected_seed)
+})
+
+test_that("single vector arguments to c() retain all elements", {
+  fn <- function(x) {
+    declare(type(x = double(n)))
+    c(x)
+  }
+  expect_quick_identical(fn, list(2), list(c(1, 2, 3)), list(numeric()))
+})
+
 test_that("fill constructors spread inside c()", {
   known <- function(x) {
     declare(type(x = double(3)))

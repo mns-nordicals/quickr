@@ -32,7 +32,7 @@ test_that("sapply lowers scalar-return closures (named + inline)", {
 test_that("sapply infers vector outputs for length-one vector results", {
   inline <- function(n) {
     declare(type(n = integer(1)))
-    sapply(seq_len(n), function(i) integer(1L))
+    sapply(seq_len(n), function(i) c(i))
   }
   named <- function(n) {
     declare(type(n = integer(1)))
@@ -42,7 +42,7 @@ test_that("sapply infers vector outputs for length-one vector results", {
   }
   logical_result <- function(n) {
     declare(type(n = integer(1)))
-    sapply(seq_len(n), function(i) logical(1L))
+    sapply(seq_len(n), function(i) c(i > 1L))
   }
   captured <- function(n, x) {
     declare(type(n = integer(1)), type(x = double(1)))
@@ -50,7 +50,7 @@ test_that("sapply infers vector outputs for length-one vector results", {
   }
   array_simplify <- function(n) {
     declare(type(n = integer(1)))
-    sapply(seq_len(n), function(i) integer(1L), simplify = "array")
+    sapply(seq_len(n), function(i) c(i), simplify = "array")
   }
   for (fn in list(inline, named, logical_result, array_simplify)) {
     expect_quick_identical(fn, list(1L), list(3L))
@@ -59,7 +59,7 @@ test_that("sapply infers vector outputs for length-one vector results", {
 
   # A statically singleton output is itself passed as a scalar.
   fixed <- function() {
-    sapply(seq_len(1L), function(i) integer(1L))
+    sapply(seq_len(1L), function(i) c(i))
   }
   expect_quick_identical(fixed, list())
 })

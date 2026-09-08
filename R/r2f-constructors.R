@@ -139,6 +139,12 @@ r2f_handlers[["c"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   promoted <- promote_operands(ff, context = "c()")
   ff <- promoted$args
   mode <- promoted$mode
+  # Known length-one vectors use scalar storage. An array constructor such
+  # as [ i ] cannot be assigned to that storage or a scalar closure result.
+  if (length(ff) == 1L && passes_as_scalar(ff[[1L]]@value)) {
+    value <- booleanize_logical_as_int(ff[[1L]])
+    return(Fortran(glue("({value})"), Variable(mode, list(1L))))
+  }
   # Fill constructors are one scalar literal claiming length k; spread them
   # as implied-dos so the emitted element count matches the claimed length.
   fill_idx <- which(map_lgl(args, is_fill_constructor_call, scope = scope))
