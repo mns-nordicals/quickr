@@ -754,10 +754,6 @@ test_that("unverifiable %*% dims compile and guard at runtime", {
     A %*% B
   }
 
-  c_code <- as.character(r2f(fn)@c_bridge)
-  guard <- regexpr("non-conformable arguments in %*%", c_code, fixed = TRUE)
-  allocation <- regexpr("Rf_allocVector(REALSXP", c_code, fixed = TRUE)
-  expect_true(guard > 0L && guard < allocation)
   qfn <- expect_no_warning(quick(fn))
   A <- matrix(as.double(1:6), 2, 3)
   B <- matrix(as.double(6:1), 3, 2)
@@ -769,7 +765,7 @@ test_that("unverifiable %*% dims compile and guard at runtime", {
   )
 })
 
-test_that("cross-product return allocations validate contracted dimensions", {
+test_that("cross-product results validate contracted dimensions", {
   cross <- function(x, y) {
     declare(type(x = double(NA, NA)), type(y = double(NA, NA)))
     crossprod(x, y)
@@ -780,11 +776,6 @@ test_that("cross-product return allocations validate contracted dimensions", {
   }
   x <- matrix(as.double(1:6), 2L, 3L)
   y <- matrix(as.double(1:8), 2L, 4L)
-  old_limit <- mem.maxVSize()
-  withr::defer(mem.maxVSize(old_limit))
-  # A regression must report a normal R allocation error, never attempt an
-  # 80 GB allocation in the test process.
-  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
   for (fn in list(cross, tcross)) {
     qfn <- quick(fn)
     expect_error(qfn(x, t(x)), "non-conformable arguments")
@@ -793,8 +784,8 @@ test_that("cross-product return allocations validate contracted dimensions", {
     } else {
       expect_equal(qfn(x, y), fn(x, y))
     }
-    a <- matrix(1, 1L, 100000L)
-    b <- matrix(1, 2L, 100000L)
+    a <- matrix(1, 1L, 3L)
+    b <- matrix(1, 2L, 3L)
     if (identical(fn, tcross)) {
       a <- t(a)
       b <- t(b)
@@ -803,10 +794,7 @@ test_that("cross-product return allocations validate contracted dimensions", {
   }
 })
 
-test_that("square-matrix return requirements precede C allocation", {
-  old_limit <- mem.maxVSize()
-  withr::defer(mem.maxVSize(old_limit))
-  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+test_that("square-matrix results validate input shapes", {
   for (op in c("solve", "chol", "chol2inv")) {
     fn <- function(a) {
       declare(type(a = double(n, m)))
@@ -816,16 +804,13 @@ test_that("square-matrix return requirements precede C allocation", {
     qfn <- quick(fn)
     expect_equal(qfn(diag(2)), fn(diag(2)))
     expect_error(
-      qfn(matrix(1, 46000L, 1L)),
+      qfn(matrix(1, 3L, 1L)),
       paste(op, "requires a square matrix")
     )
   }
 })
 
-test_that("solve return requirements check both squareness and RHS rows", {
-  old_limit <- mem.maxVSize()
-  withr::defer(mem.maxVSize(old_limit))
-  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+test_that("solve checks both squareness and RHS rows", {
   fn <- function(a, b) {
     declare(type(a = double(n, m)), type(b = double(k, p)))
     solve(a, b)
@@ -833,19 +818,20 @@ test_that("solve return requirements check both squareness and RHS rows", {
   qfn <- quick(fn)
   expect_equal(qfn(diag(2), diag(2)), diag(2))
   expect_error(
-    qfn(matrix(1, 1L, 46000L), matrix(1, 1L, 46000L)),
+    qfn(matrix(1, 1L, 3L), matrix(1, 1L, 3L)),
     "solve requires a square matrix"
   )
   expect_error(
-    qfn(matrix(numeric(), 0L, 0L), matrix(1, 1L, 46000L)),
+    qfn(matrix(numeric(), 0L, 0L), matrix(1, 1L, 3L)),
     "non-conformable arguments in solve"
   )
 })
 
-test_that("return shape requirements survive copies and precede list allocation", {
-  old_limit <- mem.maxVSize()
-  withr::defer(mem.maxVSize(old_limit))
-  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+test_that("operation guards remain active with composed, copied, and list results", {
+  composed <- function(a) {
+    declare(type(a = double(n, m)))
+    solve(a) + 0
+  }
   alias <- function(a) {
     declare(type(a = double(n, m)))
     x <- solve(a)
@@ -858,17 +844,14 @@ test_that("return shape requirements survive copies and precede list allocation"
     y <- solve(a)
     list(x, y)
   }
-  for (fn in list(alias, listed)) {
+  for (fn in list(composed, alias, listed)) {
     qfn <- quick(fn)
     expect_equal(qfn(diag(2)), fn(diag(2)))
-    expect_error(qfn(matrix(1, 46000L, 1L)), "solve requires a square matrix")
+    expect_error(qfn(matrix(1, 3L, 1L)), "solve requires a square matrix")
   }
 })
 
-test_that("vector products and QR solves validate before oversized returns", {
-  old_limit <- mem.maxVSize()
-  withr::defer(mem.maxVSize(old_limit))
-  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+test_that("vector products and QR solves validate contracted dimensions", {
   matvec <- function(a, b) {
     declare(type(a = double(n, m)), type(b = double(k)))
     a %*% b
@@ -885,17 +868,17 @@ test_that("vector products and QR solves validate before oversized returns", {
   qvecmat <- quick(vecmat)
   qsolve <- quick(qr_fn)
   expect_error(
-    qmatvec(matrix(numeric(), 100000000L, 0L), 1),
+    qmatvec(matrix(numeric(), 3L, 0L), 1),
     "non-conformable arguments in %*%",
     fixed = TRUE
   )
   expect_error(
-    qvecmat(1, matrix(numeric(), 0L, 100000000L)),
+    qvecmat(1, matrix(numeric(), 0L, 3L)),
     "non-conformable arguments in %*%",
     fixed = TRUE
   )
   expect_error(
-    qsolve(diag(1), matrix(numeric(), 0L, 100000000L)),
+    qsolve(diag(1), matrix(numeric(), 0L, 3L)),
     "non-conformable arguments in qr.solve",
     fixed = TRUE
   )
@@ -906,10 +889,9 @@ test_that("vector products and QR solves validate before oversized returns", {
   expect_equal(qsolve(a, b), qr_fn(a, b))
 })
 
-test_that("return preflight preserves RNG effects and conditional execution", {
-  # A fixed output size permits effects before computation-time shape errors.
+test_that("operation guards preserve preceding RNG effects and conditional execution", {
   fn <- function(a) {
-    declare(type(a = double(2, m)))
+    declare(type(a = double(n, m)))
     noise <- runif(1L)
     solve(a)
   }
@@ -936,10 +918,7 @@ test_that("return preflight preserves RNG effects and conditional execution", {
   expect_equal(qconditional(diag(2), TRUE), conditional(diag(2), TRUE))
 })
 
-test_that("local closure results retain return allocation requirements", {
-  old_limit <- mem.maxVSize()
-  withr::defer(mem.maxVSize(old_limit))
-  mem.maxVSize(max(256, 2 * sum(gc()[, 2L])))
+test_that("operation guards remain active in local closures", {
   assigned <- function(a) {
     declare(type(a = double(n, m)))
     invert <- function(x) {
@@ -971,20 +950,19 @@ test_that("local closure results retain return allocation requirements", {
   for (fn in list(assigned, nested, existing)) {
     qfn <- quick(fn)
     expect_equal(qfn(diag(2)), fn(diag(2)))
-    expect_error(qfn(matrix(1, 46000L, 1L)), "solve requires a square matrix")
+    expect_error(qfn(matrix(1, 3L, 1L)), "solve requires a square matrix")
   }
 })
 
-test_that("return preflight preserves output before shape errors", {
-  # Keep the output size valid independently of the input's column count.
+test_that("operation guards preserve output before shape errors", {
   direct <- function(a) {
-    declare(type(a = double(2, m)))
+    declare(type(a = double(n, m)))
     marker <- 123L
     print(marker)
     solve(a)
   }
   nested <- function(a) {
-    declare(type(a = double(2, m)))
+    declare(type(a = double(n, m)))
     invert <- function(x) {
       marker <- 123L
       print(marker)

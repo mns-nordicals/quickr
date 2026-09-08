@@ -460,19 +460,19 @@ threads.
 
 ### Return allocation and observable effects
 
-C allocates returned arrays before the generated Fortran body runs. quickr
-therefore rejects functions whose return-size validation could skip earlier
-RNG or output effects. For example, drawing a random number or printing a
-value before returning `matrix(1, n, n)` with a runtime scalar `n` is refused
-at compile time: a negative `n` would otherwise raise an error before the
-earlier effect occurs.
+C validates return dimensions and allocates all returned arrays before the
+generated Fortran body runs. Operation-specific checks, such as matrix
+conformability, execute in Fortran before the native operation. An allocation
+error can therefore occur before an operation reports an invalid shape.
+quickr does not impose a memory budget or promise to avoid large allocations
+for computations that will later fail; R's allocator handles allocation failure.
 
-Fixed valid return sizes and unchanged input shapes remain supported, as do
-sizes established by a preceding unconditional assignment. Creating the
-matrix before printing makes its size validation precede the output in both
-R and quickr. A direct `runif(n)` result is also supported because its count
-is validated before drawing. The analysis is conservative for control flow
-and local closure calls, and checks every result in a returned list.
+Functions with runtime return dimensions and preceding RNG or output effects
+are supported. On successful calls, those effects execute in the generated
+body. On failing calls, return-size validation or allocation can prevent
+prints or random draws that R would have performed before encountering the
+error. quickr does not promise the same first error or the same partial effects
+as R on failing calls.
 
 ### Scalar transpose {#scalar-transpose}
 

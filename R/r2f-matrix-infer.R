@@ -42,22 +42,6 @@ infer_matrix_arg <- function(arg, scope) {
   list(var = var, trans = "N")
 }
 
-# Carry every input-shape requirement needed before allocating a C result.
-# A solve may need both a square coefficient matrix and conformable RHS rows.
-add_c_bridge_dim_check <- function(out, left, right, message) {
-  if (isTRUE(check_blas_dims(left, right)$unknown)) {
-    out@c_bridge_dim_checks <- c(
-      out@c_bridge_dim_checks,
-      list(list(
-        left = left,
-        right = right,
-        message = message
-      ))
-    )
-  }
-  out
-}
-
 # Infer destination dimensions for %*% based on inputs.
 infer_dest_matmul <- function(args, scope) {
   if (length(args) != 2L) {
@@ -107,13 +91,7 @@ infer_dest_matmul <- function(args, scope) {
   } else {
     list(left_eff$rows, right_eff$cols)
   }
-  # Vector/matrix products need the same contracted-axis guard as GEMM.
-  add_c_bridge_dim_check(
-    Variable("double", out_dims),
-    left_eff$cols,
-    right_eff$rows,
-    "non-conformable arguments in %*%"
-  )
+  Variable("double", out_dims)
 }
 
 # Shared inference for crossprod/tcrossprod destination sizes.
@@ -144,22 +122,10 @@ infer_dest_crossprod_like <- function(args, scope, trans) {
   }
   y_dims <- matrix_dims_var(y)
   if (identical(trans, "T")) {
-    out <- Variable("double", list(x_dims$cols, y_dims$cols))
-    left <- x_dims$rows
-    right <- y_dims$rows
-    op <- "crossprod"
+    Variable("double", list(x_dims$cols, y_dims$cols))
   } else {
-    out <- Variable("double", list(x_dims$rows, y_dims$rows))
-    left <- x_dims$cols
-    right <- y_dims$cols
-    op <- "tcrossprod"
+    Variable("double", list(x_dims$rows, y_dims$rows))
   }
-  add_c_bridge_dim_check(
-    out,
-    left,
-    right,
-    paste("non-conformable arguments in", op)
-  )
 }
 
 # Infer destination dimensions for crossprod().
@@ -210,22 +176,11 @@ infer_dest_triangular <- function(args, scope) {
   if (is.null(B@dims)) {
     return(NULL)
   }
-  out <- add_c_bridge_dim_check(
-    Variable("double", B@dims),
-    A@dims[[1L]],
-    A@dims[[2L]],
-    "triangular solve requires a square matrix"
-  )
-  add_c_bridge_dim_check(
-    out,
-    A@dims[[1L]],
-    B@dims[[1L]],
-    "non-conformable arguments in triangular solve"
-  )
+  Variable("double", B@dims)
 }
 
 # Infer destination dimensions for solve().
-infer_dest_solve <- function(args, scope, context = "solve") {
+infer_dest_solve <- function(args, scope) {
   a_arg <- args$a %||% args[[1L]]
   if (is.null(a_arg)) {
     return(NULL)
@@ -247,35 +202,6 @@ infer_dest_solve <- function(args, scope, context = "solve") {
   } else {
     return(NULL)
   }
-  if (!identical(context, "qr.solve")) {
-    out <- add_c_bridge_dim_check(
-      out,
-      n_rows,
-      n_cols,
-      paste(context, "requires a square matrix")
-    )
-  }
-  if (!is.null(B)) {
-    out <- add_c_bridge_dim_check(
-      out,
-      n_rows,
-      B@dims[[1L]],
-      paste("non-conformable arguments in", context)
-    )
-  }
-  out
-}
-
-infer_dest_qr_solve <- function(args, scope) {
-  out <- infer_dest_solve(args, scope, context = "qr.solve")
-  tol <- args$tol %||% if (length(args) >= 3L) args[[3L]] else NULL
-  # An effectful tolerance must run before a shape error, so that guard
-  # cannot be moved ahead of the Fortran call.
-  if (
-    !is.null(out) && !is_missing(tol) && !r2f_expression_is_pure(tol, scope)
-  ) {
-    out@c_bridge_dim_checks <- list()
-  }
   out
 }
 
@@ -290,24 +216,7 @@ infer_dest_chol <- function(args, scope) {
     return(NULL)
   }
   x_dims <- matrix_dims_var(X)
-  add_c_bridge_dim_check(
-    Variable("double", list(x_dims$rows, x_dims$rows)),
-    x_dims$rows,
-    x_dims$cols,
-    "chol requires a square matrix"
-  )
-}
-
-# Infer destination dimensions for chol2inv().
-infer_dest_chol2inv <- function(args, scope) {
-  out <- infer_dest_chol(args, scope)
-  if (!is.null(out)) {
-    out@c_bridge_dim_checks <- lapply(out@c_bridge_dim_checks, function(check) {
-      check$message <- "chol2inv requires a square matrix"
-      check
-    })
-  }
-  out
+  Variable("double", list(x_dims$rows, x_dims$rows))
 }
 
 # Helper to infer a size from a literal or symbol.

@@ -731,7 +731,7 @@ register_r2f_handler(
     )
   },
   dest_supported = TRUE,
-  dest_infer = infer_dest_qr_solve
+  dest_infer = infer_dest_solve
 )
 
 register_r2f_handler(
@@ -783,7 +783,7 @@ register_r2f_handler(
     )
   },
   dest_supported = TRUE,
-  dest_infer = infer_dest_chol2inv
+  dest_infer = infer_dest_chol
 )
 
 guard_diag_identity_size <- function(size, hoist, scope) {

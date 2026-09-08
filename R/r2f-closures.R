@@ -304,7 +304,6 @@ compile_internal_subroutine <- function(
     }
 
     if (!is.null(res_var)) {
-      res_var@c_bridge_dim_checks <- expr@value@c_bridge_dim_checks
       if (is.null(res_var@mode)) {
         res_var@mode <- expr@value@mode
         res_var@dims <- expr@value@dims
@@ -1108,7 +1107,6 @@ compile_closure_call <- function(
   }
 
   tmp <- hoist$declare_tmp(mode = res_var@mode, dims = res_var@dims)
-  tmp@c_bridge_dim_checks <- res_var@c_bridge_dim_checks
   inputs <- closure_call_inputs(args_f, args_present, formal_vars)
   call_args <- inputs$args
   res_arg <- if (inputs$use_keywords) {
@@ -1225,7 +1223,6 @@ compile_closure_call_assignment <- function(
       )
     }
   }
-  target_var@c_bridge_dim_checks <- proc$res_var@c_bridge_dim_checks
   scope[[target_name]] <- target_var
   scope_add_internal_proc(scope_root(scope), proc)
 

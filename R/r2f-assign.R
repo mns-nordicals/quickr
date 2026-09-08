@@ -211,8 +211,7 @@ register_r2f_handler(
         src <- value@value
         var <- Variable(
           mode = src@mode,
-          dims = src@dims,
-          c_bridge_dim_checks = src@c_bridge_dim_checks
+          dims = src@dims
         )
       }
       if (
