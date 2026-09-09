@@ -26,6 +26,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-local-closure-optional-args-more.R",
     "test-logical.R",
     "test-loops.R",
+    "test-mask-reduction-guards.R",
     "test-matrix-inference.R",
     "test-matrix-lapack.R",
     "test-matrix-mul.R",

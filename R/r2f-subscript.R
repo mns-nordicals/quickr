@@ -73,12 +73,22 @@ r2f_handlers[["["]] <- function(
       idxs[[1]]@value@mode == "logical" &&
       idxs[[1]]@value@rank == var@value@rank
   ) {
-    mask <- idxs[[1]]
-    mask <- booleanize_logical_as_int(mask)
-    if (hoist_mask(mask)) {
-      return(var)
+    # Fortran broadcasts scalar masks, just as R recycles length-one masks.
+    # All other masks must conform, including when a reduction consumes them.
+    mask <- scalarize_logical_mask(idxs[[1]])
+    if (passes_as_scalar(mask@value) && !passes_as_scalar(var@value)) {
+      emit_quickr_error_if(
+        glue("({mask}) .and. size({var}) == 0"),
+        "logical mask selects beyond empty indexed value",
+        hoist,
+        scope
+      )
     }
-    for (axis in seq_len(mask@value@rank)) {
+    for (axis in if (passes_as_scalar(mask@value)) {
+      integer()
+    } else {
+      seq_len(mask@value@rank)
+    }) {
       guard_conformable_dims(
         dim_or_one(var, axis),
         dim_or_one(mask, axis),
@@ -91,6 +101,12 @@ r2f_handlers[["["]] <- function(
         right_axis = axis,
         checker = check_equal_dims
       )
+    }
+    if (hoist_mask(mask)) {
+      return(var)
+    }
+    if (passes_as_scalar(var@value)) {
+      var <- Fortran(glue("[{var}]"), Variable(var@value@mode, 1L))
     }
     return(Fortran(
       glue("pack({var}, {mask})"),
@@ -406,9 +422,32 @@ check_scalar_logical_subscript <- function(subscript, expr) {
   }
 }
 
+# A length-one expression can be a scalar or an array in Fortran. Wrapping
+# either in an array constructor and reducing handles parentheses as well.
+scalarize_logical_mask <- function(mask) {
+  mask <- booleanize_logical_as_int(mask)
+  if (passes_as_scalar(mask@value)) {
+    return(Fortran(glue("any([{mask}])"), Variable("logical")))
+  }
+  mask
+}
+
 # Share per-axis logical-vector validation between reads and writes.
 logical_axis_subscript <- function(var, mask, axis, scope, hoist) {
-  mask <- booleanize_logical_as_int(mask)
+  mask <- scalarize_logical_mask(mask)
+  if (passes_as_scalar(mask@value)) {
+    index <- scope_unique_var(scope, "integer")
+    register_openmp_private(scope, index@name)
+    extent <- guard_dim_f(dim_or_one(var, axis), var, axis)
+    emit_quickr_error_if(
+      glue("({mask}) .and. {extent} == 0"),
+      "logical mask selects beyond empty indexed axis",
+      hoist,
+      scope
+    )
+    f <- glue("pack([({index}, {index}=1, {extent})], {mask})")
+    return(Fortran(f, Variable("int", NA)))
+  }
   guard_conformable_dims(
     dim_or_one(var, axis),
     dim_or_one(mask, 1L),
@@ -421,12 +460,8 @@ logical_axis_subscript <- function(var, mask, axis, scope, hoist) {
     right_axis = 1L,
     checker = check_equal_dims
   )
-  if (passes_as_scalar(mask@value)) {
-    f <- glue("pack([1], [{mask}])")
-  } else {
-    index <- scope_unique_var(scope, "integer")
-    register_openmp_private(scope, index@name)
-    f <- glue("pack([({index}, {index}=1, size({mask}))], {mask})")
-  }
+  index <- scope_unique_var(scope, "integer")
+  register_openmp_private(scope, index@name)
+  f <- glue("pack([({index}, {index}=1, size({mask}))], {mask})")
   Fortran(f, Variable("int", NA))
 }

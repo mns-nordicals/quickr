@@ -508,14 +508,16 @@ defeat the purpose of compiling, so quickr's contract is:
   matching Fortran's own contract: reading or writing out of bounds is
   undefined behavior, as in C. It will not return `NA`-padded results
   the way R does.
-- A logical mask must match the indexed extent, including masks on individual
-  axes such as `m[mask, ]` and `m[, mask]`. quickr refuses both shorter masks
+- A non-scalar logical mask must match the indexed extent, including masks on individual
+  axes such as `m[mask, ]` and `m[, mask]`. quickr refuses both shorter non-scalar masks
   that R recycles and longer masks. Known mismatches are compile errors;
-  dynamic extents are checked before indexing.
+  dynamic extents are checked before indexing, including inside reductions.
+  A mask known at compile time to have length one, such as `logical(1)` or
+  `c(FALSE)`, broadcasts over the indexed extent. A true length-one mask on
+  an empty extent is rejected because R would select an out-of-range value.
 - Literal `TRUE` subscripts select the full axis. Other scalar logical
   expressions, including literal `FALSE`, are compile errors in reads and
-  writes. Declared logical vectors, including length-one vectors, follow the
-  mask extent checks above.
+  writes. Declared logical vectors follow the mask rules above.
 
 If you need R's bounds behavior, validate indices before the loop.
 

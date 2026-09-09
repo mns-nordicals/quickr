@@ -157,13 +157,13 @@ test_that("any/all reduction intrinsics cover scalar, multi-arg, and mask cases"
     declare(type(x = logical(1)))
     any(x[c(FALSE, TRUE)])
   }
-  expect_error(r2f(any_scalar_masked_long_mask), "scalar masked subsets")
+  expect_error(r2f(any_scalar_masked_long_mask), "logical mask extents")
 
   all_scalar_masked_long_mask <- function(x) {
     declare(type(x = logical(1)))
     all(x[c(FALSE, TRUE)])
   }
-  expect_error(r2f(all_scalar_masked_long_mask), "scalar masked subsets")
+  expect_error(r2f(all_scalar_masked_long_mask), "logical mask extents")
 
   # 1-element vector expressions like c(FALSE) compile to Fortran array
   # constructors (`[.false.]`) but any()/all() must still return scalars.
