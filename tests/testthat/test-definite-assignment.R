@@ -667,3 +667,191 @@ test_that("defaults affected by body assignments are refused", {
   body(fn)[[4L]] <- quote(f(1L, 4L))
   expect_quick_identical(fn, list())
 })
+
+test_that("enclosing initialization does not initialize a shadowing local", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    x <- 42L
+    f <- function() {
+      if (flag) {
+        x <- 1L
+      }
+      x
+    }
+    f()
+  }
+  expect_identical(fn(FALSE), 42L)
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+  body(fn)[[4L]][[3L]][[3L]][[2L]] <- quote(
+    if (flag) {
+      x <- 1L
+    }
+  )
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+  body(fn)[[4L]][[3L]][[3L]][[2L]] <- quote(if (flag) x <- 1L else x <- 2L)
+  expect_quick_identical(fn, TRUE, FALSE)
+})
+
+test_that("reads before a shadowing assignment retain their capture", {
+  fn <- function(flag) {
+    declare(type(flag = logical(1)))
+    if (flag) {
+      x <- 42L
+    }
+    f <- function() {
+      y <- x
+      x <- 9L
+      y
+    }
+    f()
+  }
+  expect_error(fn(FALSE), "not found")
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+  body(fn)[[3L]] <- quote(
+    if (flag) {
+      x <- 42L
+    }
+  )
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+  body(fn)[[3L]] <- quote(if (flag) x <- 42L else x <- 43L)
+  expect_quick_identical(fn, TRUE, FALSE)
+
+  # Self-initialization reads the host before introducing the local binding.
+  body(fn)[[4L]][[3L]][[3L]] <- quote({
+    x <- x + 1L
+    x
+  })
+  expect_quick_identical(fn, TRUE, FALSE)
+  body(fn)[[3L]] <- quote(if (flag) x <- 42L)
+  expect_error(quick(fn), "local variable `x` may be uninitialized")
+})
+
+test_that("closure captures cannot silently resolve to caller bindings", {
+  fn <- function() {
+    x <- 42L
+    f <- function(a = x) a
+    g <- function(x) f()
+    g(9L)
+  }
+  expect_identical(fn(), 42L)
+  expect_error(quick(fn), "capture `x` is shadowed at the call site")
+  body(fn)[[4L]] <- quote(g <- function(y) f())
+  expect_quick_identical(fn, list())
+
+  # Explicit actuals still resolve in the caller, and replace unused defaults.
+  body(fn)[[4L]] <- quote(g <- function(x) f(x))
+  expect_quick_identical(fn, list())
+
+  body(fn)[[3L]] <- quote(f <- function() x)
+  body(fn)[[4L]] <- quote(
+    g <- function() {
+      x <- 9L
+      f()
+    }
+  )
+  body(fn)[[5L]] <- quote(g())
+  expect_error(quick(fn), "capture `x` is shadowed at the call site")
+
+  body(fn)[[3L]] <- quote(f <- function(i) x + i)
+  body(fn)[[4L]] <- quote(
+    g <- function(x) {
+      out <- sapply(seq_len(2L), f)
+      out
+    }
+  )
+  body(fn)[[5L]] <- quote(g(9L))
+  expect_error(quick(fn), "capture `x` is shadowed at the call site")
+  body(fn)[[4L]] <- quote(
+    g <- function(y) {
+      out <- sapply(seq_len(2L), f)
+      out
+    }
+  )
+  expect_quick_identical(fn, list())
+})
+
+test_that("eager arguments and defaults cannot read callee-modified bindings", {
+  fn <- function() {
+    x <- 1L
+    f <- function(a) {
+      x <<- 2L
+      a
+    }
+    f(x + 0L)
+  }
+  expect_identical(fn(), 2L)
+  expect_error(
+    quick(fn),
+    "arguments cannot depend on bindings modified by the callee"
+  )
+  body(fn)[[4L]] <- quote(f(3L))
+  expect_quick_identical(fn, list())
+
+  fn <- function() {
+    x <- 1L
+    bump <- function() {
+      x <<- 2L
+      0L
+    }
+    f <- function(a = x + 0L) {
+      unused <- bump()
+      a
+    }
+    f()
+  }
+  expect_identical(fn(), 2L)
+  expect_error(
+    quick(fn),
+    "arguments cannot depend on bindings modified by the callee"
+  )
+  body(fn)[[5L]] <- quote(f(3L))
+  expect_quick_identical(fn, list())
+
+  # Follow parenthesized calls and callbacks passed by name as well.
+  body(fn)[[4L]] <- quote(
+    f <- function(a = x + 0L) {
+      unused <- (bump)()
+      a
+    }
+  )
+  body(fn)[[5L]] <- quote(f())
+  expect_error(
+    quick(fn),
+    "arguments cannot depend on bindings modified by the callee"
+  )
+  body(fn)[[3L]] <- quote(
+    bump <- function(i) {
+      x <<- 2L
+      i
+    }
+  )
+  body(fn)[[4L]] <- quote(
+    f <- function(a = x + 0L) {
+      unused <- sapply(seq_len(2L), bump)
+      a
+    }
+  )
+  expect_error(
+    quick(fn),
+    "arguments cannot depend on bindings modified by the callee"
+  )
+
+  fn <- function() {
+    x <- 1L
+    y <- 3L
+    f <- function(a) {
+      x <<- 2L
+      a
+    }
+    f(y + 1L)
+  }
+  expect_quick_identical(fn, list())
+})
+
+test_that("default substitution preserves function-position lookup", {
+  fn <- function() {
+    f <- function(abs, b = abs(-2L)) b
+    f(3L)
+  }
+  expect_quick_identical(fn, list())
+})

@@ -414,6 +414,7 @@ LocalClosure := new_class(
   properties = list(
     name = prop_string(default = NULL, allow_null = TRUE),
     proc_name = prop_string(default = NULL, allow_null = TRUE),
+    definition_scope = NULL | class_environment,
     fun = class_function
   )
 )

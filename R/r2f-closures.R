@@ -69,6 +69,7 @@ maybe_lower_local_closure_call <- function(
       env = environment(host_closure),
       name = proc_name
     )
+    closure_obj@definition_scope <- scope
     call_expr <- as.call(c(list(callable_unwrapped), as.list(e)[-1L]))
     return(compile_call(call_expr, closure_obj, proc_name))
   }
@@ -119,6 +120,11 @@ compile_internal_subroutine <- function(
   stopifnot(is_string(proc_name), inherits(closure_obj, LocalClosure))
   fun <- closure_obj@fun
   stopifnot(is.function(fun))
+  check_closure_capture_scope(
+    closure_obj,
+    parent_scope,
+    supplied = names(formals(fun))
+  )
   stopifnot(is.null(res_var) || inherits(res_var, Variable))
   stopifnot(is_bool(allow_void_return))
   stopifnot(is.character(forbid_superassign))
@@ -900,11 +906,23 @@ match_closure_call_args <- function(
       if (!is.call(e)) {
         return(e)
       }
-      as.call(lapply(as.list(e), replace_formals))
+      # R resolves a function-position symbol separately from a value formal
+      # (e.g. a numeric formal named abs does not hide base::abs()).
+      as.call(c(list(e[[1L]]), lapply(as.list(e)[-1L], replace_formals)))
     }
     replace_formals(args_aligned[[nm]])
   }
   args_expr <- setNames(lapply(formal_names, resolve_default), formal_names)
+  check_closure_capture_scope(closure_obj, scope, supplied)
+
+  writes <- closure_superassign_names(closure_obj@fun, scope)
+  dependencies <- unique(unlist(lapply(args_expr, all.vars), use.names = FALSE))
+  if (length(intersect(dependencies, writes))) {
+    stop(
+      "local closure arguments cannot depend on bindings modified by the callee",
+      call. = FALSE
+    )
+  }
 
   # Local closures lower to Fortran procedures, so they cannot reproduce R's
   # lazy promise forcing for effectful or trapping actual expressions. Keep
@@ -1318,6 +1336,7 @@ compile_sapply_assignment <- function(
   } else if (is_function_call(fun_expr)) {
     proc_name <- scope_unique_proc(scope_root(scope), prefix = "closure")
     closure_obj <- as_local_closure(fun_expr, env, name = proc_name)
+    closure_obj@definition_scope <- scope
   } else {
     stop("unsupported FUN in sapply(); use a local closure or function(i) ...")
   }
@@ -1832,34 +1851,100 @@ check_static_closure_bindings <- function(expr, formals = character()) {
   invisible(NULL)
 }
 
+# Procedure bodies still lower using their call-site compiler scope. Refuse
+# captures whose lexical binding would change there, rather than silently
+# reading a caller's shadowing binding. Environment identity distinguishes
+# bindings even when their values or generated names happen to be equal.
+check_closure_capture_scope <- function(
+  closure,
+  scope,
+  supplied = character()
+) {
+  definition_scope <- closure@definition_scope
+  if (is.null(definition_scope)) {
+    return(invisible(NULL))
+  }
+  binding_scope <- function(name, scope) {
+    while (inherits(scope, "quickr_scope")) {
+      if (exists(name, scope, inherits = FALSE)) {
+        return(scope)
+      }
+      scope <- parent.env(scope)
+    }
+    NULL
+  }
+  definition <- as.call(list(
+    quote(`function`),
+    formals(closure@fun),
+    body(closure@fun)
+  ))
+  for (name in closure_free_names(definition, supplied)) {
+    if (
+      !identical(
+        binding_scope(name, definition_scope),
+        binding_scope(name, scope)
+      )
+    ) {
+      stop(
+        "local closure capture `",
+        name,
+        "` is shadowed at the call site; use distinct binding names",
+        call. = FALSE
+      )
+    }
+  }
+  invisible(NULL)
+}
+
+# Conservative transitive write summary for eager argument/default evaluation.
+# Include nested definitions even if not called; do not try to prove a call's
+# execution path or its promise-forcing order. Follow captured procedures with
+# cycle protection, so moving a read before an indirect write is refused too.
+closure_superassign_names <- function(fun, scope, seen = character()) {
+  writes <- character()
+  scan <- function(e) {
+    if (is_missing(e)) {
+      return(invisible(NULL))
+    }
+    if (is.symbol(e)) {
+      name <- as.character(e)
+      closure <- get0(name, scope)
+      if (inherits(closure, LocalClosure) && !name %in% seen) {
+        writes <<- union(
+          writes,
+          closure_superassign_names(
+            closure@fun,
+            closure@definition_scope %||% scope,
+            c(seen, name)
+          )
+        )
+      }
+      return(invisible(NULL))
+    }
+    if (!is.call(e)) {
+      return(invisible(NULL))
+    }
+    if (is_call(e, "<<-")) {
+      target <- e[[2L]]
+      while (is.call(target)) {
+        target <- target[[2L]]
+      }
+      if (is.symbol(target)) writes <<- union(writes, as.character(target))
+    }
+    lapply(as.list(e), scan)
+    invisible(NULL)
+  }
+  scan(body(fun))
+  writes
+}
+
 # Names a function needs from its enclosing scope, including callees and the
 # free names of nested functions. Each function owns its bindings: a nested
 # formal or assignment cannot bind a name read by its enclosing function.
 closure_free_names <- function(expr, supplied = character()) {
   stopifnot(is_function_call(expr))
-  bound <- names(as.list(expr[[2L]]))
-  fn_body <- expr[[3L]]
-  collect <- function(e) {
-    if (is_missing(e) || !is.call(e) || is_function_call(e)) {
-      return(invisible(NULL))
-    }
-    if (
-      (is_call(e, "<-") || is_call(e, "=")) &&
-        length(e) == 3L &&
-        is.symbol(e[[2L]])
-    ) {
-      bound <<- union(bound, as.character(e[[2L]]))
-    }
-    # A `<<-` target is the host binding, not a binding of this closure, so it
-    # stays a capture: the closure may read it, and quickr writes through to
-    # the enclosing variable either way.
-    if (is_call(e, "for") && length(e) == 4L) {
-      bound <<- union(bound, as.character(e[[2L]]))
-    }
-    lapply(as.list(e)[-1L], collect)
-    invisible(NULL)
-  }
-  collect(fn_body)
+  fun <- as.function(c(as.list(expr[[2L]]), list(expr[[3L]])))
+  body_reads <- check_definite_assignment(fun, emptyenv(), capture_reads = TRUE)
   reads <- function(e) {
     if (is_missing(e)) {
       return(character())
@@ -1882,7 +1967,7 @@ closure_free_names <- function(expr, supplied = character()) {
   # Defaults resolve formal dependencies in the callee, while other names
   # remain lexical captures. Body assignments must not hide these reads.
   union(
-    setdiff(reads(fn_body), bound),
+    body_reads,
     setdiff(
       unlist(lapply(defaults, reads), use.names = FALSE),
       names(as.list(expr[[2L]]))

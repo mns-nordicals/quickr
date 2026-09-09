@@ -53,6 +53,11 @@ enclosing variable it reads must already be initialized at that point.
 This includes reads reached through other local closures. Nested functions
 have their own bindings: their arguments and local assignments do not
 initialize variables in an enclosing function.
+Reads before a closure's first local assignment can use an initialized
+enclosing binding, including `x <- x * 2`. After a local assignment has been
+visited in any branch, later reads require that local to be initialized on
+every path. quickr refuses conditional fallback between a local and an
+enclosing binding. Braces around statements do not create a separate scope.
 Default argument expressions are included in the capture checks. At a direct
 closure call, an explicitly supplied argument replaces its default and does
 not require that default's captures. Checks through other closure references
@@ -60,6 +65,13 @@ remain conservative and include all defaults. Defaults that refer to other
 formals use their matched arguments, including chained defaults, rather than
 same-named bindings in the caller. Recursive default dependencies and defaults
 that depend on bindings assigned in the callee body are rejected.
+Calls are also refused if a caller's binding shadows a required lexical
+capture, in either the body or an omitted default; use distinct names in
+those scopes. Explicit arguments continue to resolve in the caller's scope.
+Arguments and defaults must be pure expressions whose dependencies are not
+superassigned by the callee or other closures it references. This check is
+conservative about control flow and nested definitions: quickr does not
+implement R's lazy promise-forcing order.
 Local closure definitions must occur outside conditionals and loops in
 their enclosing function. They select a procedure at compile time; quickr
 rejects runtime selection or rebinding of a closure. Define the closure

@@ -112,6 +112,7 @@ register_r2f_handler(
         environment(scope_closure(scope)),
         name = name
       )
+      closure@definition_scope <- scope
       # Nested R scopes share the root Fortran CONTAINS section. Give their
       # procedures distinct names even when the R bindings shadow each other.
       closure@proc_name <- if (scope_is_closure(scope)) {
@@ -422,8 +423,16 @@ register_r2f_handler("=", r2f_handlers[["<-"]])
 
 # A Fortran declaration does not establish an R binding. Check source-level
 # control flow before accepting reads of locals, including the final return.
-check_definite_assignment <- function(closure, scope, captured = character()) {
+check_definite_assignment <- function(
+  closure,
+  scope,
+  captured = character(),
+  capture_reads = FALSE
+) {
   locals <- character()
+  introduced <- character()
+  required <- character()
+  formals <- names(formals(closure)) %||% character()
   # Closure bindings are static and unique within this lexical scope, so build
   # their registry once before walking control flow.
   # Fortran host association makes captures readable regardless of the R
@@ -468,7 +477,22 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     intersect(left, right)
   }
   require_assigned <- function(name, assigned) {
+    if (capture_reads && !name %in% union(locals, formals)) {
+      required <<- union(required, name)
+    }
     if (name %in% locals && !name %in% assigned) {
+      # Before its first assignment, lowering can read an enclosing binding.
+      # Once a local has been introduced (even in only one branch), lowering
+      # uses its storage and must prove that storage initialized on this path.
+      if (!name %in% introduced) {
+        if (capture_reads) {
+          required <<- union(required, name)
+        }
+        if (name %in% captured) return(invisible(NULL))
+      }
+      if (capture_reads) {
+        return(invisible(NULL))
+      }
       stop(
         "local variable `",
         name,
@@ -527,9 +551,26 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
         return(NULL)
       }
       if (is.symbol(expr[[2L]])) {
+        introduced <<- union(introduced, as.character(expr[[2L]]))
         return(union(assigned, as.character(expr[[2L]])))
       }
       return(walk(expr[[2L]], assigned))
+    }
+    if (is_call(expr, "<<-") && length(expr) == 3L) {
+      assigned <- walk(expr[[3L]], assigned)
+      target <- expr[[2L]]
+      while (is.call(target)) {
+        target <- target[[2L]]
+      }
+      if (capture_reads && is.symbol(target)) {
+        required <<- union(required, as.character(target))
+      }
+      if (is.call(expr[[2L]])) {
+        for (index in as.list(expr[[2L]])[-c(1L, 2L)]) {
+          assigned <- walk(index, assigned)
+        }
+      }
+      return(assigned)
     }
     if (is_call(expr, "if") && length(expr) %in% c(3L, 4L)) {
       assigned <- walk(expr[[2L]], assigned)
@@ -540,6 +581,7 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     if (is_call(expr, "for") && length(expr) == 4L) {
       assigned <- walk(expr[[3L]], assigned)
       iterator <- as.character(expr[[2L]])
+      introduced <<- union(introduced, iterator)
       after <- walk(expr[[4L]], union(assigned, iterator))
       iterable <- unwrap_parens(expr[[3L]])
       nonempty <- is_call(iterable, "seq_len") &&
@@ -608,6 +650,6 @@ check_definite_assignment <- function(closure, scope, captured = character()) {
     }
     assigned
   }
-  walk(body(closure), union(names(formals(closure)), captured))
-  invisible(NULL)
+  walk(body(closure), formals)
+  invisible(required)
 }
