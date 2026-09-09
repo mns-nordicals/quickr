@@ -521,6 +521,19 @@ defeat the purpose of compiling, so quickr's contract is:
 
 If you need R's bounds behavior, validate indices before the loop.
 
+### Diagnostic output
+
+`cat()` supports one unnamed string literal ending in a newline, for example
+`cat("working\n")`. Multiple arguments, strings without a final newline, and
+options such as `sep` or `file` are rejected.
+
+`print()` supports one logical, integer, or double value, including expressions
+such as `print(x + 1)`. Expressions are evaluated once before printing.
+Formatting uses R's native diagnostic printers: logicals print as `0` and `1`,
+and arrays print as flat sequences rather than using R's matrix layout.
+Additional formatting arguments and complex values are rejected. These output
+calls are supported as statements; their R return values are not supported.
+
 ### `ifelse()` {#ifelse}
 
 Differences include:

@@ -23,6 +23,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-errors.R",
     "test-evaluation-order.R",
     "test-ifelse.R",
+    "test-io.R",
     "test-local-closure-optional-args-more.R",
     "test-logical.R",
     "test-loops.R",
