@@ -52,13 +52,13 @@ test_that("masked reductions check every matrix axis", {
   }
 })
 
-test_that("scalar masks broadcast over array data", {
+test_that("scalar masks broadcast and scalar data obeys empty identities", {
   template <- function(x, mask) {
     declare(type(x = double(n)), type(mask = logical(1)))
     REDUCE(x[mask])
   }
   for (op in c("sum", "prod", "min", "max", "any", "all")) {
-    for (scalar in FALSE) {
+    for (scalar in c(FALSE, TRUE)) {
       fn <- template
       body(fn)[[3L]][[1L]] <- as.name(op)
       logical <- op %in% c("any", "all")
@@ -86,6 +86,27 @@ test_that("scalar masks broadcast over array data", {
         }
       }
     }
+  }
+})
+
+test_that("mask hoisting does not cross operations or nested subsets", {
+  template <- function(x, mask) {
+    declare(type(x = double(n)), type(mask = logical(n)))
+    RESULT
+  }
+  for (expr in list(
+    quote(sum(rev(x[mask]))),
+    quote(sum(length(x[mask]))),
+    quote(sum(x[mask][c(TRUE, FALSE)])),
+    quote(sum(x[mask] + 1)),
+    quote(sum(x[mask] + x[!mask])),
+    quote(sum(x[(c(TRUE))])),
+    quote(any(rev(x[mask] > 3))),
+    quote(all(rev(x[mask] > 0)))
+  )) {
+    fn <- template
+    body(fn)[[3L]] <- expr
+    expect_quick_identical(fn, list(c(1, 2, 4, 8), c(TRUE, FALSE, TRUE, FALSE)))
   }
 })
 

@@ -26,6 +26,7 @@ r2f_handlers[["["]] <- function(
     scope,
     ...,
     hoist = hoist,
+    hoist_mask = function(mask) FALSE,
     later_args = later_idx_args
   )
 
@@ -53,6 +54,7 @@ r2f_handlers[["["]] <- function(
         scope,
         ...,
         hoist = hoist,
+        hoist_mask = function(mask) FALSE,
         later_args = later_idx_args
       )
       check_scalar_logical_subscript(sub, idx)

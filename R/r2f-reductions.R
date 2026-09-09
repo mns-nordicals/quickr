@@ -45,6 +45,8 @@ register_r2f_handler(
     reduce_arg <- function(arg, index = length(args), allow_empty = FALSE) {
       arg_hoist <- capture_hoist(hoist)
       mask_hoist <- create_mask_hoist()
+      # Only a direct subset can donate its mask. Moving a mask across rev(),
+      # length(), arithmetic, or other calls can change the selected values.
       # Nested reductions (e.g., min(max(...), ...)) can thread an existing
       # hoist_mask through `...`. We always want a single mask hoister per
       # reduction context, so we ignore any inherited one and install ours.
@@ -54,7 +56,11 @@ register_r2f_handler(
         scope,
         calls = dots$calls,
         hoist = arg_hoist,
-        hoist_mask = mask_hoist$try_set
+        hoist_mask = if (is_call(unwrap_parens(arg), "[")) {
+          mask_hoist$try_set
+        } else {
+          function(mask) FALSE
+        }
       )
       if (mask_hoist$has_conflict()) {
         stop(
@@ -113,9 +119,13 @@ register_r2f_handler(
         arith_join_mode(x),
         sprintf("%s()", call_name)
       )
-      out <- if (x@value@is_scalar) {
+      scalar_array <- startsWith(trimws(as.character(x)), "[")
+      out <- if (x@value@is_scalar && is.null(hoisted_mask) && !scalar_array) {
         x
       } else {
+        if (x@value@is_scalar) {
+          x <- Fortran(glue("[{x}]"), Variable(x@value@mode, 1L))
+        }
         s <- glue(
           if (is.null(hoisted_mask)) {
             "{intrinsic}({x})"
@@ -299,7 +309,11 @@ register_r2f_handler(
         scope,
         calls = dots$calls,
         hoist = arg_hoist,
-        hoist_mask = mask_hoist$try_set
+        hoist_mask = if (is_call(unwrap_parens(arg), "[")) {
+          mask_hoist$try_set
+        } else {
+          function(mask) FALSE
+        }
       )
       if (mask_hoist$has_conflict()) {
         stop(
