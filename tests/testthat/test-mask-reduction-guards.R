@@ -101,6 +101,7 @@ test_that("mask hoisting does not cross operations or nested subsets", {
     quote(sum(x[mask] + 1)),
     quote(sum(x[mask] + x[!mask])),
     quote(sum(x[(c(TRUE))])),
+    quote(sum(x[((mask))])),
     quote(any(rev(x[mask] > 3))),
     quote(all(rev(x[mask] > 0)))
   )) {
