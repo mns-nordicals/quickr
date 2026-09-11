@@ -124,6 +124,26 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   iterable_reversed <- isTRUE(iterable_info$reversed)
   parallel <- take_pending_parallel(scope)
 
+  check_loop_binding <- function(mode) {
+    if (inherits(existing, Variable)) {
+      if (!passes_as_scalar(existing)) {
+        stop("for-loop variable must be scalar: ", var, call. = FALSE)
+      }
+      if (!identical(existing@mode, mode)) {
+        stop(
+          "for-loop binding `",
+          var,
+          "` cannot change type from ",
+          existing@mode,
+          " to ",
+          mode,
+          "; use a new loop variable with the iterable's type",
+          call. = FALSE
+        )
+      }
+    }
+  }
+
   # Value iteration: `for (x in foo) { ... }`
   if (is.symbol(iterable_unwrapped)) {
     iterable_name <- as.character(iterable_unwrapped)
@@ -143,13 +163,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
       )
     }
 
-    if (inherits(existing, Variable) && !passes_as_scalar(existing)) {
-      stop(
-        "for-loop variable must be scalar when iterating values: ",
-        var,
-        call. = FALSE
-      )
-    }
+    check_loop_binding(iterable_var@mode)
 
     loop_var <- existing %||% Variable(mode = iterable_var@mode)
     loop_var@name <- var_name
@@ -251,6 +265,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   # Index iteration: `for (i in 1:n) { ... }`
+  check_loop_binding("integer")
   loop_var <- Variable(mode = "integer", name = var_name, r_name = var)
   if (iterable_is_singleton_one(iterable_unwrapped, scope)) {
     loop_var@loop_is_singleton <- TRUE

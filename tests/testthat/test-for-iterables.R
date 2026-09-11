@@ -343,3 +343,62 @@ test_that("unbraced for() bodies keep hoisted setup inside value loops", {
     c(1L, 3L, 5L)
   )
 })
+
+
+test_that("loop bindings refuse changes of mode in either direction", {
+  template <- function(x) {
+    declare(type(x = double(2)))
+    i <- 0L
+    for (i in x) {}
+    i
+  }
+  modes <- list(logical = FALSE, integer = 0L, double = 0, complex = 0i)
+  for (initial in names(modes)) {
+    for (element in setdiff(names(modes), initial)) {
+      fn <- template
+      body(fn)[[2L]][[2L]][[2L]] <- call(element, 2L)
+      body(fn)[[3L]][[3L]] <- modes[[initial]]
+      expect_error(quick(fn), "for-loop binding `i` cannot change type")
+      body(fn)[[4L]][[3L]] <- quote(rev(x))
+      expect_error(quick(fn), "for-loop binding `i` cannot change type")
+    }
+  }
+  body(template)[[3L]][[3L]] <- 0
+  body(template)[[4L]][[3L]] <- quote(seq_len(2L))
+  expect_error(quick(template), "for-loop binding `i` cannot change type")
+})
+
+test_that("same-mode value loops preserve the final value and type", {
+  template <- function(x) {
+    declare(type(x = double(2)))
+    i <- 0
+    for (i in x) {}
+    i
+  }
+  modes <- list(logical = FALSE, integer = 0L, double = 0, complex = 0i)
+  inputs <- list(
+    logical = c(TRUE, FALSE),
+    integer = 1:2,
+    double = c(1.5, 2.5),
+    complex = c(1i, 2i)
+  )
+  for (mode in names(modes)) {
+    fn <- template
+    body(fn)[[2L]][[2L]][[2L]] <- call(mode, 2L)
+    body(fn)[[3L]][[3L]] <- modes[[mode]]
+    expect_quick_identical(fn, list(inputs[[mode]]))
+    body(fn)[[4L]][[3L]] <- quote(rev(x))
+    expect_quick_identical(fn, list(inputs[[mode]]))
+  }
+})
+
+test_that("both loop paths refuse existing array bindings", {
+  fn <- function(i) {
+    declare(type(i = integer(2)))
+    for (i in seq_len(2L)) {}
+    1L
+  }
+  expect_error(quick(fn), "for-loop variable must be scalar")
+  body(fn)[[3L]][[3L]] <- quote(i)
+  expect_error(quick(fn), "for-loop variable must be scalar")
+})
