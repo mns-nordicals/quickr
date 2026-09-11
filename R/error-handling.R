@@ -163,7 +163,9 @@ quickr_error_return_if_set <- function(
 }
 
 quickr_error_serial_loop_checks <- function(scope, parallel = NULL) {
-  if (!scope_in_openmp(scope) || !is.null(parallel)) {
+  if (
+    !scope_in_openmp(scope) || !is.null(parallel) || !scope_uses_errors(scope)
+  ) {
     return(list(before = character(), after = ""))
   }
   list(

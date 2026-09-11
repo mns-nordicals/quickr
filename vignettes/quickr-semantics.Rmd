@@ -45,8 +45,14 @@ including when they are returned. A binding created only in one arm of an
 `if` or inside a possibly empty loop is rejected if it is read afterward.
 Initialize it before the conditional or loop, or assign it in both arms of
 the `if`. This check is conservative: beyond statically nonempty iterables
-and literal positive `seq_len()` loops without `break` or `next`, it does
+and supported nonempty sequences without `break` or `next`, it does
 not prove that a loop executes or that separate conditions imply one another.
+For the loop variable itself, initialization before the loop is insufficient:
+R resets it to `NULL` when the iterable is empty. quickr rejects reads of that
+binding after a possibly empty loop, including reads through local closures.
+Use a separate result variable assigned in the body when an empty loop should
+preserve an initial value. Nonempty loops retain the last value assigned to the
+loop variable, including assignments made in the body.
 A local closure reads enclosing variables through Fortran host association,
 so the same requirement applies wherever the closure is reached: every
 enclosing variable it reads must already be initialized at that point.

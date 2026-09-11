@@ -124,7 +124,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   iterable_reversed <- isTRUE(iterable_info$reversed)
   parallel <- take_pending_parallel(scope)
 
-  check_loop_binding <- function(mode) {
+  bind_loop_variable <- function(mode, logical_storage = FALSE) {
     if (inherits(existing, Variable)) {
       if (!passes_as_scalar(existing)) {
         stop("for-loop variable must be scalar: ", var, call. = FALSE)
@@ -142,6 +142,17 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
         )
       }
     }
+    loop_var <- existing %||% Variable(mode = mode)
+    loop_var@name <- var_name
+    loop_var@r_name <- var
+    if (mode == "logical" && !inherits(existing, Variable)) {
+      loop_var@logical_as_int <- logical_storage
+    }
+    loop_var@loop_is_singleton <- FALSE
+    loop_var@modified <- TRUE
+    scope[[var]] <- loop_var
+    register_openmp_private(scope, var_name)
+    loop_var
   }
 
   # Value iteration: `for (x in foo) { ... }`
@@ -163,16 +174,10 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
       )
     }
 
-    check_loop_binding(iterable_var@mode)
-
-    loop_var <- existing %||% Variable(mode = iterable_var@mode)
-    loop_var@name <- var_name
-    loop_var@r_name <- var
-    if (identical(loop_var@mode, "logical") && !inherits(existing, Variable)) {
-      loop_var@logical_as_int <- logical_as_int(iterable_var)
-    }
-    loop_var@modified <- TRUE
-    scope[[var]] <- loop_var
+    loop_var <- bind_loop_variable(
+      iterable_var@mode,
+      logical_as_int(iterable_var)
+    )
 
     iterable_tmp <- scope_unique_var(
       scope,
@@ -180,9 +185,11 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
       dims = iterable_var@dims,
       logical_as_int = logical_as_int(iterable_var)
     )
+    register_openmp_private(scope, iterable_tmp@name)
     iterable_tmp_assign <- glue("{iterable_tmp@name} = {iterable_var@name}")
 
     idx <- scope_unique_var(scope, "integer")
+    register_openmp_private(scope, idx@name)
     end <- if (passes_as_scalar(iterable_var)) {
       "1_c_int"
     } else {
@@ -240,7 +247,8 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
 
     directives <- openmp_directives(
       parallel,
-      private = c(var_name, openmp_private_vars(scope))
+      private = openmp_private_vars(scope),
+      lastprivate = var_name
     )
     if (!is.null(parallel)) {
       mark_openmp_used(scope)
@@ -265,14 +273,17 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   # Index iteration: `for (i in 1:n) { ... }`
-  check_loop_binding("integer")
-  loop_var <- Variable(mode = "integer", name = var_name, r_name = var)
+  # Evaluate the sequence in the pre-loop scope, then bind its element. A
+  # separate Fortran counter preserves R's final binding, and permits body
+  # assignments or nested loops that reuse the R name.
+  iterable <- r2f_for_iterable(iterable, scope, ..., hoist = hoist)
+  loop_var <- bind_loop_variable("integer")
   if (iterable_is_singleton_one(iterable_unwrapped, scope)) {
     loop_var@loop_is_singleton <- TRUE
+    scope[[var]] <- loop_var
   }
-  scope[[var]] <- loop_var
-
-  iterable <- r2f_for_iterable(iterable, scope, ..., hoist = hoist)
+  idx <- scope_unique_var(scope, "integer")
+  register_openmp_private(scope, idx@name)
   if (!is.null(parallel)) {
     previous_openmp <- enter_openmp_scope(scope)
     on.exit(exit_openmp_scope(scope, previous_openmp), add = TRUE)
@@ -288,7 +299,8 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
 
   directives <- openmp_directives(
     parallel,
-    private = openmp_private_vars(scope)
+    private = openmp_private_vars(scope),
+    lastprivate = var_name
   )
   if (!is.null(parallel)) {
     mark_openmp_used(scope)
@@ -301,10 +313,15 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   } else {
     checks$after
   }
-  loop_header <- glue("do {var_name} = {iterable}")
+  loop_header <- glue("do {idx@name} = {iterable}")
+  loop_stmts <- str_flatten_lines(
+    checks$before,
+    glue("{var_name} = {idx@name}"),
+    body
+  )
   Fortran(glue(
     "{str_flatten_lines(directives$prefix, loop_header)}
-    {indent(str_flatten_lines(checks$before, body))}
+    {indent(loop_stmts)}
     end do
     {str_flatten_lines(directives$suffix, error_check_after)}
     "

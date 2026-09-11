@@ -38,6 +38,7 @@
       
         ! locals
         integer(c_int) :: i
+        integer(c_int) :: tmp1_
         ! manifest end
       
       
@@ -50,7 +51,8 @@
             call quickr_set_error_msg("seq_len() bound must be non-negative")
             return
           end if
-          do i = 1, btmp1_
+          do tmp1_ = 1, btmp1_
+            i = tmp1_
             out(i) = (a(i) + b(i))
           end do
         end block

@@ -496,6 +496,41 @@ r2f_unwrap_for_iterable <- function(iterable) {
   list(iterable = iterable, reversed = reversed)
 }
 
+# Static nonemptiness for definite assignment of the R loop binding. In an
+# empty loop R assigns NULL, which cannot inhabit a compiled scalar variable.
+for_iterable_is_nonempty <- function(iterable, scope) {
+  iterable <- r2f_unwrap_for_iterable(iterable)$iterable
+  if (is.symbol(iterable)) {
+    var <- get0(as.character(iterable), scope)
+    return(
+      inherits(var, Variable) &&
+        all(vapply(var@dims, is_scalar_integerish, logical(1L))) &&
+        all(unlist(var@dims) > 0L)
+    )
+  }
+  if (!is.call(iterable) || !is.symbol(iterable[[1L]])) {
+    return(FALSE)
+  }
+  name <- as.character(iterable[[1L]])
+  if (!name %in% c(":", "seq", "seq_len", "seq_along")) {
+    return(FALSE)
+  }
+  info <- tryCatch(
+    seq_like_parse(name, as.list(iterable)[-1L], scope),
+    error = function(e) NULL
+  )
+  if (is.null(info)) {
+    return(FALSE)
+  }
+  switch(
+    name,
+    `:` = TRUE,
+    seq = TRUE,
+    seq_len = is_scalar_integerish(info$n) && info$n > 0L,
+    seq_along = for_iterable_is_nonempty(info$arg, scope)
+  )
+}
+
 # Check if an iterable is a singleton sequence of 1.
 # Used by: r2f-control-flow.R
 iterable_is_singleton_one <- function(iterable, scope) {

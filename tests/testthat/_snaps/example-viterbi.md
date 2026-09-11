@@ -102,9 +102,12 @@
         real(c_double), allocatable :: trellis(:, :)
         integer(c_int), allocatable :: backpointer(:, :)
         integer(c_int) :: step
+        integer(c_int) :: tmp1_
         integer(c_int) :: current_state
+        integer(c_int) :: tmp2_
         real(c_double), allocatable :: probabilities(:)
         integer(c_int), allocatable :: path(:)
+        integer(c_int) :: tmp3_
         ! manifest end
       
         allocate(trellis(states__len_, observations__len_))
@@ -140,8 +143,10 @@
           return
         end if
         trellis(:, 1_c_int) = (initial_probs * emission_probs(:, observations(1_c_int)))
-        do step = 2_c_int, num_steps, sign(1, num_steps-2_c_int)
-          do current_state = 1_c_int, num_states, sign(1, num_states-1_c_int)
+        do tmp1_ = 2_c_int, num_steps, sign(1, num_steps-2_c_int)
+          step = tmp1_
+          do tmp2_ = 1_c_int, num_states, sign(1, num_states-1_c_int)
+            current_state = tmp2_
       if (size(trellis(:, (step - 1_c_int)), kind=c_ptrdiff_t) == 0 .or. size(trellis(:, (step - 1_c_int)), kind=c_ptrdiff_t) /=&
       & size(transition_probs(:, current_state), kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
@@ -163,7 +168,8 @@
         end if
         path = 0_c_int
         path(num_steps) = maxloc(trellis(:, num_steps), 1)
-        do step = ((num_steps - 1_c_int)), 1_c_int, sign(1, 1_c_int-((num_steps - 1_c_int)))
+        do tmp3_ = ((num_steps - 1_c_int)), 1_c_int, sign(1, 1_c_int-((num_steps - 1_c_int)))
+          step = tmp3_
           path(step) = backpointer(path((step + 1_c_int)), (step + 1_c_int))
         end do
         out = states(path)
@@ -403,9 +409,12 @@
         real(c_double), allocatable :: trellis(:, :)
         integer(c_int), allocatable :: backpointer(:, :)
         integer(c_int) :: step
+        integer(c_int) :: tmp1_
         integer(c_int) :: current_state
+        integer(c_int) :: tmp2_
         real(c_double), allocatable :: probabilities(:)
         integer(c_int), allocatable :: path(:)
+        integer(c_int) :: tmp3_
         ! manifest end
       
         allocate(trellis(states__len_, observations__len_))
@@ -439,8 +448,10 @@
           return
         end if
         trellis(:, 1_c_int) = (initial_probs * emission_probs(:, observations(1_c_int)))
-        do step = 2_c_int, size(observations), sign(1, size(observations)-2_c_int)
-          do current_state = 1_c_int, size(states), sign(1, size(states)-1_c_int)
+        do tmp1_ = 2_c_int, size(observations), sign(1, size(observations)-2_c_int)
+          step = tmp1_
+          do tmp2_ = 1_c_int, size(states), sign(1, size(states)-1_c_int)
+            current_state = tmp2_
       if (size(trellis(:, (step - 1_c_int)), kind=c_ptrdiff_t) == 0 .or. size(trellis(:, (step - 1_c_int)), kind=c_ptrdiff_t) /=&
       & size(transition_probs(:, current_state), kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
@@ -462,7 +473,8 @@
         end if
         path = 0_c_int
         path(size(observations)) = maxloc(trellis(:, size(observations)), 1)
-        do step = (size(observations) - 1_c_int), 1_c_int, sign(1, 1_c_int-(size(observations) - 1_c_int))
+        do tmp3_ = (size(observations) - 1_c_int), 1_c_int, sign(1, 1_c_int-(size(observations) - 1_c_int))
+          step = tmp3_
           path(step) = backpointer(path((step + 1_c_int)), (step + 1_c_int))
         end do
         out = states(path)

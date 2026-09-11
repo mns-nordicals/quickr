@@ -204,17 +204,18 @@ openmp_parallel_do <- function(private = NULL) {
 
 openmp_parallel_end <- function() "!$omp end parallel do"
 
-openmp_directives <- function(parallel, private = NULL) {
+openmp_directives <- function(parallel, private = NULL, lastprivate = NULL) {
   if (is.null(parallel)) {
     return(list(prefix = NULL, suffix = NULL))
   }
   if (!identical(parallel$backend, "omp")) {
     stop("unsupported parallel backend: ", parallel$backend, call. = FALSE)
   }
-  list(
-    prefix = openmp_parallel_do(private = private),
-    suffix = openmp_parallel_end()
-  )
+  prefix <- openmp_parallel_do(private = setdiff(private, lastprivate))
+  if (length(lastprivate)) {
+    prefix <- glue("{prefix} lastprivate({str_flatten_commas(lastprivate)})")
+  }
+  list(prefix = prefix, suffix = openmp_parallel_end())
 }
 
 openmp_fflags <- function() {

@@ -484,7 +484,8 @@ test_that("parallel fill constructors privatize implied-do indices", {
     out
   }
   fsub <- as.character(r2f(fn))
-  expect_match(fsub, "!$omp parallel do private(tmp1_)", fixed = TRUE)
+  expect_match(fsub, "!$omp parallel do private(tmp2_)", fixed = TRUE)
+  expect_quick_identical(fn, 10L)
 })
 test_that("c() evaluates effectful arguments from left to right", {
   fn <- function() {

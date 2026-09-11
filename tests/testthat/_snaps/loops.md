@@ -165,10 +165,12 @@
       
         ! locals
         integer(c_int) :: i
+        integer(c_int) :: tmp1_
         ! manifest end
       
       
-        do i = 1_c_int, 10_c_int, sign(1, 10_c_int-1_c_int)
+        do tmp1_ = 1_c_int, 10_c_int, sign(1, 10_c_int-1_c_int)
+          i = tmp1_
           x = (x + 1_c_int)
           if ((x >= 5_c_int)) then
             exit

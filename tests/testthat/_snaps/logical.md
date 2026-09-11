@@ -928,7 +928,8 @@
         ! locals
         integer(c_int) :: n
         integer(c_int) :: i
-        logical :: tmp1_ ! logical
+        integer(c_int) :: tmp1_
+        logical :: tmp2_ ! logical
         ! manifest end
       
       
@@ -939,13 +940,14 @@
         end if
         out = .false.
       
-        !$omp parallel do private(tmp1_)
-        do i = 1, size(x)
-          tmp1_ = (x(i) > 0.0_c_double)
-          if (tmp1_) then
-            tmp1_ = (y(i) > 0.0_c_double)
+        !$omp parallel do private(tmp2_) lastprivate(i)
+        do tmp1_ = 1, size(x)
+          i = tmp1_
+          tmp2_ = (x(i) > 0.0_c_double)
+          if (tmp2_) then
+            tmp2_ = (y(i) > 0.0_c_double)
           end if
-          out(i) = tmp1_
+          out(i) = tmp2_
         end do
         !$omp end parallel do
         if (quickr_err_msg(1) /= c_null_char) return

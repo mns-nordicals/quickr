@@ -392,15 +392,106 @@ test_that("same-mode value loops preserve the final value and type", {
   }
 })
 
-test_that("both loop paths refuse existing array bindings", {
+test_that("index loop bindings retain R's final value", {
+  template <- function() {
+    i <- 9L
+    for (i in seq_len(3L)) {}
+    i
+  }
+  for (iterable in list(
+    quote(seq_len(3L)),
+    quote(3:1),
+    quote(seq(1L, 6L, by = 2L)),
+    quote(rev(seq_len(3L)))
+  )) {
+    fn <- template
+    body(fn)[[3L]][[3L]] <- iterable
+    expect_quick_identical(fn, list())
+    body(fn)[[3L]][[4L]] <- quote({
+      if (i == 2L) break
+    })
+    expect_quick_identical(fn, list())
+    body(fn)[[3L]][[4L]] <- quote({
+      if (i == 2L) next
+    })
+    expect_quick_identical(fn, list())
+  }
+})
+
+test_that("index loop bindings can be assigned and reused by nested loops", {
+  fn <- function() {
+    out <- 0L
+    for (i in 1:3) {
+      i <- 10L
+      out <- out + i
+    }
+    c(out, i)
+  }
+  expect_quick_identical(fn, list())
+  body(fn)[[3L]][[4L]] <- quote({
+    for (i in 1:2) {
+      out <- out + i
+    }
+    out <- out + i
+  })
+  expect_quick_identical(fn, list())
+})
+
+test_that("index loops copy modified arguments and use their old bounds", {
   fn <- function(i) {
-    declare(type(i = integer(2)))
-    for (i in seq_len(2L)) {}
+    declare(type(i = integer(1)))
+    for (i in seq_len(i)) {}
     1L
   }
-  expect_error(quick(fn), "for-loop variable must be scalar")
-  body(fn)[[3L]][[3L]] <- quote(i)
-  expect_error(quick(fn), "for-loop variable must be scalar")
+  input <- 3L
+  qfn <- quick(fn)
+  expect_identical(qfn(input), fn(input))
+  expect_identical(input, 3L)
+})
+
+test_that("reads after possibly empty loops cannot retain an old scalar", {
+  template <- function(x) {
+    declare(type(x = integer(NA)))
+    i <- 9L
+    for (i in x) {}
+    i
+  }
+  for (iterable in list(
+    quote(x),
+    quote(rev(x)),
+    quote(seq_along(x)),
+    quote(seq_len(0L))
+  )) {
+    fn <- template
+    body(fn)[[4L]][[3L]] <- iterable
+    expect_null(fn(integer()))
+    expect_error(quick(fn), "may be uninitialized")
+  }
+  body(template)[[5L]] <- 1L
+  expect_quick_identical(template, integer(), 1:2)
+})
+
+test_that("parallel loops retain the last iteration's binding", {
+  skip_if_no_openmp()
+  fn <- function() {
+    i <- 0L
+    declare(parallel())
+    for (i in 1:3) {
+      i <- i * 2L
+    }
+    i
+  }
+  expect_quick_identical(fn, list())
+  values <- function(x) {
+    declare(type(x = double(3)))
+    i <- 0
+    declare(parallel())
+    for (i in rev(x)) {
+      i <- i + 1
+    }
+    i
+  }
+  expect_quick_identical(values, list(c(1.5, 2.5, 3.5)))
 })
 
 test_that("seq with an explicit double step cannot silently bind integers", {
@@ -410,4 +501,74 @@ test_that("seq with an explicit double step cannot silently bind integers", {
     i
   }
   expect_error(quick(fn), "non-integer seq")
+})
+
+
+test_that("empty inner loops invalidate bindings across enclosing loops", {
+  template <- function() {
+    i <- 9L
+    LOOP
+    i
+  }
+  for (loop in list(
+    quote(
+      for (i in 1:2) {
+        for (i in seq_len(0L)) {}
+      }
+    ),
+    quote(
+      for (j in 1:2) {
+        for (i in seq_len(0L)) {}
+        break
+      }
+    ),
+    quote(
+      while (i > 0L) {
+        for (i in seq_len(0L)) {}
+        break
+      }
+    ),
+    quote(
+      repeat {
+        for (i in seq_len(0L)) {}
+        break
+      }
+    )
+  )) {
+    fn <- template
+    body(fn)[[3L]] <- loop
+    expect_null(fn())
+    expect_error(quick(fn), "may be uninitialized")
+  }
+})
+
+
+test_that("serial loops inside parallel loops keep iteration storage private", {
+  skip_if_no_openmp()
+  fn <- function(out) {
+    declare(type(out = integer(NA)))
+    declare(parallel())
+    for (i in seq_along(out)) {
+      values <- c(i, i + 1L)
+      for (j in values) {
+        out[i] <- out[i] + j
+      }
+    }
+    out
+  }
+  expect_quick_identical(fn, integer(10000L))
+  body(fn)[[4L]][[4L]][[3L]][[3L]] <- quote(i:(i + 1L))
+  expect_quick_identical(fn, integer(10000L))
+})
+
+
+test_that("both loop paths refuse existing array bindings", {
+  fn <- function(i) {
+    declare(type(i = integer(2)))
+    for (i in seq_len(2L)) {}
+    1L
+  }
+  expect_error(quick(fn), "for-loop variable must be scalar")
+  body(fn)[[3L]][[3L]] <- quote(i)
+  expect_error(quick(fn), "for-loop variable must be scalar")
 })

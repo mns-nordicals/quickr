@@ -466,6 +466,24 @@ check_definite_assignment <- function(
   }
   collect(body(closure))
 
+  # An inner empty loop can invalidate a binding that existed on entry to an
+  # enclosing loop, including before its next iteration. Be conservative about
+  # break/next paths rather than carrying the old scalar through those paths.
+  nullable_loop_bindings <- function(expr) {
+    if (!is.call(expr) || is_function_call(expr)) {
+      return(character())
+    }
+    names <- if (
+      is_call(expr, "for") &&
+        !for_iterable_is_nonempty(expr[[3L]], scope)
+    ) {
+      as.character(expr[[2L]])
+    } else {
+      character()
+    }
+    union(names, unlist(lapply(as.list(expr)[-1L], nullable_loop_bindings)))
+  }
+
   # NULL denotes a path that cannot reach the following statement.
   join <- function(left, right) {
     if (is.null(left)) {
@@ -582,32 +600,29 @@ check_definite_assignment <- function(
       assigned <- walk(expr[[3L]], assigned)
       iterator <- as.character(expr[[2L]])
       introduced <<- union(introduced, iterator)
-      after <- walk(expr[[4L]], union(assigned, iterator))
-      iterable <- unwrap_parens(expr[[3L]])
-      nonempty <- is_call(iterable, "seq_len") &&
-        length(iterable) == 2L &&
-        is_scalar_integerish(iterable[[2L]]) &&
-        iterable[[2L]] > 0L
-      if (is.symbol(iterable)) {
-        var <- get0(as.character(iterable), scope)
-        nonempty <- inherits(var, Variable) &&
-          all(vapply(var@dims, is_scalar_integerish, logical(1L))) &&
-          all(unlist(var@dims) > 0L)
-        if (nonempty) assigned <- union(assigned, iterator)
+      nullable <- nullable_loop_bindings(expr[[4L]])
+      after <- walk(expr[[4L]], union(setdiff(assigned, nullable), iterator))
+      nonempty <- for_iterable_is_nonempty(expr[[3L]], scope)
+      # R resets the loop binding to NULL even if it was initialized before an
+      # empty loop. Its previous scalar value cannot make later reads safe.
+      assigned <- setdiff(assigned, iterator)
+      if (nonempty) {
+        assigned <- union(assigned, iterator)
       }
       if (nonempty && !any(all.names(expr[[4L]]) %in% c("break", "next"))) {
-        return(union(assigned, setdiff(after, iterator)))
+        return(after)
       }
-      # The iterable may be empty; neither its variable nor body assignments
-      # establish bindings after the loop.
-      return(assigned)
+      return(setdiff(assigned, nullable))
     }
+
     if (is_call(expr, "while") && length(expr) == 3L) {
+      assigned <- setdiff(assigned, nullable_loop_bindings(expr[[3L]]))
       assigned <- walk(expr[[2L]], assigned)
       walk(expr[[3L]], assigned)
       return(assigned)
     }
     if (is_call(expr, "repeat") && length(expr) == 2L) {
+      assigned <- setdiff(assigned, nullable_loop_bindings(expr[[2L]]))
       walk(expr[[2L]], assigned)
       # Conservatively require initialization before loops, including repeat:
       # an earlier break/next can bypass an assignment in the body.

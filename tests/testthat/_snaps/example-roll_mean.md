@@ -45,6 +45,7 @@
         ! locals
         integer(c_int) :: n
         integer(c_int) :: i
+        integer(c_int) :: tmp1_
         ! manifest end
       
       
@@ -67,7 +68,8 @@
           end if
           weights = ((weights / sum(weights)) * size(weights))
         end if
-        do i = 1, size(out)
+        do tmp1_ = 1, size(out)
+          i = tmp1_
       if (size(x(i:(((i + n) - 1_c_int)):sign(1, (((i + n) - 1_c_int))-i)), kind=c_ptrdiff_t) == 0 .or. size(x(i:(((i + n) -&
       & 1_c_int)):sign(1, (((i + n) - 1_c_int))-i)), kind=c_ptrdiff_t) /= size(weights, kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
