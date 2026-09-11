@@ -692,6 +692,28 @@ test_that("enclosing initialization does not initialize a shadowing local", {
   expect_quick_identical(fn, TRUE, FALSE)
 })
 
+test_that("calls before a shadowing closure definition remain refused", {
+  fn <- function() {
+    x <- 3L
+    g <- function() {
+      x <<- x + 1L
+      2L
+    }
+    f <- function() {
+      y <- g()
+      g <- function() 0L
+      y
+    }
+    x + f()
+  }
+  expect_identical(fn(), 5L)
+  expect_error(
+    quick(fn),
+    "local variable `g` may be uninitialized",
+    fixed = TRUE
+  )
+})
+
 test_that("reads before a shadowing assignment retain their capture", {
   fn <- function(flag) {
     declare(type(flag = logical(1)))
