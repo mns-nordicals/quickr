@@ -133,7 +133,11 @@ seq_like_parse <- function(name, args, scope) {
     seq = {
       call_expr <- as.call(c(as.symbol("seq"), args))
       seq_call <- match.call(seq.default, call_expr)
-      seq_call <- whole_doubles_to_ints(seq_call)
+      # With an explicit step, R retains double inputs in the result type.
+      # Only the no-step form may normalize whole-valued double literals.
+      if (is.null(seq_call$by)) {
+        seq_call <- whole_doubles_to_ints(seq_call)
+      }
 
       if (!is.null(seq_call$length.out) && !is_missing(seq_call$length.out)) {
         stop("seq(length.out=, along.with=) not implemented yet")
@@ -196,8 +200,18 @@ seq_like_r2f <- function(
   state <- switch(
     kind,
     `:` = {
-      from <- r2f(info$from, scope, ...)
-      to <- r2f(info$to, scope, ...)
+      from <- lower_r2f_operand_in_order(
+        info$from,
+        scope,
+        ...,
+        later_args = list(info$to, info$by)
+      )
+      to <- lower_r2f_operand_in_order(
+        info$to,
+        scope,
+        ...,
+        later_args = list(info$by)
+      )
       list(
         from = from,
         to = to,
@@ -207,12 +221,22 @@ seq_like_r2f <- function(
       )
     },
     seq = {
-      from <- r2f(info$from, scope, ...)
-      to <- r2f(info$to, scope, ...)
+      from <- lower_r2f_operand_in_order(
+        info$from,
+        scope,
+        ...,
+        later_args = list(info$to, info$by)
+      )
+      to <- lower_r2f_operand_in_order(
+        info$to,
+        scope,
+        ...,
+        later_args = list(info$by)
+      )
       by <- if (is.null(info$by)) {
         Fortran(glue("sign(1, {to}-{from})"), Variable("integer"))
       } else {
-        r2f(info$by, scope, ...)
+        lower_r2f_operand_in_order(info$by, scope, ...)
       }
 
       if (

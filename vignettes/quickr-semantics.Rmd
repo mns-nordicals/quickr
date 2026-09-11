@@ -175,7 +175,9 @@ A `for` binding must have exactly the iterable's element type if that variable
 already exists. Both directions of type change are compile errors: even an
 integer element assigned to a double variable would retain the wrong result
 type. Use a fresh loop variable, or initialize it with the iterable's type.
-This applies to both value iteration and sequence iteration.
+This applies to both value iteration and sequence iteration. `seq()` with an
+explicit `by` supports integer bounds and steps only; double inputs are refused
+even when they are whole-valued, because R can return a double sequence.
 
 ## Shapes
 

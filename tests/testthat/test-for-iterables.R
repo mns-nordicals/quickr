@@ -402,3 +402,12 @@ test_that("both loop paths refuse existing array bindings", {
   body(fn)[[3L]][[3L]] <- quote(i)
   expect_error(quick(fn), "for-loop variable must be scalar")
 })
+
+test_that("seq with an explicit double step cannot silently bind integers", {
+  fn <- function() {
+    i <- 0L
+    for (i in seq(1, 3, by = 1)) {}
+    i
+  }
+  expect_error(quick(fn), "non-integer seq")
+})

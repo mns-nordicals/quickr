@@ -169,3 +169,21 @@ test_that("nested mutation summaries also protect eager closure arguments", {
   }
   expect_error(quick(fn), "arguments cannot depend on bindings modified")
 })
+
+test_that("sequence bounds preserve reads before later host writes", {
+  fn <- function() {
+    x <- 1L
+    end <- function() {
+      x <<- 2L
+      3L
+    }
+    out <- 0L
+    for (i in x:end()) {
+      out <- out * 10L + i
+    }
+    out
+  }
+  expect_quick_identical(fn, list())
+  body(fn)[[5L]][[3L]] <- quote(seq(x, end(), by = 1L))
+  expect_quick_identical(fn, list())
+})
