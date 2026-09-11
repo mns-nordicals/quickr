@@ -915,7 +915,10 @@ match_closure_call_args <- function(
   args_expr <- setNames(lapply(formal_names, resolve_default), formal_names)
   check_closure_capture_scope(closure_obj, scope, supplied)
 
-  writes <- closure_superassign_names(closure_obj@fun, scope)
+  writes <- closure_superassign_names(
+    closure_obj@fun,
+    closure_obj@definition_scope %||% scope
+  )
   dependencies <- unique(unlist(lapply(args_expr, all.vars), use.names = FALSE))
   if (length(intersect(dependencies, writes))) {
     stop(
@@ -1900,42 +1903,9 @@ check_closure_capture_scope <- function(
 # Include nested definitions even if not called; do not try to prove a call's
 # execution path or its promise-forcing order. Follow captured procedures with
 # cycle protection, so moving a read before an indirect write is refused too.
-closure_superassign_names <- function(fun, scope, seen = character()) {
-  writes <- character()
-  scan <- function(e) {
-    if (is_missing(e)) {
-      return(invisible(NULL))
-    }
-    if (is.symbol(e)) {
-      name <- as.character(e)
-      closure <- get0(name, scope)
-      if (inherits(closure, LocalClosure) && !name %in% seen) {
-        writes <<- union(
-          writes,
-          closure_superassign_names(
-            closure@fun,
-            closure@definition_scope %||% scope,
-            c(seen, name)
-          )
-        )
-      }
-      return(invisible(NULL))
-    }
-    if (!is.call(e)) {
-      return(invisible(NULL))
-    }
-    if (is_call(e, "<<-")) {
-      target <- e[[2L]]
-      while (is.call(target)) {
-        target <- target[[2L]]
-      }
-      if (is.symbol(target)) writes <<- union(writes, as.character(target))
-    }
-    lapply(as.list(e), scan)
-    invisible(NULL)
-  }
-  scan(body(fun))
-  writes
+closure_superassign_names <- function(fun, scope) {
+  definition <- as.call(list(quote(`function`), formals(fun), body(fun)))
+  r2f_expression_host_mutations(definition, scope)
 }
 
 # Names a function needs from its enclosing scope, including callees and the

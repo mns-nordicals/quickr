@@ -357,64 +357,94 @@ snapshot_operand_before_later_effects <- function(
   )
 }
 
-r2f_expression_host_mutations <- function(e, scope, seen = character()) {
-  if (!is.call(e)) {
-    return(character())
-  }
-
-  callable <- e[[1L]]
-  while (is_call(callable, quote(`(`)) && length(callable) == 2L) {
-    callable <- callable[[2L]]
-  }
-  op <- if (is.symbol(callable)) as.character(callable) else NULL
-  if (identical(op, "function")) {
-    return(character())
-  }
-
-  mutations <- character()
-  if (identical(op, "<<-")) {
-    target <- e[[2L]]
-    while (is_call(target, quote(`(`)) && length(target) == 2L) {
-      target <- target[[2L]]
+# Conservative write summary, including closures passed as callbacks and nested
+# definitions. Analysis environments are separate from compiler scopes: collect
+# each function's closure bindings before following lexical references.
+# Track closure objects rather than names, since nested functions can share names.
+r2f_expression_host_mutations <- function(e, scope) {
+  scan_closure <- function(closure, scope, seen) {
+    if (any(vapply(seen, identical, logical(1L), y = closure))) {
+      return(character())
     }
-    if (is.call(target) && identical(target[[1L]], quote(`[`))) {
-      target <- target[[2L]]
-    }
-    if (is.symbol(target)) {
-      mutations <- as.character(target)
-    }
-  }
-
-  if (!is.null(op)) {
-    closure_obj <- scope[[op]]
-    if (inherits(closure_obj, LocalClosure) && !op %in% seen) {
-      mutations <- c(
-        mutations,
-        r2f_expression_host_mutations(
-          body(closure_obj@fun),
-          scope,
-          seen = c(seen, op)
-        )
-      )
-    }
-  } else if (
-    is.call(callable) &&
-      identical(callable[[1L]], quote(`function`))
-  ) {
-    mutations <- c(
-      mutations,
-      r2f_expression_host_mutations(callable[[3L]], scope, seen)
+    scan_function(
+      closure@fun,
+      closure@definition_scope %||% scope,
+      c(seen, list(closure))
     )
   }
-
-  children <- as.list(e)[-1L]
-  if (length(children)) {
-    mutations <- c(
-      mutations,
-      unlist(lapply(children, r2f_expression_host_mutations, scope, seen))
-    )
+  scan_function <- function(fun, parent_scope, seen) {
+    local_scope <- new.env(parent = parent_scope)
+    # Non-function bindings do not hide R's function-position lookup. Keeping
+    # enclosing procedures visible also covers calls before a local assignment.
+    collect <- function(expr) {
+      if (!is.call(expr) || is_function_call(expr)) {
+        return(invisible(NULL))
+      }
+      if (
+        (is_call(expr, "<-") || is_call(expr, "=")) &&
+          is.symbol(expr[[2L]])
+      ) {
+        name <- as.character(expr[[2L]])
+        rhs <- expr[[3L]]
+        if (is_function_call(rhs)) {
+          closure <- as_local_closure(rhs, environment(fun), name)
+          closure@definition_scope <- local_scope
+          local_scope[[name]] <- closure
+        }
+      }
+      lapply(as.list(expr)[-1L], collect)
+      invisible(NULL)
+    }
+    collect(body(fun))
+    scan(body(fun), local_scope, seen)
   }
-  unique(mutations)
+  scan <- function(expr, scope, seen) {
+    if (is_missing(expr)) {
+      return(character())
+    }
+    if (is.symbol(expr)) {
+      closure <- get0(as.character(expr), scope)
+      if (inherits(closure, LocalClosure)) {
+        return(scan_closure(closure, scope, seen))
+      }
+      return(character())
+    }
+    if (!is.call(expr)) {
+      return(character())
+    }
+    if (is_function_call(expr)) {
+      return(scan_function(
+        as.function(c(as.list(expr[[2L]]), list(expr[[3L]]))),
+        scope,
+        seen
+      ))
+    }
+    if (
+      (is_call(expr, "<-") || is_call(expr, "=")) &&
+        is.symbol(expr[[2L]]) &&
+        is_function_call(expr[[3L]])
+    ) {
+      closure <- get0(as.character(expr[[2L]]), scope)
+      if (inherits(closure, LocalClosure)) {
+        return(scan_closure(closure, scope, seen))
+      }
+    }
+    mutations <- character()
+    if (is_call(expr, "<<-")) {
+      target <- expr[[2L]]
+      while (is.call(target)) {
+        target <- target[[2L]]
+      }
+      if (is.symbol(target)) {
+        mutations <- as.character(target)
+      }
+    }
+    unique(c(
+      mutations,
+      unlist(lapply(as.list(expr), scan, scope, seen), use.names = FALSE)
+    ))
+  }
+  scan(e, scope, list())
 }
 
 lower_r2f_operand_in_order <- function(
