@@ -157,7 +157,7 @@
       
       
       
-        !$omp parallel do private(j, tmp2_) lastprivate(i)
+        !$omp parallel do private(tmp2_) lastprivate(i, j)
         do tmp1_ = 1, 1_c_int
           i = tmp1_
       

@@ -110,6 +110,7 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
 # ---- for ----
 r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   .[var, iterable, body] <- args
+  source_body <- body
   stopifnot(is.symbol(var))
   var <- as.character(var)
   existing <- get0(var, scope, inherits = FALSE)
@@ -248,7 +249,15 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
     directives <- openmp_directives(
       parallel,
       private = openmp_private_vars(scope),
-      lastprivate = var_name
+      lastprivate = if (!is.null(parallel)) {
+        vapply(
+          openmp_lastprivate_bindings(source_body, var, scope),
+          function(nm) {
+            scope[[nm]]@name
+          },
+          character(1L)
+        )
+      }
     )
     if (!is.null(parallel)) {
       mark_openmp_used(scope)
@@ -300,7 +309,15 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   directives <- openmp_directives(
     parallel,
     private = openmp_private_vars(scope),
-    lastprivate = var_name
+    lastprivate = if (!is.null(parallel)) {
+      vapply(
+        openmp_lastprivate_bindings(source_body, var, scope),
+        function(nm) {
+          scope[[nm]]@name
+        },
+        character(1L)
+      )
+    }
   )
   if (!is.null(parallel)) {
     mark_openmp_used(scope)

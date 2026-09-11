@@ -503,6 +503,99 @@ test_that("seq with an explicit double step cannot silently bind integers", {
   expect_error(quick(fn), "non-integer seq")
 })
 
+test_that("parallel regions retain nested loop bindings", {
+  withr::local_envvar(c(OMP_NUM_THREADS = "2", OMP_THREAD_LIMIT = "2"))
+  template <- function() {
+    values <- c(3L, 1L)
+    j <- 9L
+    declare(parallel())
+    for (i in 1:2) {
+      for (j in 1:2) {}
+    }
+    j
+  }
+  for (outer in list(quote(1:2), quote(values), quote(rev(values)))) {
+    for (inner in list(quote(1:2), quote(values), quote(rev(values)))) {
+      fn <- template
+      body(fn)[[5L]][[3L]] <- outer
+      body(fn)[[5L]][[4L]] <- call("for", quote(j), inner, quote({}))
+      expect_quick_identical(fn, list())
+    }
+  }
+
+  # The final binding comes from the last logical iteration, including body
+  # assignments and serial or parallel nesting more than one level deep.
+  body(template)[[5L]][[4L]] <- quote({
+    for (j in i:(i + 2L)) {
+      for (k in 1:2) {}
+      j <- j * 2L
+    }
+  })
+  body(template)[[6L]] <- quote(c(i, j, k))
+  expect_quick_identical(template, list())
+  body(template)[[5L]][[4L]][[2L]][[4L]] <- quote({
+    declare(parallel())
+    for (k in 1:2) {}
+    j <- j * 2L
+  })
+  expect_quick_identical(template, list())
+})
+
+test_that("parallel nested bindings must be established in each iteration", {
+  template <- function() {
+    j <- 9L
+    declare(parallel())
+    for (i in 1:2) {
+      if (i == 1L) for (j in 1:2) {}
+    }
+    j
+  }
+  expect_identical(template(), 2L)
+  expect_error(quick(template), "local variable `j` may be uninitialized")
+
+  for (inner in list(
+    quote({
+      if (i == 2L) {
+        next
+      }
+      for (j in 1:2) {}
+    }),
+    quote({
+      for (j in seq_len(0L)) {}
+    }),
+    quote({
+      j <- j + 1L
+      for (j in 1:2) {}
+    })
+  )) {
+    fn <- template
+    body(fn)[[4L]][[4L]] <- inner
+    expect_error(quick(fn), "local variable `j` may be uninitialized")
+  }
+
+  # Assigning on both paths, or explicitly initializing within the iteration,
+  # makes the nested binding safe to copy back.
+  body(template)[[4L]][[4L]] <- quote({
+    if (i == 1L) for (j in 1:2) {} else for (j in 3:4) {}
+  })
+  expect_quick_identical(template, list())
+  body(template)[[4L]][[4L]] <- quote({
+    j <- 7L
+    if (i == 1L) for (j in 1:2) {}
+  })
+  expect_quick_identical(template, list())
+
+  # A possibly skipped binding can still be used after explicit reassignment.
+  body(template)[[4L]][[4L]] <- quote({
+    if (i == 1L) for (j in 1:2) {}
+  })
+  body(template) <- as.call(c(
+    as.list(body(template))[-5L],
+    list(quote(j <- 5L), quote(j))
+  ))
+  expect_quick_identical(template, list())
+})
+
 
 test_that("empty inner loops invalidate bindings across enclosing loops", {
   template <- function() {

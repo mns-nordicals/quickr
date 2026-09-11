@@ -53,6 +53,13 @@ binding after a possibly empty loop, including reads through local closures.
 Use a separate result variable assigned in the body when an empty loop should
 preserve an initial value. Nonempty loops retain the last value assigned to the
 loop variable, including assignments made in the body.
+Inside a `declare(parallel())` region, nested loop bindings are private to each
+thread. Their final values are preserved after the region only when quickr can
+prove they are assigned on every iteration path. Initialization before the
+parallel region is insufficient; a later read of a possibly skipped binding is
+rejected. Initialize it within each iteration or assign it again after the
+region before reading it. The same conservative `break`/`next` checks apply.
+
 A local closure reads enclosing variables through Fortran host association,
 so the same requirement applies wherever the closure is reached: every
 enclosing variable it reads must already be initialized at that point.

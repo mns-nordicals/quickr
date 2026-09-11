@@ -54,6 +54,36 @@ openmp_private_vars <- function(scope) {
   scope_get(scope, "openmp_private_vars", character())
 }
 
+# Source loop bindings, excluding counters and other generated temporaries.
+openmp_nested_loop_bindings <- function(expr) {
+  if (!is.call(expr) || is_function_call(expr)) {
+    return(character())
+  }
+  binding <- if (is_call(expr, "for")) as.character(expr[[2L]]) else character()
+  unique(c(
+    binding,
+    unlist(lapply(as.list(expr)[-1L], openmp_nested_loop_bindings))
+  ))
+}
+
+openmp_lastprivate_bindings <- function(body, iterator, scope) {
+  # Analyze one iteration with no incoming nested bindings. Reuse the normal
+  # control-flow analysis, including its conservative treatment of break/next.
+  iteration <- as.function(list(call(
+    "for",
+    as.name(iterator),
+    quote(1:1),
+    body
+  )))
+  assigned <- check_definite_assignment(
+    iteration,
+    scope,
+    capture_reads = TRUE,
+    return_assigned = TRUE
+  )
+  intersect(union(iterator, openmp_nested_loop_bindings(body)), assigned)
+}
+
 openmp_scope_uses_rng <- function(scope) {
   if (!inherits(scope, "quickr_scope")) {
     return(FALSE)

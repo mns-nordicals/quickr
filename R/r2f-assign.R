@@ -427,11 +427,13 @@ check_definite_assignment <- function(
   closure,
   scope,
   captured = character(),
-  capture_reads = FALSE
+  capture_reads = FALSE,
+  return_assigned = FALSE
 ) {
   locals <- character()
   introduced <- character()
   required <- character()
+  pending_parallel <- FALSE
   formals <- names(formals(closure)) %||% character()
   # Closure bindings are static and unique within this lexical scope, so build
   # their registry once before walking control flow.
@@ -557,9 +559,13 @@ check_definite_assignment <- function(
       return(assigned)
     }
     if (is_call(expr, "declare")) {
+      pending_parallel <<- pending_parallel ||
+        any(vapply(as.list(expr)[-1L], is_parallel_decl_call, logical(1L)))
       return(assigned)
     }
     if ((is_call(expr, "<-") || is_call(expr, "=")) && length(expr) == 3L) {
+      # A parallel declaration can also target an sapply() assignment.
+      pending_parallel <<- FALSE
       if (is.symbol(expr[[2L]]) && is_function_call(expr[[3L]])) {
         # Defining a closure establishes its binding but reads no captures yet.
         return(union(assigned, as.character(expr[[2L]])))
@@ -597,11 +603,27 @@ check_definite_assignment <- function(
       return(join(yes, no))
     }
     if (is_call(expr, "for") && length(expr) == 4L) {
+      parallel <- pending_parallel && !capture_reads
+      pending_parallel <<- FALSE
       assigned <- walk(expr[[3L]], assigned)
       iterator <- as.character(expr[[2L]])
       introduced <<- union(introduced, iterator)
+      if (parallel) {
+        nested <- setdiff(openmp_nested_loop_bindings(expr[[4L]]), iterator)
+        # Thread-private bindings do not inherit pre-region initialization.
+        assigned <- setdiff(assigned, nested)
+        introduced <<- union(introduced, nested)
+      }
       nullable <- nullable_loop_bindings(expr[[4L]])
       after <- walk(expr[[4L]], union(setdiff(assigned, nullable), iterator))
+      if (parallel) {
+        copied <- openmp_lastprivate_bindings(expr[[4L]], iterator, scope)
+        after <- if (is.null(after)) {
+          NULL
+        } else {
+          setdiff(after, setdiff(nested, copied))
+        }
+      }
       nonempty <- for_iterable_is_nonempty(expr[[3L]], scope)
       # R resets the loop binding to NULL even if it was initialized before an
       # empty loop. Its previous scalar value cannot make later reads safe.
@@ -665,6 +687,6 @@ check_definite_assignment <- function(
     }
     assigned
   }
-  walk(body(closure), formals)
-  invisible(required)
+  assigned <- walk(body(closure), formals)
+  invisible(if (return_assigned) assigned else required)
 }
