@@ -42,6 +42,10 @@
           return
         end if
         out = 0.0_c_double
+        if (x__len_ == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+          return
+        end if
         if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
           call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return

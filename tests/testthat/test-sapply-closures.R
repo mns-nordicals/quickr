@@ -520,6 +520,49 @@ test_that("sapply errors when named FUN is not a local closure", {
   )
 })
 
+test_that("sapply rejects statically empty iterables", {
+  index <- function() {
+    sapply(seq_len(0L), function(i) i)
+  }
+  values <- function() {
+    sapply(integer(0L), function(i) i)
+  }
+  for (fn in list(index, values)) {
+    expect_identical(fn(), list())
+    expect_error(quick(fn), "sapply\\(\\) requires a nonempty input")
+  }
+})
+
+test_that("sapply checks dynamic lengths for new and existing outputs", {
+  index <- function(x) {
+    declare(type(x = integer(n)))
+    out <- sapply(seq_along(x), function(i) x[i])
+    out
+  }
+  values <- function(x) {
+    declare(type(x = integer(n)))
+    out <- sapply(x, function(v) v)
+    out
+  }
+  existing <- function(x) {
+    declare(type(x = integer(n)))
+    out <- integer(length(x))
+    out <- sapply(seq_along(x), function(i) x[i])
+    out
+  }
+  array <- function(x) {
+    declare(type(x = integer(n)))
+    out <- sapply(seq_along(x), function(i) c(i, i), simplify = "array")
+    out
+  }
+  for (fn in list(index, values, existing, array)) {
+    expect_identical(fn(integer()), list())
+    qfn <- quick(fn)
+    expect_error(qfn(integer()), "sapply\\(\\) requires a nonempty input")
+    expect_quick_identical(fn, list(1L), list(1:3))
+  }
+})
+
 test_that("sapply checks the existing output extent before writing", {
   fn <- function(x, out) {
     declare(type(x = integer(n)), type(out = integer(m)))
@@ -540,6 +583,7 @@ test_that("sapply checks filtered iterable size after materialization", {
     out
   }
   qfn <- quick(fn)
+  expect_error(qfn(-3:-1), "sapply\\(\\) requires a nonempty input")
   expect_error(qfn(1:2), "assignment must preserve its shape")
   expect_quick_identical(fn, list(c(-1L, 1:3)))
 })

@@ -1498,6 +1498,19 @@ compile_sapply_assignment <- function(
     stop("sapply() requires a vector input with a known length")
   }
 
+  empty_message <- "sapply() requires a nonempty input; R returns a list for empty input"
+  if (is_wholenumber(iterable_len_expr)) {
+    if (iterable_len_expr == 0L) {
+      stop(empty_message, call. = FALSE)
+    }
+  } else {
+    emit_quickr_error_if(
+      glue("{last_i} == 0"),
+      empty_message,
+      hoist,
+      scope
+    )
+  }
   if (target_exists) {
     guard_conformable_dims(
       if (is_wholenumber(out_var@dims[[out_var@rank]])) {

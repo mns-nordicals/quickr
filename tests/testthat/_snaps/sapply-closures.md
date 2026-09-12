@@ -44,6 +44,10 @@
         end if
         out = 0.0_c_double
       
+        if (x__len_ == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+          return
+        end if
         if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
           call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return
@@ -190,6 +194,10 @@
           return
         end if
         out = .false.
+        if (x__len_ == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+          return
+        end if
         if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
           call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return
@@ -349,6 +357,10 @@
           return
         end if
         out = 0_c_int
+        if (x__len_ == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+          return
+        end if
         if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
           call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return
@@ -499,6 +511,10 @@
           return
         end if
         out = 0.0_c_double
+        if (x__dim_2_ == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+          return
+        end if
         if (size(out, 2, kind=c_ptrdiff_t) /= x__dim_2_) then
           call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return
@@ -671,6 +687,10 @@
           return
         end if
         out = .false.
+        if (x__dim_2_ == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+          return
+        end if
         if (size(out, 2, kind=c_ptrdiff_t) /= x__dim_2_) then
           call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return
@@ -855,6 +875,10 @@
         out = 0.0_c_double
         if (k < 0) then
           call quickr_set_error_msg("seq_len() bound must be non-negative")
+          return
+        end if
+        if (k == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
           return
         end if
         if (size(out, 3, kind=c_ptrdiff_t) /= k) then
@@ -1048,6 +1072,10 @@
           integer(c_int) :: btmp1_(3)
       
           btmp1_ = shape(x)
+          if (x__dim_3_ == 0) then
+            call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+            return
+          end if
           if (size(out, 3, kind=c_ptrdiff_t) /= x__dim_3_) then
             call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
             return
@@ -1229,6 +1257,10 @@
           integer(c_int) :: btmp1_(4)
       
           btmp1_ = shape(x)
+          if (x__dim_4_ == 0) then
+            call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+            return
+          end if
           if (size(out, 4, kind=c_ptrdiff_t) /= x__dim_4_) then
             call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
             return
@@ -1416,6 +1448,10 @@
         out = 0.0_c_double
         if (k < 0) then
           call quickr_set_error_msg("seq_len() bound must be non-negative")
+          return
+        end if
+        if (k == 0) then
+          call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
           return
         end if
         if (size(out, 4, kind=c_ptrdiff_t) /= k) then
@@ -1726,6 +1762,10 @@
           real(c_double), allocatable :: btmp1_(:, :)
       
           allocate(btmp1_(x__dim_1_, x__dim_2_))
+          if (x__dim_2_ == 0) then
+            call quickr_set_error_msg("sapply() requires a nonempty input; R returns a list for empty input")
+            return
+          end if
           if (size(out, 2, kind=c_ptrdiff_t) /= x__dim_2_) then
             call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
             return

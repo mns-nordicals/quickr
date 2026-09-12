@@ -455,6 +455,14 @@ assigning `1L` to a double `x` leaves `x` double. This is a non-error
 difference for whole-variable assignment, since R changes `x` to integer.
 Subassignment retains the higher type in both R and quickr.
 
+### `sapply()` requires nonempty input
+
+R returns `list()` when `sapply()` receives an empty iterable. quickr's
+compiled output has a fixed atomic type, so known-empty inputs are refused
+at compile time and dynamic lengths are checked at runtime. This applies
+whether the output variable already exists or is inferred from the callback,
+including `simplify = "array"`. Nonempty inputs use the usual simplification.
+
 ### Complex values are elementwise-only {#complex}
 
 Elementwise arithmetic and equality comparisons handle complex values
