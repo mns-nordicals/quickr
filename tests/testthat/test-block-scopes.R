@@ -111,6 +111,7 @@ test_that("later user variables do not shadow generated temps", {
 })
 
 test_that("parallel loops privatize bindings created in the body", {
+  withr::local_envvar(c(OMP_NUM_THREADS = "2", OMP_THREAD_LIMIT = "2"))
   fn <- function(x, n, out) {
     declare(
       type(x = double(n)),
@@ -125,6 +126,5 @@ test_that("parallel loops privatize bindings created in the body", {
     out
   }
 
-  code <- as.character(r2f(fn))
-  expect_match(code, "!$omp parallel do private(scratch)", fixed = TRUE)
+  expect_quick_identical(fn, list(seq_len(256L) / 8, 256L, numeric(256L)))
 })
