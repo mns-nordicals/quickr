@@ -182,7 +182,12 @@ quick(function(x) {
 The same check applies to subassignment (`x[i] <- ...`) and
 superassignment (`x <<- ...`, `x[i] <<- ...`). Widening in the other
 direction (assigning an integer value to a double variable) is fine and
-inserts the conversion R would perform.
+converts the value to the variable's fixed type. This matches R for
+subassignment. For whole-variable assignment, it is an intentional type
+difference: R replaces the binding with the RHS type, whereas quickr keeps
+the existing type. For example, `x <- 1L` with a double `x` leaves `x`
+double in quickr and makes it integer in R. The same distinction applies
+to whole-variable superassignment (`x <<- 1L`).
 
 A `for` binding must have exactly the iterable's element type if that variable
 already exists. Both directions of type change are compile errors: even an
@@ -435,6 +440,11 @@ axes explicitly when `drop()` should remove them.
 `x <- x + 0.5` on an integer `x` is a compile-time error, as described
 under [Types](#reassignment-cannot-narrow-a-type). R instead promotes
 the variable to double.
+
+Conversion upwards into an existing higher-mode binding is allowed:
+assigning `1L` to a double `x` leaves `x` double. This is a non-error
+difference for whole-variable assignment, since R changes `x` to integer.
+Subassignment retains the higher type in both R and quickr.
 
 ### Complex values are elementwise-only {#complex}
 
