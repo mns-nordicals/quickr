@@ -183,7 +183,9 @@ test_that("BLAS destinations are not reused across unproven shapes", {
 
   a <- matrix(as.double(1:6), 2, 3)
   b <- matrix(as.double(1:3), 3, 1)
-  expect_quick_equal(local, list(a, b))
+  expect_error(quick(local)(a, b), "assignment must preserve its shape")
+  same_shape <- matrix(as.double(1:9), 3, 3)
+  expect_quick_equal(local, list(a, same_shape))
   expect_error(
     quick(external),
     "cannot change the shape of an external assignment target",

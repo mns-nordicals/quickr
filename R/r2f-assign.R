@@ -1,5 +1,112 @@
 # Assignment-related r2f handlers and helpers
 
+# Whole-binding replacement preserves the binding's R shape. Unlike slice
+# assignment, it must not broadcast a scalar or silently resize an array.
+guard_assignment_shape <- function(name, target, value, scope, hoist) {
+  if (is.null(value@value)) {
+    return(value)
+  }
+  source <- value@value
+  target_dims <- target@dims %||% list(1L)
+  source_dims <- source@dims %||% list(1L)
+  message <- paste0(
+    "cannot reassign `",
+    name,
+    "`: assignment must preserve its shape"
+  )
+  if (length(target_dims) != length(source_dims)) {
+    stop(message, call. = FALSE)
+  }
+  deferred_local <- !target@is_external &&
+    any(map_lgl(
+      seq_along(target_dims),
+      function(axis) {
+        dim <- target_dims[[axis]]
+        is_scalar_na(dim) ||
+          (is.symbol(dim) &&
+            identical(as.character(dim), get_size_name(target, axis)))
+      }
+    ))
+  if (deferred_local && !is.null(value@scalar_fill_dims)) {
+    # A scalar fill cannot trigger Fortran's implicit array allocation.
+    dims <- lapply(seq_along(source_dims), function(axis) {
+      dim <- source_dims[[axis]]
+      if (is_scalar_na(dim)) value@scalar_fill_dims[[axis]] else dim
+    })
+    dims_f <- dims2f(dims, scope)
+    if (!nzchar(dims_f)) {
+      dims_f <- "1"
+    }
+    if (grepl(":", dims_f, fixed = TRUE)) {
+      stop(
+        message,
+        "; could not determine replacement dimensions",
+        call. = FALSE
+      )
+    }
+    hoist$emit(glue(
+      "if (.not. allocated({target@name})) allocate({target@name}({dims_f}))"
+    ))
+  }
+  for (axis in seq_along(target_dims)) {
+    left <- target_dims[[axis]]
+    right <- source_dims[[axis]]
+    # Compare actual storage extents: a symbolic size may have changed since
+    # the target was allocated. Constructors can be scalar fills with no
+    # array to inquire, so render their claimed dimensions explicitly.
+    right_f <- if (!is.null(value@scalar_fill_dims)) {
+      dims2f(
+        list(
+          if (is_scalar_na(right)) value@scalar_fill_dims[[axis]] else right
+        ),
+        scope
+      )
+    } else {
+      guard_dim_f(right, value, axis)
+    }
+    if (identical(right_f, ":")) {
+      stop(
+        message,
+        "; could not determine replacement dimensions",
+        call. = FALSE
+      )
+    }
+    if (!nzchar(right_f)) {
+      right_f <- "1"
+    }
+    # Deferred locals acquire their extents on first assignment. Later
+    # assignments (including another loop iteration) must preserve them.
+    check_if_allocated <- deferred_local && !is_wholenumber(left)
+    if (check_if_allocated) {
+      hoist$emit(glue("if (allocated({target@name})) then"))
+    }
+    guard_conformable_dims(
+      if (is_wholenumber(left)) left else NA_integer_,
+      right,
+      message,
+      hoist,
+      scope,
+      left = target@name,
+      right = value,
+      left_axis = axis,
+      right_f = right_f,
+      checker = check_equal_dims
+    )
+    if (check_if_allocated) hoist$emit("end if")
+  }
+  if (
+    passes_as_scalar(target) &&
+      !passes_as_scalar(source) &&
+      is.null(value@scalar_fill_dims)
+  ) {
+    # R's length-one vector may use an array on the RHS and scalar storage
+    # on the LHS. The shape guard above makes selecting its first value safe.
+    value <- hoist_unless_name(value, hoist)
+    value <- Fortran(glue("{value}(1)"), Variable(source@mode))
+  }
+  value
+}
+
 assignment_dispatch_call_target <- function(
   target,
   args,
@@ -252,7 +359,7 @@ register_r2f_handler(
         var@dims <- value@value@dims
       }
       check_reassignment_narrowing(name, var, value@value)
-      check_assignment_compatible(var, value@value)
+      value <- guard_assignment_shape(name, var, value, scope, hoist)
       var@modified <- TRUE
       # could probably drop this @modified property, and instead track
       # if the var populated by declare is identical at the end (e.g., perhaps by
@@ -361,7 +468,7 @@ register_r2f_handler(
 
     value <- r2f(args[[2L]], scope, ..., hoist = hoist)
     check_reassignment_narrowing(name, host_var, value@value)
-    check_assignment_compatible(host_var, value@value)
+    value <- guard_assignment_shape(name, host_var, value, scope, hoist)
 
     Fortran(glue("{host_var@name} = {value}"))
   }

@@ -279,9 +279,9 @@ can_use_output <- function(
     )
   }
   if (!dims_proven) {
-    # Local allocatables fall back to intrinsic assignment, which reallocates
-    # them to the temporary result's shape. External arrays have fixed ABI
-    # extents and are rejected above.
+    # Local arrays fall back to a temporary result; whole-binding assignment
+    # checks its actual shape before copying it into the existing storage.
+    # External arrays have fixed ABI extents and are rejected above.
     return(FALSE)
   }
   output_name <- dest@name

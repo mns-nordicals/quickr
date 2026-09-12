@@ -44,6 +44,10 @@
         end if
         out = 0.0_c_double
       
+        if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__len_
           call f(tmp1_, out(tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return
@@ -186,6 +190,10 @@
           return
         end if
         out = .false.
+        if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__len_
           call closure1_(tmp1_, out(tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return
@@ -341,6 +349,10 @@
           return
         end if
         out = 0_c_int
+        if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__len_
           call closure1_(tmp1_, out(tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return
@@ -458,7 +470,7 @@
       cat(fsub)
     Output
       subroutine fn(x, out, x__dim_1_, x__dim_2_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -487,6 +499,10 @@
           return
         end if
         out = 0.0_c_double
+        if (size(out, 2, kind=c_ptrdiff_t) /= x__dim_2_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__dim_2_
           call closure1_(tmp1_, out(:, tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return
@@ -625,7 +641,7 @@
       cat(fsub)
     Output
       subroutine fn(x, thresh, out, x__dim_1_, x__dim_2_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -655,6 +671,10 @@
           return
         end if
         out = .false.
+        if (size(out, 2, kind=c_ptrdiff_t) /= x__dim_2_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__dim_2_
           call closure1_(tmp1_, out(:, tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return
@@ -807,7 +827,7 @@
       cat(fsub)
     Output
       subroutine fn(x, k, out, x__dim_1_, x__dim_2_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -835,6 +855,10 @@
         out = 0.0_c_double
         if (k < 0) then
           call quickr_set_error_msg("seq_len() bound must be non-negative")
+          return
+        end if
+        if (size(out, 3, kind=c_ptrdiff_t) /= k) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return
         end if
         do tmp1_ = 1_c_int, k
@@ -998,7 +1022,7 @@
       cat(fsub)
     Output
       subroutine fn(x, out, x__dim_1_, x__dim_2_, x__dim_3_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -1024,6 +1048,10 @@
           integer(c_int) :: btmp1_(3)
       
           btmp1_ = shape(x)
+          if (size(out, 3, kind=c_ptrdiff_t) /= x__dim_3_) then
+            call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+            return
+          end if
           do tmp1_ = 1_c_int, x__dim_3_
             call closure1_(tmp1_, out(:, :, tmp1_))
             if (quickr_err_msg(1) /= c_null_char) return
@@ -1174,7 +1202,7 @@
       cat(fsub)
     Output
       subroutine fn(x, out, x__dim_1_, x__dim_2_, x__dim_3_, x__dim_4_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -1201,6 +1229,10 @@
           integer(c_int) :: btmp1_(4)
       
           btmp1_ = shape(x)
+          if (size(out, 4, kind=c_ptrdiff_t) /= x__dim_4_) then
+            call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+            return
+          end if
           do tmp1_ = 1_c_int, x__dim_4_
             call closure1_(tmp1_, out(:, :, :, tmp1_))
             if (quickr_err_msg(1) /= c_null_char) return
@@ -1355,7 +1387,7 @@
       cat(fsub)
     Output
       subroutine fn(x, k, out, x__dim_1_, x__dim_2_, x__dim_3_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -1384,6 +1416,10 @@
         out = 0.0_c_double
         if (k < 0) then
           call quickr_set_error_msg("seq_len() bound must be non-negative")
+          return
+        end if
+        if (size(out, 4, kind=c_ptrdiff_t) /= k) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
           return
         end if
         do tmp1_ = 1_c_int, k
@@ -1648,7 +1684,7 @@
       cat(fsub)
     Output
       subroutine fn(x, out, x__dim_1_, x__dim_2_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -1677,11 +1713,23 @@
           return
         end if
         out = 0.0_c_double
+        if (size(out, 1, kind=c_ptrdiff_t) /= size(x, 1, kind=c_ptrdiff_t)) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
+        if (size(out, 2, kind=c_ptrdiff_t) /= size(x, 2, kind=c_ptrdiff_t)) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         out = x
         block
           real(c_double), allocatable :: btmp1_(:, :)
       
           allocate(btmp1_(x__dim_1_, x__dim_2_))
+          if (size(out, 2, kind=c_ptrdiff_t) /= x__dim_2_) then
+            call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+            return
+          end if
           do tmp1_ = 1_c_int, x__dim_2_
             call closure1_(tmp1_, btmp1_(:, tmp1_))
             if (quickr_err_msg(1) /= c_null_char) return

@@ -384,6 +384,8 @@ Fortran := new_class(
     # consistently propagated with the Fortran object.
     logical_booleanized = prop_bool(default = FALSE),
     writes_to_dest = prop_bool(default = FALSE),
+    # Scalar constructor code carrying the shape of the array it fills.
+    scalar_fill_dims = NULL | class_list,
 
     r = new_property(
       # custom setter only to workaround https://github.com/RConsortium/S7/issues/511

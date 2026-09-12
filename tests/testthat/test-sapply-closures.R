@@ -519,3 +519,27 @@ test_that("sapply errors when named FUN is not a local closure", {
     "unsupported FUN in sapply\\(\\)"
   )
 })
+
+test_that("sapply checks the existing output extent before writing", {
+  fn <- function(x, out) {
+    declare(type(x = integer(n)), type(out = integer(m)))
+    out <- sapply(seq_along(x), function(i) x[i])
+    out
+  }
+  qfn <- quick(fn)
+  expect_error(qfn(1:3, integer(2)), "assignment must preserve its shape")
+  expect_error(qfn(1:2, integer(3)), "assignment must preserve its shape")
+  expect_quick_identical(fn, list(1:3, integer(3)))
+})
+
+test_that("sapply checks filtered iterable size after materialization", {
+  fn <- function(x) {
+    declare(type(x = integer(n)))
+    out <- integer(3L)
+    out <- sapply(x[x > 0L], function(v) v)
+    out
+  }
+  qfn <- quick(fn)
+  expect_error(qfn(1:2), "assignment must preserve its shape")
+  expect_quick_identical(fn, list(c(-1L, 1:3)))
+})

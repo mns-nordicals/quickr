@@ -1478,6 +1478,11 @@ compile_sapply_assignment <- function(
   }
 
   idx <- scope_unique_var(scope, "integer")
+  if (!index_iterable) {
+    # Materialize before inquiring about size: deferred temporaries acquire
+    # their extents on assignment, and the iterable is evaluated only once.
+    hoist$emit(iterable_tmp_assign)
+  }
   last_i <- if (index_iterable) {
     if (is.null(iterable_len_expr) || is_scalar_na(iterable_len_expr)) {
       NULL
@@ -1491,6 +1496,29 @@ compile_sapply_assignment <- function(
   }
   if (is.null(last_i)) {
     stop("sapply() requires a vector input with a known length")
+  }
+
+  if (target_exists) {
+    guard_conformable_dims(
+      if (is_wholenumber(out_var@dims[[out_var@rank]])) {
+        out_var@dims[[out_var@rank]]
+      } else {
+        NA_integer_
+      },
+      iterable_len_expr,
+      paste0(
+        "cannot reassign `",
+        out_name,
+        "`: assignment must preserve its shape"
+      ),
+      hoist,
+      scope,
+      left = out_var@name,
+      right = NULL,
+      left_axis = out_var@rank,
+      right_f = as.character(last_i),
+      checker = check_equal_dims
+    )
   }
 
   res_target <- if (out_var@rank == 1L) {
@@ -1547,10 +1575,7 @@ compile_sapply_assignment <- function(
     ""
   }
   loop_header <- glue("do {idx@name} = 1_c_int, {last_i}")
-  prefix <- str_flatten_lines(
-    if (!index_iterable) iterable_tmp_assign else NULL,
-    str_flatten_lines(directives$prefix, loop_header)
-  )
+  prefix <- str_flatten_lines(directives$prefix, loop_header)
   Fortran(glue(
     "
     {prefix}

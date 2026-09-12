@@ -42,6 +42,10 @@
           return
         end if
         out = 0.0_c_double
+        if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__len_
           call closure1_(tmp1_, out(tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return

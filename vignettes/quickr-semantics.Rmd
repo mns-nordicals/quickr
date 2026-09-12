@@ -211,6 +211,15 @@ each answer has a fixed consequence:
 
 There is no case where a mismatch is silently accepted.
 
+A variable keeps its shape for the duration of a call. Whole-variable
+assignment (`x <- value` or `x <<- value`) requires the same length and
+dimensions as the existing binding. Known mismatches are compile errors;
+dynamic extents are checked at runtime. For example,
+`x <- integer(2L); x <- integer(3L)` is refused. To fill an existing vector
+with a scalar, use subassignment such as `x[] <- 0L`.
+Locals declared with unspecified extents acquire their shape on first
+assignment and must preserve it afterward.
+
 For elementwise operations (arithmetic, comparisons, `&`, `|`),
 "compatible" means:
 

@@ -192,13 +192,16 @@
     Code
       cat(fsub)
     Output
-      subroutine fn(x, out, x__len_) bind(c)
-        use iso_c_binding, only: c_double, c_int, c_ptrdiff_t
+      subroutine fn(x, out, x__len_, quickr_err_msg) bind(c)
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
         ! sizes
         integer(c_ptrdiff_t), intent(in), value :: x__len_
+      
+        ! error
+        character(kind=c_char), intent(inout) :: quickr_err_msg(256)
       
         ! args
         real(c_double), intent(in out) :: x(x__len_)
@@ -210,9 +213,13 @@
       
       
       
+        if (size(out, 1, kind=c_ptrdiff_t) /= x__len_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__len_
           call f(tmp1_, out(tmp1_))
-      
+          if (quickr_err_msg(1) /= c_null_char) return
         end do
       
       
@@ -227,6 +234,16 @@
             x(i) = (x(i) * 2.0_c_double)
             res = x(i)
           end subroutine
+          subroutine quickr_set_error_msg(msg)
+            character(len=*), intent(in) :: msg
+            integer :: i
+            integer :: n
+            if (quickr_err_msg(1) == c_null_char) then
+              n = min(len(msg), 256 - 1)
+              quickr_err_msg(1:n) = [(msg(i:i), i = 1, n)]
+              quickr_err_msg(n + 1) = c_null_char
+            end if
+          end subroutine quickr_set_error_msg
       end subroutine
     Code
       cat(cwrapper)
@@ -263,7 +280,8 @@
       extern void fn(
         double* const x__,
         double* const out__,
-        const R_xlen_t x__len_);
+        const R_xlen_t x__len_,
+        char* quickr_err_msg);
       
       SEXP fn_(SEXP _args) {
         // x
@@ -281,7 +299,18 @@
         SEXP out = PROTECT(Rf_allocVector(REALSXP, out__len_));
         double* out__ = REAL(out);
         
-        fn(x__, out__, x__len_);
+        char quickr_err_msg[256];
+        quickr_err_msg[0] = '\0';
+        
+        
+        fn(
+          x__,
+          out__,
+          x__len_,
+          quickr_err_msg);
+        if (quickr_err_msg[0] != '\0') {
+          Rf_error("%s", quickr_err_msg);
+        }
         
         SEXP _ans = PROTECT(Rf_allocVector(VECSXP, 2));
         SET_VECTOR_ELT(_ans, 0, x);
@@ -510,7 +539,7 @@
       cat(fsub)
     Output
       subroutine fn(x, out, x__dim_1_, x__dim_2_, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -532,6 +561,10 @@
       
         out = x
       
+        if (size(out, 2, kind=c_ptrdiff_t) /= x__dim_2_) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         do tmp1_ = 1_c_int, x__dim_2_
           call f(tmp1_, out(:, tmp1_))
           if (quickr_err_msg(1) /= c_null_char) return

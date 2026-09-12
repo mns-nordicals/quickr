@@ -22,7 +22,7 @@
       cat(fsub)
     Output
       subroutine fn(n, m, a, b, out, quickr_err_msg) bind(c)
-        use iso_c_binding, only: c_char, c_double, c_int, c_null_char
+        use iso_c_binding, only: c_char, c_double, c_int, c_null_char, c_ptrdiff_t
         implicit none
       
         ! manifest start
@@ -42,6 +42,10 @@
         ! manifest end
       
       
+        if (size(out, 1, kind=c_ptrdiff_t) /= min(n, m)) then
+          call quickr_set_error_msg("cannot reassign `out`: assignment must preserve its shape")
+          return
+        end if
         out = 0.0_c_double
         block
           integer(c_int) :: btmp1_
