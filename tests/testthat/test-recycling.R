@@ -810,6 +810,100 @@ test_that("matrix(scalar, m, n) broadcasts natively in elementwise ops", {
   }
   expect_quick_identical(vec_operand, list(c(1, 2)))
 })
+test_that("broadcast matrix fills validate double extents before conversion", {
+  left_fill <- function(x, n, k) {
+    declare(type(x = double(2, 2)), type(n = double(1)), type(k = double(1)))
+    matrix(1, n, k) + x
+  }
+  right_fill <- function(x, n, k) {
+    declare(type(x = double(2, 2)), type(n = double(1)), type(k = double(1)))
+    x + matrix(1, n, k)
+  }
+  x <- matrix(as.double(1:4), 2, 2)
+  invalid <- c(-1, NaN, Inf, -Inf, as.double(.Machine$integer.max) + 1)
+  for (fn in list(left_fill, right_fill)) {
+    expect_quick_identical(fn, list(x, 2, 2), list(x, 2.5, 2.5))
+    compiled <- quick(fn)
+    for (extent in invalid) {
+      expect_error(compiled(x, extent, 2), "matrix\\(\\) dimensions")
+      expect_error(compiled(x, 2, extent), "matrix\\(\\) dimensions")
+    }
+    expect_error(compiled(x, 3, 2), "matching dimensions")
+  }
+})
+
+test_that("materialized matrix fills retain normalized double extents", {
+  left_vector <- function(v, n, k) {
+    declare(type(v = double(2)), type(n = double(1)), type(k = double(1)))
+    matrix(1, n, k) + v
+  }
+  right_vector <- function(v, n, k) {
+    declare(type(v = double(2)), type(n = double(1)), type(k = double(1)))
+    v + matrix(1, n, k)
+  }
+  assigned <- function(v, n, k) {
+    declare(type(v = double(2)), type(n = double(1)), type(k = double(1)))
+    m <- matrix(1, n, k)
+    m + v
+  }
+  left_scalar <- function(v, n, k) {
+    declare(type(v = double(1)), type(n = double(1)), type(k = double(1)))
+    matrix(1, n, k) + v
+  }
+  right_scalar <- function(v, n, k) {
+    declare(type(v = double(1)), type(n = double(1)), type(k = double(1)))
+    v + matrix(1, n, k)
+  }
+  temporary <- function(v, n, k) {
+    declare(type(v = double(2)), type(n = double(1)), type(k = double(1)))
+    sum(matrix(1, n, k) + v)
+  }
+  for (fn in list(left_vector, right_vector, assigned, temporary)) {
+    expect_quick_identical(
+      fn,
+      list(c(1, 2), 2, 2),
+      list(c(1, 2), 2.5, 3.5),
+      list(c(1, 2), 2, 1)
+    )
+  }
+  for (fn in list(left_scalar, right_scalar)) {
+    expect_quick_identical(fn, list(3, 2, 2), list(3, 2.5, 3.5), list(3, 1, 2))
+  }
+  compiled <- quick(temporary)
+  for (extent in c(-1, NaN, Inf, -Inf, as.double(.Machine$integer.max) + 1)) {
+    expect_error(compiled(c(1, 2), extent, 2), "matrix\\(\\) dimensions")
+    expect_error(compiled(c(1, 2), 2, extent), "matrix\\(\\) dimensions")
+  }
+})
+
+test_that("invalid left matrix fills fail before right operand effects", {
+  broadcast <- function(x, n) {
+    declare(type(x = double(2, 2)), type(n = double(1)))
+    draw <- function() {
+      unused <- runif(1)
+      x
+    }
+    sum(matrix(1, n, 2) + draw())
+  }
+  materialized <- function(x, n) {
+    declare(type(x = double(2)), type(n = double(1)))
+    draw <- function() {
+      unused <- runif(1)
+      x
+    }
+    sum(matrix(1, n, 2) + draw())
+  }
+  withr::local_seed(42)
+  for (fn in list(broadcast, materialized)) {
+    x <- if (identical(fn, broadcast)) matrix(as.double(1:4), 2) else c(1, 2)
+    compiled <- quick(fn)
+    seed <- .Random.seed
+    expect_error(compiled(x, Inf), "matrix\\(\\) dimensions")
+    expect_identical(.Random.seed, seed)
+    expect_identical(compiled(x, 2.5), fn(x, 2.5))
+  }
+})
+
 test_that("elementwise matrix fills respect a local matrix closure", {
   fn <- function(x) {
     declare(type(x = double(2, 2)))

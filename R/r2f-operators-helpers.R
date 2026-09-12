@@ -268,11 +268,36 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       }
       value <- lower_arg(fill_args$data)
       dims <- lapply(list(fill_args$nrow, fill_args$ncol), lower_arg)
+      dbl <- map_lgl(dims, \(dim) identical(dim@value@mode, "double"))
+      static_dims <- map_lgl(fill_dims, is_scalar_integerish)
+      evaluated_dims <- lapply(dims, \(dim) {
+        as.symbol(trimws(as.character(dim)))
+      })
+      evaluated_dims[static_dims] <- fill_dims[static_dims]
+      evaluated_dims <- guard_constructor_dims(
+        evaluated_dims,
+        "matrix",
+        hoist,
+        scope,
+        dbl
+      )
+      # Result dimensions must remain expressible in terms of caller inputs,
+      # while allocation and guards use the already evaluated operands.
+      result_dims <- fill_dims
+      for (axis in which(!static_dims & dbl)) {
+        result_dims[[axis]] <- call(
+          "quickr_extent_int",
+          result_dims[[axis]],
+          "matrix() dimensions must be non-negative"
+        )
+      }
       list(
         value = value,
-        dims = lapply(dims, \(dim) as.symbol(trimws(as.character(dim)))),
-        dims_f = map_chr(dims, \(dim) glue("int({dim})")),
-        dbl = map_lgl(dims, \(dim) identical(dim@value@mode, "double"))
+        dims = evaluated_dims,
+        dims_f = map_chr(evaluated_dims, \(dim) {
+          if (dim_is_one(dim)) "1" else dims2f(list(dim), scope)
+        }),
+        result_dims = result_dims
       )
     }
 
@@ -322,11 +347,6 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
       return(if (j == 1L) out else rev(out))
     }
     fallback <- if (j == 1L) {
-      static_dims <- map_lgl(fill_dims, is_scalar_integerish)
-      guard_constructor_dims(fill_dims[static_dims], "matrix", hoist, scope)
-      dynamic_dims <- lapply(fill$dims[!static_dims], as.character)
-      dbl <- fill$dbl[!static_dims]
-      guard_constructor_dims(dynamic_dims, "matrix", hoist, scope, dbl)
       out <- materialize_via_hoist(
         fill$value,
         fill$value@value@mode,
@@ -334,7 +354,7 @@ lower_elementwise_operands <- function(args, scope, ..., hoist = NULL) {
         hoist,
         allocate_at_point = TRUE
       )
-      out@value@dims <- fill_dims
+      out@value@dims <- fill$result_dims
       out
     } else {
       lower_one(args[[j]])
@@ -518,7 +538,7 @@ guard_conformable_dims <- function(
 
 # Reshape a vector to match a matrix's dimensions.
 # Used by: r2f-arithmetic.R, r2f-logical.R
-reshape_vector_for_matrix <- function(vec, rows, cols) {
+reshape_vector_for_matrix <- function(vec, rows, cols, scope) {
   stopifnot(inherits(vec, Fortran))
   out_val <- Variable(vec@value@mode, list(rows, cols))
   source <- if (passes_as_scalar(vec@value)) {
@@ -526,8 +546,12 @@ reshape_vector_for_matrix <- function(vec, rows, cols) {
   } else {
     glue("{vec}")
   }
+  shape <- map_chr(list(rows, cols), \(dim) {
+    dim_f <- if (dim_is_one(dim)) "1" else dims2f(list(dim), scope)
+    glue("int({dim_f})")
+  })
   out_expr <- glue(
-    "reshape({source}, [{bind_dim_int(rows)}, {bind_dim_int(cols)}], pad = {source})"
+    "reshape({source}, [{str_flatten_commas(shape)}], pad = {source})"
   )
   Fortran(out_expr, out_val)
 }
@@ -730,7 +754,12 @@ maybe_reshape_vector_matrix <- function(
       defer_static_error = defer_static_error
     )
     left <- hoist_unless_name(left, hoist)
-    left <- reshape_vector_for_matrix(left, right_dims$rows, right_dims$cols)
+    left <- reshape_vector_for_matrix(
+      left,
+      right_dims$rows,
+      right_dims$cols,
+      scope
+    )
   } else if (left_rank == 2L && right_rank == 1L) {
     left_dims <- matrix_dims(left)
     check_nonempty(left, vec_mat_msg)
@@ -746,7 +775,12 @@ maybe_reshape_vector_matrix <- function(
       defer_static_error = defer_static_error
     )
     right <- hoist_unless_name(right, hoist)
-    right <- reshape_vector_for_matrix(right, left_dims$rows, left_dims$cols)
+    right <- reshape_vector_for_matrix(
+      right,
+      left_dims$rows,
+      left_dims$cols,
+      scope
+    )
   }
 
   list(left = left, right = right)
