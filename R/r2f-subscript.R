@@ -57,7 +57,7 @@ r2f_handlers[["["]] <- function(
         hoist_mask = function(mask) FALSE,
         later_args = later_idx_args
       )
-      check_scalar_logical_subscript(sub, idx)
+      check_scalar_logical_subscript(sub, idx, var, i, scope, hoist)
       if (sub@value@mode == "double") {
         # Fortran subscripts must be integers; coerce numeric expressions
         Fortran(
@@ -409,19 +409,39 @@ subscript_axis_extents <- function(var, n_idx) {
 
 
 # A scalar mask is recycled over the indexed extent in R. Only literal TRUE
-# can safely become a full section without a value-dependent result shape.
+# can become a full section, provided the indexed extent is nonempty.
 # Validate before mask hoisting as well as before constructing designators.
-check_scalar_logical_subscript <- function(subscript, expr) {
-  if (
-    subscript@value@mode == "logical" &&
-      subscript@value@rank == 0L &&
-      !identical(unwrap_parens(expr), TRUE)
-  ) {
+check_scalar_logical_subscript <- function(
+  subscript,
+  expr,
+  base,
+  axis,
+  scope,
+  hoist
+) {
+  if (subscript@value@mode != "logical" || subscript@value@rank != 0L) {
+    return(invisible(NULL))
+  }
+  if (!identical(unwrap_parens(expr), TRUE)) {
     stop(
       "scalar logical subscripts other than literal TRUE are not supported",
       call. = FALSE
     )
   }
+  extent <- dim_or_one(base, axis)
+  message <- "logical mask selects beyond empty indexed axis"
+  if (is_wholenumber(extent)) {
+    if (extent == 0L) {
+      stop(message, call. = FALSE)
+    }
+    return(invisible(NULL))
+  }
+  emit_quickr_error_if(
+    glue("{guard_dim_f(extent, base, axis)} == 0"),
+    message,
+    hoist,
+    scope
+  )
 }
 
 # A length-one expression can be a scalar or an array in Fortran. Wrapping

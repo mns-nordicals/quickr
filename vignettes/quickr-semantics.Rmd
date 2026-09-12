@@ -536,7 +536,8 @@ defeat the purpose of compiling, so quickr's contract is:
   A mask known at compile time to have length one, such as `logical(1)` or
   `c(FALSE)`, broadcasts over the indexed extent. A true length-one mask on
   an empty extent is rejected because R would select an out-of-range value.
-- Literal `TRUE` subscripts select the full axis. Other scalar logical
+- Literal `TRUE` subscripts select the full axis, but reject an empty indexed
+  axis instead of padding with `NA` or growing a vector. Other scalar logical
   expressions, including literal `FALSE`, are compile errors in reads and
   writes. Declared logical vectors follow the mask rules above.
 
