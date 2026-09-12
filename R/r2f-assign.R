@@ -435,6 +435,9 @@ check_definite_assignment <- function(
   required <- character()
   pending_parallel <- FALSE
   formals <- names(formals(closure)) %||% character()
+  # Lexical binding creation follows lowering order, independently of whether
+  # the value is definitely initialized along every control-flow path.
+  bound <- formals
   # Closure bindings are static and unique within this lexical scope, so build
   # their registry once before walking control flow.
   # Fortran host association makes captures readable regardless of the R
@@ -559,6 +562,11 @@ check_definite_assignment <- function(
       return(assigned)
     }
     if (is_call(expr, "declare")) {
+      for (decl in get_flattened_args(expr)) {
+        if (is_type_call(decl)) {
+          bound <<- union(bound, names(as.list(decl)[-1L]))
+        }
+      }
       pending_parallel <<- pending_parallel ||
         any(vapply(as.list(expr)[-1L], is_parallel_decl_call, logical(1L)))
       return(assigned)
@@ -568,6 +576,7 @@ check_definite_assignment <- function(
       pending_parallel <<- FALSE
       if (is.symbol(expr[[2L]]) && is_function_call(expr[[3L]])) {
         # Defining a closure establishes its binding but reads no captures yet.
+        bound <<- union(bound, as.character(expr[[2L]]))
         return(union(assigned, as.character(expr[[2L]])))
       }
       assigned <- walk(expr[[3L]], assigned)
@@ -575,6 +584,7 @@ check_definite_assignment <- function(
         return(NULL)
       }
       if (is.symbol(expr[[2L]])) {
+        bound <<- union(bound, as.character(expr[[2L]]))
         introduced <<- union(introduced, as.character(expr[[2L]]))
         return(union(assigned, as.character(expr[[2L]])))
       }
@@ -609,19 +619,26 @@ check_definite_assignment <- function(
       iterator <- as.character(expr[[2L]])
       introduced <<- union(introduced, iterator)
       if (parallel) {
-        nested <- setdiff(openmp_nested_loop_bindings(expr[[4L]]), iterator)
+        private <- openmp_private_bindings(expr[[4L]], iterator, bound)
+        private_body <- setdiff(private, iterator)
         # Thread-private bindings do not inherit pre-region initialization.
-        assigned <- setdiff(assigned, nested)
-        introduced <<- union(introduced, nested)
+        assigned <- setdiff(assigned, private_body)
+        introduced <<- union(introduced, private_body)
       }
+      bound <<- union(bound, iterator)
       nullable <- nullable_loop_bindings(expr[[4L]])
       after <- walk(expr[[4L]], union(setdiff(assigned, nullable), iterator))
       if (parallel) {
-        copied <- openmp_lastprivate_bindings(expr[[4L]], iterator, scope)
+        copied <- openmp_lastprivate_bindings(
+          expr[[4L]],
+          iterator,
+          scope,
+          private
+        )
         after <- if (is.null(after)) {
           NULL
         } else {
-          setdiff(after, setdiff(nested, copied))
+          setdiff(after, setdiff(private_body, copied))
         }
       }
       nonempty <- for_iterable_is_nonempty(expr[[3L]], scope)

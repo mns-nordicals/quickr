@@ -124,6 +124,30 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   iterable_unwrapped <- iterable_info$iterable
   iterable_reversed <- isTRUE(iterable_info$reversed)
   parallel <- take_pending_parallel(scope)
+  private_bindings <- if (!is.null(parallel)) {
+    openmp_private_bindings(source_body, var, names(scope_vars(scope)))
+  }
+  loop_directives <- function() {
+    if (is.null(parallel)) {
+      return(openmp_directives(NULL))
+    }
+    # Include locals introduced by specialized assignment handlers, as well as
+    # ordinary assignments, and propagate locals through nested regions.
+    for (nm in private_bindings) {
+      register_openmp_private(scope, scope[[nm]]@name)
+    }
+    copied <- openmp_lastprivate_bindings(
+      source_body,
+      var,
+      scope,
+      private_bindings
+    )
+    openmp_directives(
+      parallel,
+      private = openmp_private_vars(scope),
+      lastprivate = vapply(copied, function(nm) scope[[nm]]@name, character(1L))
+    )
+  }
 
   bind_loop_variable <- function(mode, logical_storage = FALSE) {
     if (inherits(existing, Variable)) {
@@ -246,19 +270,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
       glue("do {idx@name} = 1_c_int, {end}")
     }
 
-    directives <- openmp_directives(
-      parallel,
-      private = openmp_private_vars(scope),
-      lastprivate = if (!is.null(parallel)) {
-        vapply(
-          openmp_lastprivate_bindings(source_body, var, scope),
-          function(nm) {
-            scope[[nm]]@name
-          },
-          character(1L)
-        )
-      }
-    )
+    directives <- loop_directives()
     if (!is.null(parallel)) {
       mark_openmp_used(scope)
     }
@@ -306,19 +318,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   }
   checks <- quickr_error_serial_loop_checks(scope, parallel)
 
-  directives <- openmp_directives(
-    parallel,
-    private = openmp_private_vars(scope),
-    lastprivate = if (!is.null(parallel)) {
-      vapply(
-        openmp_lastprivate_bindings(source_body, var, scope),
-        function(nm) {
-          scope[[nm]]@name
-        },
-        character(1L)
-      )
-    }
-  )
+  directives <- loop_directives()
   if (!is.null(parallel)) {
     mark_openmp_used(scope)
   }

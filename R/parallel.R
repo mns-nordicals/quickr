@@ -54,20 +54,36 @@ openmp_private_vars <- function(scope) {
   scope_get(scope, "openmp_private_vars", character())
 }
 
-# Source loop bindings, excluding counters and other generated temporaries.
-openmp_nested_loop_bindings <- function(expr) {
+# Source bindings, excluding closure definitions and generated temporaries.
+openmp_body_bindings <- function(expr, loops_only = FALSE) {
   if (!is.call(expr) || is_function_call(expr)) {
     return(character())
   }
   binding <- if (is_call(expr, "for")) as.character(expr[[2L]]) else character()
+  if (
+    !loops_only &&
+      (is_call(expr, "<-") || is_call(expr, "=")) &&
+      is.symbol(expr[[2L]]) &&
+      !is_function_call(expr[[3L]])
+  ) {
+    binding <- as.character(expr[[2L]])
+  }
   unique(c(
     binding,
-    unlist(lapply(as.list(expr)[-1L], openmp_nested_loop_bindings))
+    unlist(lapply(as.list(expr)[-1L], openmp_body_bindings, loops_only))
   ))
 }
 
-openmp_lastprivate_bindings <- function(body, iterator, scope) {
-  # Analyze one iteration with no incoming nested bindings. Reuse the normal
+openmp_private_bindings <- function(body, iterator, bound) {
+  unique(c(
+    iterator,
+    openmp_body_bindings(body, loops_only = TRUE),
+    setdiff(openmp_body_bindings(body), bound)
+  ))
+}
+
+openmp_lastprivate_bindings <- function(body, iterator, scope, bindings) {
+  # Analyze one iteration with no incoming body bindings. Reuse the normal
   # control-flow analysis, including its conservative treatment of break/next.
   iteration <- as.function(list(call(
     "for",
@@ -81,7 +97,7 @@ openmp_lastprivate_bindings <- function(body, iterator, scope) {
     capture_reads = TRUE,
     return_assigned = TRUE
   )
-  intersect(union(iterator, openmp_nested_loop_bindings(body)), assigned)
+  intersect(bindings, assigned)
 }
 
 openmp_scope_uses_rng <- function(scope) {
