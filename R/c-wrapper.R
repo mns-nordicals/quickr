@@ -569,13 +569,22 @@ dims2c_dim_index_expr <- function(cl, scope) {
   get_size_name(var, axis)
 }
 
-dims2c_expr <- function(e, scope, c_hoist = NULL) {
+dims2c_expr <- function(e, scope, c_hoist = NULL, scalar_as_real = FALSE) {
+  render <- function(e) {
+    dims2c_expr(e, scope, c_hoist = c_hoist, scalar_as_real = scalar_as_real)
+  }
+  scalar_name <- function(var) {
+    if (scalar_as_real && identical(var@mode, "double")) {
+      return(glue("Rf_asReal({var@name})"))
+    }
+    as_c_name(var, c_hoist = c_hoist)
+  }
   if (is.null(e)) {
     return(NULL)
   }
 
   if (inherits(e, Variable)) {
-    return(as_c_name(e, c_hoist = c_hoist))
+    return(scalar_name(e))
   }
 
   if (is_scalar_integer(e)) {
@@ -598,7 +607,7 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (!inherits(var, Variable)) {
       stop("could not resolve size: ", nm)
     }
-    return(as_c_name(var, c_hoist = c_hoist))
+    return(scalar_name(var))
   }
 
   if (!is.call(e)) {
@@ -612,7 +621,7 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (length(args) != 1L) {
       stop("unsupported size expression: ", deparse1(e))
     }
-    return(dims2c_expr(args[[1L]], scope, c_hoist = c_hoist))
+    return(render(args[[1L]]))
   }
 
   if (identical(op, "length")) {
@@ -644,9 +653,9 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (length(args) != 3L || is.null(c_hoist)) {
       stop("quickr_seq_length() requires three arguments and a C bridge hoist")
     }
-    from <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
-    to <- dims2c_expr(args[[2L]], scope, c_hoist = c_hoist)
-    by <- dims2c_expr(args[[3L]], scope, c_hoist = c_hoist)
+    from <- render(args[[1L]])
+    to <- render(args[[2L]])
+    by <- render(args[[3L]])
     c_bridge_hoist_seq_checks(c_hoist, from, to, by)
 
     safe_by <- glue("(({by}) == 0 ? 1 : ({by}))")
@@ -659,14 +668,13 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
 
   if (identical(op, "quickr_extent_int")) {
     arg <- args[[1L]]
-    stopifnot(length(args) == 2L, is.symbol(arg), is.environment(c_hoist))
-    var <- get(as.character(arg), scope)
     stopifnot(
-      inherits(var, Variable),
-      var@mode == "double",
+      length(args) == 2L,
+      is.environment(c_hoist),
       is_string(args[[2L]])
     )
-    size <- glue("Rf_asReal({var@name})")
+    # Validate the full real expression before truncating its final extent.
+    size <- dims2c_expr(arg, scope, c_hoist = c_hoist, scalar_as_real = TRUE)
     check <- glue(
       'if (!R_FINITE({size}) || {size} < 0 || {size} > 2147483647)
        Rf_error("{args[[2L]]}");'
@@ -679,7 +687,7 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (length(args) != 1L || is.null(c_hoist)) {
       stop("quickr_size_int() requires one argument and a C bridge hoist")
     }
-    size <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+    size <- render(args[[1L]])
     c_bridge_hoist_size_int_check(c_hoist, size)
     return(glue("((R_xlen_t)({size}))"))
   }
@@ -688,20 +696,20 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (length(args) != 1L) {
       stop("abs() expects one argument")
     }
-    e1 <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+    e1 <- render(args[[1L]])
     return(glue("(({e1}) < 0 ? -({e1}) : ({e1}))"))
   }
 
   if (op %in% c("+", "-", "*", "/", "%/%", "%%", "^")) {
     if (length(args) == 1L && op %in% c("+", "-")) {
-      e1 <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
+      e1 <- render(args[[1L]])
       return(glue("({op}({e1}))"))
     }
     if (length(args) != 2L) {
       stop("unsupported size expression: ", deparse1(e))
     }
-    e1 <- dims2c_expr(args[[1L]], scope, c_hoist = c_hoist)
-    e2 <- dims2c_expr(args[[2L]], scope, c_hoist = c_hoist)
+    e1 <- render(args[[1L]])
+    e2 <- render(args[[2L]])
     return(switch(
       op,
       `+` = glue("({e1} + {e2})"),
@@ -718,7 +726,7 @@ dims2c_expr <- function(e, scope, c_hoist = NULL) {
     if (!length(args)) {
       return("0")
     }
-    rendered <- lapply(args, dims2c_expr, scope = scope, c_hoist = c_hoist)
+    rendered <- lapply(args, render)
     cmp <- if (identical(op, "min")) "<" else ">"
     reduce(rendered, \(a, b) glue("(({a}) {cmp} ({b}) ? ({a}) : ({b}))"))
   } else {

@@ -394,7 +394,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   src <- r2f(args$data, scope, ..., hoist = hoist)
   dims <- r2dims(list(args$nrow, args$ncol), scope)
-  guard_constructor_dims(dims, "matrix", hoist, scope)
+  dims <- guard_constructor_dims(dims, "matrix", hoist, scope)
   out_val <- Variable(mode = src@value@mode, dims = dims)
 
   # A scalar broadcasts natively on direct whole-array assignment, so keep
@@ -417,16 +417,16 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   rows <- dims[[1L]]
   cols <- dims[[2L]]
+  row_count <- dims2f(list(rows), scope)
+  col_count <- dims2f(list(cols), scope)
+  row_count <- if (nzchar(row_count)) row_count else "1"
+  col_count <- if (nzchar(col_count)) col_count else "1"
 
   # Avoid double-evaluating non-trivial expressions when used in both the
   # `source` and `pad` args.
   source <- hoist_unless_name(src, hoist)
   source_len <- var_element_count(src@value)
   if (is.na(source_len) || source_len == 0) {
-    row_count <- dims2f(list(rows), scope)
-    col_count <- dims2f(list(cols), scope)
-    row_count <- if (nzchar(row_count)) row_count else "1"
-    col_count <- if (nzchar(col_count)) col_count else "1"
     emit_quickr_error_if(
       glue(
         "size({source}, kind=c_ptrdiff_t) == 0_c_ptrdiff_t .and. ({row_count}) > 0 .and. ({col_count}) > 0"
@@ -439,7 +439,7 @@ r2f_handlers[["matrix"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   Fortran(
     glue(
-      "reshape({source}, [{bind_dim_int(rows)}, {bind_dim_int(cols)}], pad = {source})"
+      "reshape({source}, [int({row_count}), int({col_count})], pad = {source})"
     ),
     out_val
   )
@@ -525,7 +525,7 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
   if (!length(target_dims)) {
     stop("array(dim=) must not be empty", call. = FALSE)
   }
-  guard_constructor_dims(target_dims, "array", hoist, scope)
+  target_dims <- guard_constructor_dims(target_dims, "array", hoist, scope)
   if (!passes_as_scalar(out@value)) {
     # R semantics: `array()` flattens its input (dropping dim) then reshapes.
     # We implement this as Fortran `reshape()`. Recycling (i.e. expanding a
@@ -592,10 +592,9 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
         Variable(mode = out@value@mode, dims = list(1L))
       )
     } else {
-      if (!nzchar(dims_f)) {
-        dims_f <- "1"
-      }
-      shape <- glue("int([{dims_f}])")
+      # Normalize each element before constructing the shape vector; converted
+      # double extents and literal extents can have different integer kinds.
+      shape <- glue("[{str_flatten_commas(paste0('int(', axis_terms, ')'))}]")
 
       known_prod <- function(dims) {
         if (is.null(dims) || !length(dims)) {

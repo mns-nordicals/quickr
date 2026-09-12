@@ -224,6 +224,13 @@ iso_c_binding_symbols <- function(
         lapply(var@dims, function(size) {
           syms <- all.vars(size)
           c(
+            if (
+              any(
+                all.names(size) %in% c("quickr_extent_int", "quickr_size_int")
+              )
+            ) {
+              "c_ptrdiff_t"
+            },
             if (any(grepl("__len_$", syms))) "c_ptrdiff_t",
             if (any(grepl("__dim_[0-9]+_$", syms))) "c_int"
           )

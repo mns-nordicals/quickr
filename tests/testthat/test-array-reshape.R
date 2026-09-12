@@ -142,3 +142,34 @@ test_that("array() rejects empty dim vectors (dim=c())", {
   # early too, rather than emitting rank-mismatched Fortran.
   expect_error(quick(fn), "dim")
 })
+
+test_that("array retains normalized double dimensions", {
+  returned <- function(n) {
+    declare(type(n = double(1)))
+    array(1, c(n, n))
+  }
+  temporary <- function(n) {
+    declare(type(n = double(1)))
+    sum(array(1, c(n, n)))
+  }
+  reshaped <- function(n) {
+    declare(type(n = double(1)))
+    array(c(1L, 2L, 3L, 4L), c(n, 2L))
+  }
+  for (fn in list(returned, temporary)) {
+    expect_quick_identical(fn, list(0), list(1), list(2), list(2.5))
+    qfn <- quick(fn)
+    for (n in c(-1, Inf, NaN, as.double(.Machine$integer.max) + 1)) {
+      expect_error(qfn(n), "array\\(\\) dimensions must be non-negative")
+    }
+  }
+  expect_quick_identical(reshaped, list(1), list(2), list(2.5))
+})
+
+test_that("array truncates double size expressions after evaluating them", {
+  fn <- function(n) {
+    declare(type(n = double(1)))
+    array(1, c(n * 2L, 2L))
+  }
+  expect_quick_identical(fn, list(1.8), list(2))
+})
