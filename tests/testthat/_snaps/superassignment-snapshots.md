@@ -587,12 +587,29 @@
             integer(c_int), intent(in) :: j
             real(c_double), intent(out) :: res(:)
       
-            if (size(x(:, j), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
+            block
+              real(c_double), allocatable :: btmp1_(:)
+      
+              if (size(x(:, j), 1, kind=c_ptrdiff_t) == 0_c_ptrdiff_t) then
           call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
           & supported")
-              return
-            end if
-            x(:, j) = (x(:, j) * 2.0_c_double)
+                return
+              end if
+              allocate(btmp1_(x__dim_1_))
+              btmp1_ = (x(:, j) * 2.0_c_double)
+              if (size(x(:, j), kind=c_ptrdiff_t) > 0) then
+              if (size(btmp1_, kind=c_ptrdiff_t) == 1) then
+              x(:, j) = btmp1_(1)
+              else
+              if (size(x(:, j), 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("section replacement must have length 1 or match the selected section's shape; R-style recycling is not&
+          & supported")
+                return
+              end if
+              x(:, j) = btmp1_
+              end if
+              end if
+            end block
             res = x(:, j)
           end subroutine
           subroutine quickr_set_error_msg(msg)

@@ -38,6 +38,7 @@ test_that("non-smoke test files skip on CRAN", {
     "test-recycling.R",
     "test-runif.R",
     "test-rank-one-array.R",
+    "test-section-assignment.R",
     "test-r2f-registry.R",
     "test-refusal-diagnostics.R",
     "test-return-allocation.R",

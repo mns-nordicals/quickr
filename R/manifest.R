@@ -322,6 +322,9 @@ emit_decl_line <- function(
       !is.null(dims) &&
       grepl(":", dims, fixed = TRUE)
   ) {
+    # A partially unknown shape still requires every allocatable axis to
+    # be deferred; intrinsic assignment supplies the actual extents.
+    dims <- sprintf("(%s)", str_flatten_commas(rep(":", var@rank)))
     "allocatable"
   }
 

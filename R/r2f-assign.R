@@ -128,6 +128,122 @@ assignment_dispatch_call_target <- function(
   handler(args, scope, ..., hoist = hoist)
 }
 
+# Section replacement may broadcast one value, but otherwise the physical
+# Fortran arrays must conform. Check before the write, using actual extents
+# for dynamic shapes rather than symbolic dimensions that may have changed.
+compile_section_assignment <- function(lhs, value, scope, hoist) {
+  target <- lhs@value
+  source <- value@value
+  if (!inherits(source, Variable)) {
+    stop("section replacement must produce a value", call. = FALSE)
+  }
+  target_len <- if (target@rank == 0L) 1 else var_element_count(target)
+  source_len <- if (source@rank == 0L) 1 else var_element_count(source)
+  message <- paste0(
+    "section replacement must have length 1 or match the selected section's shape; ",
+    "R-style recycling is not supported"
+  )
+
+  # R still evaluates the replacement and indices for an empty selection.
+  # Their effects have already been lowered by the caller.
+  if (!is.na(target_len) && target_len == 0) {
+    return(Fortran(""))
+  }
+
+  # Fill constructors carry an array shape but emit a scalar literal. Give
+  # them real storage when length/shape inquiries or scalar indexing need it.
+  if (
+    (!is.null(value@scalar_fill_dims) && !passes_as_scalar(source)) ||
+      is.na(source_len) ||
+      (source_len == 1 && !passes_as_scalar(source))
+  ) {
+    value <- hoist_unless_name(value, hoist, allocate_at_point = TRUE)
+  }
+
+  scalar_value <- function() {
+    if (passes_as_scalar(source)) {
+      return(as.character(value))
+    }
+    glue("{value}({str_flatten_commas(rep('1', source@rank))})")
+  }
+  if (!is.na(source_len) && source_len == 1) {
+    return(Fortran(glue("{lhs} = {scalar_value()}")))
+  }
+
+  rank_matches <- target@rank == source@rank
+  static_mismatch <- !rank_matches ||
+    any(vapply(
+      seq_len(target@rank),
+      function(axis) {
+        !check_equal_dims(target@dims[[axis]], source@dims[[axis]])$ok
+      },
+      logical(1L)
+    ))
+  if (static_mismatch && !is.na(source_len) && !is.na(target_len)) {
+    if (isTRUE(hoist$defer_static_shape_error)) {
+      stop_deferred_branch_error(message)
+    }
+    stop(message, call. = FALSE)
+  }
+
+  h <- capture_hoist(hoist)
+  if (is.na(target_len)) {
+    h$emit(glue("if (size({lhs}, kind=c_ptrdiff_t) > 0) then"))
+  }
+  if (is.na(source_len)) {
+    h$emit(glue("if (size({value}, kind=c_ptrdiff_t) == 1) then"))
+    h$emit(glue("{lhs} = {scalar_value()}"))
+    h$emit("else")
+  }
+  if (static_mismatch) {
+    # This branch may be reached only for a nonscalar RHS/nonempty LHS.
+    # Do not emit a rank-invalid intrinsic assignment even after the error.
+    emit_quickr_error_if(".true.", message, h, scope)
+  } else {
+    for (axis in seq_len(target@rank)) {
+      left <- target@dims[[axis]]
+      right <- source@dims[[axis]]
+      guard_conformable_dims(
+        if (is_wholenumber(left)) left else NA_integer_,
+        if (is_wholenumber(right)) right else NA_integer_,
+        message,
+        h,
+        scope,
+        left = lhs,
+        right = value,
+        left_axis = axis,
+        right_axis = axis,
+        checker = check_equal_dims
+      )
+    }
+    h$emit(glue("{lhs} = {value}"))
+  }
+  if (is.na(source_len)) {
+    h$emit("end if")
+  }
+  if (is.na(target_len)) {
+    h$emit("end if")
+  }
+  if (h$contains_runtime_guard()) {
+    hoist$mark_runtime_guard()
+  }
+  Fortran(h$render(character()))
+}
+
+lower_section_replacement <- function(rhs, target, scope, ..., hoist) {
+  indices <- as.list(target)[-(1:2)]
+  indices <- indices[!vapply(indices, is_missing, logical(1L))]
+  # R evaluates the RHS before the indices. Snapshot it if a later index
+  # expression can change a binding that the replacement has already read.
+  lower_r2f_operand_in_order(
+    rhs,
+    scope,
+    ...,
+    hoist = hoist,
+    later_args = indices
+  )
+}
+
 assignment_extract_fallthrough <- function(rhs) {
   rhs_unwrapped <- rhs
   while (is_call(rhs_unwrapped, "(") && length(rhs_unwrapped) == 2L) {
@@ -394,7 +510,7 @@ register_r2f_handler(
 
 register_r2f_handler(
   "[<-",
-  function(args, scope = NULL, ...) {
+  function(args, scope = NULL, ..., hoist = NULL) {
     # TODO: handle logical subsetting here, which must become a where a construct like:
     #   x[lgl] <- val
     # becomes
@@ -409,8 +525,20 @@ register_r2f_handler(
 
     stopifnot(is_call(target_call <- args[[1L]], "["))
 
-    lhs <- compile_subscript_lhs(target_call, scope, ..., target = "local")
-    value <- r2f(args[[2L]], scope, ...)
+    value <- lower_section_replacement(
+      args[[2L]],
+      target_call,
+      scope,
+      ...,
+      hoist = hoist
+    )
+    lhs <- compile_subscript_lhs(
+      target_call,
+      scope,
+      ...,
+      hoist = hoist,
+      target = "local"
+    )
 
     # Subassignment cannot re-type the base variable any more than
     # whole-variable reassignment can: `x[1L] <- 2.5` on an integer `x`
@@ -418,7 +546,7 @@ register_r2f_handler(
     base_name <- as.character(target_call[[2L]])
     check_reassignment_narrowing(base_name, get0(base_name, scope), value@value)
 
-    Fortran(str_flatten_lines(lhs$pre, glue("{lhs$lhs} = {value}")))
+    compile_section_assignment(lhs$lhs, value, scope, hoist)
   }
 )
 
@@ -518,6 +646,13 @@ register_r2f_handler(
     host_var@modified <- TRUE
     host_scope[[name]] <- host_var
 
+    value <- lower_section_replacement(
+      args[[2L]],
+      subset_call,
+      scope,
+      ...,
+      hoist = hoist
+    )
     lhs <- compile_subscript_lhs(
       subset_call,
       scope,
@@ -525,9 +660,8 @@ register_r2f_handler(
       hoist = hoist,
       target = "host"
     )
-    value <- r2f(args[[2L]], scope, ..., hoist = hoist)
     check_reassignment_narrowing(name, host_var, value@value)
-    Fortran(glue("{lhs$lhs} = {value}"))
+    compile_section_assignment(lhs$lhs, value, scope, hoist)
   }
 )
 

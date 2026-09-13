@@ -1658,6 +1658,10 @@ compile_subset_designator <- function(
   # silent out-of-bounds Fortran writes.
   check_subscript_exprs(base_var, idx_args)
 
+  designator <- function(code, dims = NULL) {
+    Fortran(code, Variable(base_var@mode, dims))
+  }
+
   idxs <- whole_doubles_to_ints(idx_args)
   idxs <- imap(idxs, function(idx, i) {
     if (is_missing(idx)) {
@@ -1693,10 +1697,10 @@ compile_subset_designator <- function(
   ) {
     idx_r <- attr(idxs[[1]], "r", exact = TRUE)
     if (identical(idx_r, 1L) || identical(idx_r, 1)) {
-      return(base_name)
+      return(designator(base_name))
     }
     if (isTRUE(idxs[[1]]@value@loop_is_singleton)) {
-      return(base_name)
+      return(designator(base_name))
     }
   }
 
@@ -1708,7 +1712,7 @@ compile_subset_designator <- function(
       base_var@rank > 1
   ) {
     subs <- linear_subscripts_from_1d(base_name, base_var@rank, idxs[[1]])
-    return(as.character(glue("{base_name}({str_flatten_commas(subs)})")))
+    return(designator(glue("{base_name}({str_flatten_commas(subs)})")))
   }
 
   if (length(idxs) != base_var@rank) {
@@ -1754,7 +1758,24 @@ compile_subset_designator <- function(
     )
   })
 
-  as.character(glue("{base_name}({str_flatten_commas(idxs)})"))
+  # Retain the physical section rank, including length-one triplets. Unlike
+  # ordinary Variables, dims = list(1L) here denotes a Fortran array section.
+  section_dims <- drop_nulls(lapply(idxs, function(idx) {
+    code <- as.character(idx)
+    if (
+      passes_as_scalar(idx@value) &&
+        !grepl(":", code, fixed = TRUE) &&
+        !startsWith(trimws(code), "[")
+    ) {
+      return(NULL)
+    }
+    idx@value@dims[[1L]]
+  }))
+  if (passes_as_scalar(base_var)) {
+    # A scalar's full section has one element but no Fortran subscript.
+    return(designator(base_name))
+  }
+  designator(glue("{base_name}({str_flatten_commas(idxs)})"), section_dims)
 }
 
 compile_subscript_lhs <- function(
@@ -1800,6 +1821,10 @@ compile_subscript_lhs <- function(
         scope[[base_name]] <- shadow
 
         pre <- glue("{shadow@name} = {parent_base@name}")
+        # Section inquiries and logical-index guards need an initialized
+        # shadow, including when its storage is allocated by this copy.
+        hoist$emit(pre)
+        pre <- NULL
       }
     }
 
@@ -1834,7 +1859,7 @@ compile_subscript_lhs <- function(
       )
     )
 
-    return(list(pre = pre, lhs = Fortran(designator)))
+    return(list(pre = pre, lhs = designator))
   }
 
   if (is.null(scope) || !identical(scope_kind(scope), "closure")) {
@@ -1876,7 +1901,7 @@ compile_subscript_lhs <- function(
     allow_logical_vector_subscripts = TRUE
   )
 
-  list(pre = NULL, lhs = Fortran(designator))
+  list(pre = NULL, lhs = designator)
 }
 
 # Closure bindings select a fixed Fortran procedure at compile time. Reject

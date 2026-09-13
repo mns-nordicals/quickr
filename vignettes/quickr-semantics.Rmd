@@ -413,6 +413,14 @@ longer vector, where R would recycle with a deprecation warning.
 
 Non-fill `array(data, dim)` calls also refuse to recycle `data` when it is shorter than `prod(dim)`.
 
+Section replacement (`x[...] <- value` or `x[...] <<- value`) accepts a
+replacement of length one, including when its length is only known at
+runtime. Other replacements must match the selected section's rank and
+extents; quickr refuses implicit reshaping and recycling. Known mismatches
+are compile-time errors, and dynamic shapes are checked before the write.
+An empty selection performs no write. The replacement is evaluated before
+the indices, as in R.
+
 One-dimensional `array()` results retain their `dim` attribute, including
 arrays of length zero or one. Copies, local closure calls, and elemental
 arithmetic preserve this distinction; `c()`, `as.double()`, and

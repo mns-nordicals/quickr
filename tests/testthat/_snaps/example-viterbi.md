@@ -136,13 +136,30 @@
           return
         end if
         backpointer = 0_c_int
+        block
+          real(c_double), allocatable :: btmp1_(:)
+      
       if (size(initial_probs, kind=c_ptrdiff_t) == 0 .or. size(initial_probs, kind=c_ptrdiff_t) /= size(emission_probs(:,&
       & observations(1_c_int)), kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        trellis(:, 1_c_int) = (initial_probs * emission_probs(:, observations(1_c_int)))
+            return
+          end if
+          allocate(btmp1_(states__len_))
+          btmp1_ = (initial_probs * emission_probs(:, observations(1_c_int)))
+          if (size(trellis(:, 1_c_int), kind=c_ptrdiff_t) > 0) then
+          if (size(btmp1_, kind=c_ptrdiff_t) == 1) then
+          trellis(:, 1_c_int) = btmp1_(1)
+          else
+          if (size(trellis(:, 1_c_int), 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("section replacement must have length 1 or match the selected section's shape; R-style recycling is not&
+      & supported")
+            return
+          end if
+          trellis(:, 1_c_int) = btmp1_
+          end if
+          end if
+        end block
         do tmp1_ = 2_c_int, num_steps, sign(1, num_steps-2_c_int)
           step = tmp1_
           do tmp2_ = 1_c_int, num_states, sign(1, num_states-1_c_int)
@@ -441,13 +458,30 @@
           return
         end if
         backpointer = 0_c_int
+        block
+          real(c_double), allocatable :: btmp1_(:)
+      
       if (size(initial_probs, kind=c_ptrdiff_t) == 0 .or. size(initial_probs, kind=c_ptrdiff_t) /= size(emission_probs(:,&
       & observations(1_c_int)), kind=c_ptrdiff_t)) then
       call quickr_set_error_msg("elementwise vector operations require equal lengths or a scalar operand; R-style recycling is not&
       & supported")
-          return
-        end if
-        trellis(:, 1_c_int) = (initial_probs * emission_probs(:, observations(1_c_int)))
+            return
+          end if
+          allocate(btmp1_(states__len_))
+          btmp1_ = (initial_probs * emission_probs(:, observations(1_c_int)))
+          if (size(trellis(:, 1_c_int), kind=c_ptrdiff_t) > 0) then
+          if (size(btmp1_, kind=c_ptrdiff_t) == 1) then
+          trellis(:, 1_c_int) = btmp1_(1)
+          else
+          if (size(trellis(:, 1_c_int), 1, kind=c_ptrdiff_t) /= size(btmp1_, 1, kind=c_ptrdiff_t)) then
+      call quickr_set_error_msg("section replacement must have length 1 or match the selected section's shape; R-style recycling is not&
+      & supported")
+            return
+          end if
+          trellis(:, 1_c_int) = btmp1_
+          end if
+          end if
+        end block
         do tmp1_ = 2_c_int, size(observations), sign(1, size(observations)-2_c_int)
           step = tmp1_
           do tmp2_ = 1_c_int, size(states), sign(1, size(states)-1_c_int)
