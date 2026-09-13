@@ -39,7 +39,10 @@ r2f_handlers[["+"]] <- function(args, scope, ..., hoist = NULL) {
     refuse_raw_arithmetic(x, context = "+")
     # R: +TRUE is 1L
     x <- cast_to_mode(x, arith_join_mode(x), "unary +")
-    Fortran(glue("(+{x})"), Variable(x@value@mode, x@value@dims))
+    Fortran(
+      glue("(+{x})"),
+      Variable(x@value@mode, x@value@dims, has_dim = x@value@has_dim)
+    )
   } else {
     .[left, right] <- lower_elementwise_operands(
       args,
@@ -61,7 +64,10 @@ r2f_handlers[["-"]] <- function(args, scope, ..., hoist = NULL) {
     refuse_raw_arithmetic(x, context = "-")
     # R: -TRUE is -1L
     x <- cast_to_mode(x, arith_join_mode(x), "unary -")
-    Fortran(glue("(-{x})"), Variable(x@value@mode, x@value@dims))
+    Fortran(
+      glue("(-{x})"),
+      Variable(x@value@mode, x@value@dims, has_dim = x@value@has_dim)
+    )
   } else {
     .[left, right] <- lower_elementwise_operands(
       args,

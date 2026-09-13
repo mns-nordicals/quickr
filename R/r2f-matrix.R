@@ -226,7 +226,7 @@ register_r2f_handler(
       stop("drop() expects a typed value", call. = FALSE)
     }
     if (x@value@rank <= 1L) {
-      return(x)
+      return(drop_rank1_array_dim(x, scope, hoist))
     }
     if (x@value@rank != 2L) {
       stop("drop() only supports rank 0-2 inputs", call. = FALSE)

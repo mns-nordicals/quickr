@@ -25,10 +25,7 @@ test_that("array() reshape accepts numeric dim vectors", {
 test_that("array() reshape accepts scalar dims", {
   fn <- function(x) {
     declare(type(x = integer(24L)))
-    # Rank-1 arrays carry a `dim` attribute in base R, but quickr treats them as
-    # plain vectors; wrap in `c()` so both sides compare identically while still
-    # exercising the `array(dim=scalar)` lowering.
-    c(array(as.double(x), dim = 24))
+    array(as.double(x), dim = 24)
   }
 
   set.seed(1)
@@ -110,9 +107,7 @@ test_that("array() fill reshape handles dim expressions that lower to comma-cont
 test_that("array() reshape supports dim = 1 for non-scalar data", {
   fn <- function(x) {
     declare(type(x = integer(2L, 3L, 4L)))
-    # Rank-1 length-1 arrays are scalar-like in quickr; index the first element
-    # to compare against base R without relying on `dim` attributes.
-    array(as.double(x), dim = 1L)[1]
+    array(as.double(x), dim = 1L)
   }
 
   set.seed(1)

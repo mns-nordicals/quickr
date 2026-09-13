@@ -57,6 +57,9 @@ materialize_via_hoist <- function(
   tmp <- declare_tmp(
     mode = mode,
     dims = dims,
+    has_dim = inherits(code, Fortran) &&
+      inherits(code@value, Variable) &&
+      code@value@has_dim,
     logical_as_int = logical_storage
   )
   hoist$emit(glue("{tmp@name} = {code}"))
@@ -668,7 +671,8 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
   out@value <- Variable(
     mode = out@value@mode,
-    dims = target_dims
+    dims = target_dims,
+    has_dim = TRUE
   )
   if (data_scalar && !passes_as_scalar(out@value)) {
     out@scalar_fill_dims <- target_dims

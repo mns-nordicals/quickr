@@ -31,6 +31,21 @@ r2f_handlers[["["]] <- function(
   )
 
   check_subscript_exprs(var@value, idx_args)
+  rank1_array <- var@value@has_dim && var@value@rank == 1L
+
+  # Empty indexing preserves all R attributes, including dim = 1L.
+  if (
+    rank1_array &&
+      length(idx_args) == 1L &&
+      is_missing(idx_args[[1L]])
+  ) {
+    return(var)
+  }
+  keep_rank1_dim <- rank1_array && !drop
+  if (keep_rank1_dim) {
+    # Keep the R dimension independently of scalar Fortran storage.
+    drop <- TRUE
+  }
 
   idxs <- whole_doubles_to_ints(idx_args)
   idxs <- imap(unname(idxs), function(idx, i) {
@@ -110,10 +125,15 @@ r2f_handlers[["["]] <- function(
     if (passes_as_scalar(var@value)) {
       var <- Fortran(glue("[{var}]"), Variable(var@value@mode, 1L))
     }
-    return(Fortran(
+    out <- Fortran(
       glue("pack({var}, {mask})"),
       Variable(var@value@mode, dims = NA)
-    ))
+    )
+    if (rank1_array) {
+      out@value@has_dim <- TRUE
+      if (!keep_rank1_dim) out <- drop_rank1_array_dim(out, scope, hoist)
+    }
+    return(out)
   }
 
   # Indexing a scalar (rank-1 length-1) with `[1]` is valid in R, but Fortran
@@ -126,9 +146,15 @@ r2f_handlers[["["]] <- function(
   ) {
     idx_r <- attr(idxs[[1]], "r", exact = TRUE)
     if (identical(idx_r, 1L) || identical(idx_r, 1)) {
+      var@value@has_dim <- keep_rank1_dim
       return(var)
     }
     if (isTRUE(idxs[[1]]@value@loop_is_singleton)) {
+      var@value@has_dim <- keep_rank1_dim
+      return(var)
+    }
+    if (rank1_array) {
+      var@value@has_dim <- keep_rank1_dim
       return(var)
     }
   }
@@ -253,6 +279,10 @@ r2f_handlers[["["]] <- function(
     idx@value@dims[[1]]
   }))
   outval <- Variable(var@value@mode, dims)
+  if (rank1_array) {
+    outval@dims <- if (length(dims)) dims else list(1L)
+    outval@has_dim <- keep_rank1_dim || !passes_as_scalar(outval)
+  }
 
   # Fortran does not allow subscripting arbitrary parenthesized expressions,
   # so if the base is an array expression (not a named array designator),
@@ -272,11 +302,36 @@ r2f_handlers[["["]] <- function(
   if (var@value@mode == "logical" && logical_as_int(var@value)) {
     base_name <- var@value@name %||% stop("missing array name for subscripting")
     designator <- glue("{base_name}({str_flatten_commas(idxs)})")
-    Fortran(glue("({designator} /= 0)"), outval)
+    out <- Fortran(glue("({designator} /= 0)"), outval)
   } else {
     base_name <- var@value@name %||% stop("missing array name for subscripting")
-    Fortran(glue("{base_name}({str_flatten_commas(idxs)})"), outval)
+    out <- Fortran(glue("{base_name}({str_flatten_commas(idxs)})"), outval)
   }
+  if (!keep_rank1_dim) {
+    out <- drop_rank1_array_dim(out, scope, hoist)
+  }
+  out
+}
+
+# R drops a singleton axis when subsetting/reversing a rank-one array.
+# Runtime-dependent attribute changes cannot be inferred for the C bridge;
+# retain the array shape and refuse the singleton case, as drop() already
+# does for matrices with dynamic extents.
+drop_rank1_array_dim <- function(x, scope, hoist) {
+  if (!x@value@has_dim || x@value@rank != 1L) {
+    return(x)
+  }
+  if (passes_as_scalar(x@value)) {
+    x@value@has_dim <- FALSE
+  } else if (!is_wholenumber(x@value@dims[[1L]])) {
+    emit_quickr_error_if(
+      glue("size({x}, kind=c_ptrdiff_t) == 1"),
+      "cannot drop a one-dimensional array's dimension when its runtime length is 1; use drop = FALSE or c()",
+      hoist,
+      scope
+    )
+  }
+  x
 }
 
 # Reject non-positive subscripts at compile time. R's negative subscript

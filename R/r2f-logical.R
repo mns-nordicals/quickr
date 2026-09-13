@@ -128,7 +128,10 @@ r2f_handlers[["!"]] <- function(args, scope, ..., hoist = NULL) {
     )
   }
   x <- booleanize_logical_as_int(x)
-  Fortran(glue("(.not. {x})"), Variable("logical", x@value@dims))
+  Fortran(
+    glue("(.not. {x})"),
+    Variable("logical", x@value@dims, has_dim = x@value@has_dim)
+  )
 }
 
 register_r2f_handler(

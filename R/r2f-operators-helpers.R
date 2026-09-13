@@ -20,7 +20,10 @@ booleanize_logical_as_int <- function(x) {
     return(x)
   }
 
-  out <- Fortran(glue("({x} /= 0)"), Variable("logical", x@value@dims))
+  out <- Fortran(
+    glue("({x} /= 0)"),
+    Variable("logical", x@value@dims, has_dim = x@value@has_dim)
+  )
   out@logical_booleanized <- TRUE
   out
 }
@@ -44,14 +47,17 @@ cast_to_mode <- function(x, mode, context = "operand") {
   if (identical(mode, "double") && identical(from, "integer")) {
     return(Fortran(
       glue("real({x}, kind=c_double)"),
-      Variable("double", x@value@dims)
+      Variable("double", x@value@dims, has_dim = x@value@has_dim)
     ))
   }
   if (identical(from, "logical") && mode %in% c("integer", "double")) {
     if (logical_as_int(x@value) && !isTRUE(x@logical_booleanized)) {
       # bind(c) logicals are already 0/1 integer storage; relabel, or cast
       # the integer text directly for a double target.
-      relabeled <- Fortran(glue("{x}"), Variable("integer", x@value@dims))
+      relabeled <- Fortran(
+        glue("{x}"),
+        Variable("integer", x@value@dims, has_dim = x@value@has_dim)
+      )
       return(cast_to_mode(relabeled, mode, context))
     }
     x <- booleanize_logical_as_int(x)
@@ -62,7 +68,7 @@ cast_to_mode <- function(x, mode, context = "operand") {
     )
     return(Fortran(
       glue("merge({literals}, {x})"),
-      Variable(mode, x@value@dims)
+      Variable(mode, x@value@dims, has_dim = x@value@has_dim)
     ))
   }
   stop(
@@ -617,6 +623,69 @@ maybe_reshape_vector_matrix <- function(
     return(list(left = left, right = right))
   }
 
+  # R checks dimensions when both operands are arrays, even if one of
+  # them uses scalar Fortran storage or has only one dimension.
+  if (
+    left@value@has_dim &&
+      right@value@has_dim &&
+      (left@value@rank == 1L || right@value@rank == 1L)
+  ) {
+    if (left@value@rank != right@value@rank) {
+      stop_static_error(
+        "elementwise array operations require matching dimensions"
+      )
+    }
+    for (axis in seq_len(left@value@rank)) {
+      guard_conformable_dims(
+        dim_or_one(left, axis),
+        dim_or_one(right, axis),
+        "elementwise array operations require matching dimensions",
+        hoist,
+        scope,
+        left = left,
+        right = right,
+        left_axis = axis,
+        right_axis = axis,
+        checker = check_equal_dims
+      )
+    }
+  }
+
+  # A length-one R array is scalar storage, but its dimensions survive
+  # only when the other operand also has length one. Arithmetic may drop
+  # them for a statically longer vector; comparisons must refuse that case.
+  pair <- list(left, right)
+  for (i in 1:2) {
+    x <- pair[[i]]
+    y <- pair[[3L - i]]
+    if (
+      x@value@has_dim &&
+        x@value@rank == 1L &&
+        passes_as_scalar(x@value) &&
+        !y@value@has_dim &&
+        !passes_as_scalar(y@value)
+    ) {
+      len <- dim_or_one(y, 1L)
+      if (scalarize_one_by_one && dim_known_greater_than_one(len)) {
+        x@value@has_dim <- FALSE
+        pair[[i]] <- x
+      } else {
+        guard_conformable_dims(
+          1L,
+          len,
+          "length-one array requires a length-one operand",
+          hoist,
+          scope,
+          left = x,
+          right = y,
+          checker = check_equal_dims
+        )
+      }
+    }
+  }
+  left <- pair[[1L]]
+  right <- pair[[2L]]
+
   left_scalar <- passes_as_scalar(left@value)
   right_scalar <- passes_as_scalar(right@value)
   left_rank <- if (left_scalar) 0L else left@value@rank
@@ -841,6 +910,15 @@ conform <- function(..., mode = NULL) {
   if (is.null(var)) {
     NULL
   } else {
-    Variable(mode %||% var@mode, var@dims)
+    # An array contributes the result's R dimensions regardless of operand
+    # order. The lowering guards have already checked conformability.
+    arrays <- Filter(function(x) x@has_dim, vars)
+    if (
+      length(arrays) &&
+        (!passes_as_scalar(arrays[[1L]]) || passes_as_scalar(var))
+    ) {
+      var <- arrays[[1L]]
+    }
+    Variable(mode %||% var@mode, var@dims, has_dim = length(arrays) > 0L)
   }
 }

@@ -71,7 +71,7 @@ make_c_bridge <- function(
       append(return_sizes) <- defs$sizes
       append(return_defs) <- defs$allocation
       add(n_protected) <- 1L # allocated return var
-      if (return_var@rank > 1) {
+      if (return_var@has_dim) {
         add(n_protected) <- 1L # allocated _dim_sexp
       }
     }
@@ -387,6 +387,11 @@ return_var_c_defs <- function(var, scope, c_hoist = NULL) {
     decls,
     glue("const R_xlen_t {len_name} = {c_len};")
   )
+  if (var@has_dim && var@rank == 1L) {
+    append(size_code) <- glue(
+      'if ({len_name} > 2147483647) Rf_error("return dimensions exceed the supported range");'
+    )
+  }
   c_code <- c(
     glue(switch(
       var@mode,
@@ -405,14 +410,14 @@ return_var_c_defs <- function(var, scope, c_hoist = NULL) {
     ))
   )
 
-  if (var@rank > 1) {
+  if (var@has_dim) {
     append(c_code) <- c_block(
       glue(
         "
         const SEXP _dim_sexp = PROTECT(Rf_allocVector(INTSXP, {var@rank}));
         int* const _dim = INTEGER(_dim_sexp);"
       ),
-      imap(c_dims, function(d, i) {
+      imap(unlist(c_dims, use.names = FALSE), function(d, i) {
         glue("_dim[{i-1}] = {d};")
       }),
       glue("Rf_dimgets({var@name}, _dim_sexp);")

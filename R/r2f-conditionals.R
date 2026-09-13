@@ -127,6 +127,7 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
       scope,
       mode = mask@value@mode,
       dims = mask@value@dims,
+      has_dim = mask@value@has_dim,
       logical_as_int = logical_as_int(mask@value) &&
         !isTRUE(mask@logical_booleanized)
     )
@@ -228,7 +229,12 @@ r2f_handlers[["ifelse"]] <- function(args, scope, ..., hoist = NULL) {
   promoted <- promote_operands(list(tsource, fsource), context = "ifelse()")
   .[tsource, fsource] <- promoted$args
   mode <- promoted$mode
-  result <- scope_unique_var(scope, mode = mode, dims = mask@value@dims)
+  result <- scope_unique_var(
+    scope,
+    mode = mode,
+    dims = mask@value@dims,
+    has_dim = mask@value@has_dim
+  )
   register_openmp_private(scope, result@name)
 
   if (passes_as_scalar(mask@value)) {

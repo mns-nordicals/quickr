@@ -413,6 +413,19 @@ longer vector, where R would recycle with a deprecation warning.
 
 Non-fill `array(data, dim)` calls also refuse to recycle `data` when it is shorter than `prod(dim)`.
 
+One-dimensional `array()` results retain their `dim` attribute, including
+arrays of length zero or one. Copies, local closure calls, and elemental
+arithmetic preserve this distinction; `c()`, `as.double()`, and
+`as.integer()` remove dimensions as in R. Whole-variable reassignment must
+preserve the array-versus-vector distinction as well as its extents.
+
+Subsetting a one-dimensional array with `drop = TRUE`, `rev()`, and `drop()`
+remove its dimension when the result has length one. When that length is
+only known at runtime, quickr retains the array shape and raises an error
+for length one. Use `drop = FALSE` for subsetting that must retain the
+dimension, or convert to a vector with `c()` before the operation. Empty
+indexing (`x[]`) preserves the array's dimensions for every length.
+
 `matrix(data, nrow, ncol)` requires both dimensions and refuses
 `byrow = TRUE`; R can infer an omitted dimension and supports row-wise filling.
 

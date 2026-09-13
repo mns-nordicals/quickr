@@ -121,6 +121,7 @@ register_r2f_handler(
       )
       scalar_array <- startsWith(trimws(as.character(x)), "[")
       out <- if (x@value@is_scalar && is.null(hoisted_mask) && !scalar_array) {
+        x@value@has_dim <- FALSE
         x
       } else {
         if (x@value@is_scalar) {
@@ -337,6 +338,7 @@ register_r2f_handler(
           if (startsWith(x_code, "[")) {
             return(Fortran(glue("{intrinsic}({x})"), Variable("logical")))
           }
+          x@value@has_dim <- FALSE
           return(x)
         }
 

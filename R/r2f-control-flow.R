@@ -151,7 +151,7 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
 
   bind_loop_variable <- function(mode, logical_storage = FALSE) {
     if (inherits(existing, Variable)) {
-      if (!passes_as_scalar(existing)) {
+      if (!passes_as_scalar(existing) || existing@has_dim) {
         stop("for-loop variable must be scalar: ", var, call. = FALSE)
       }
       if (!identical(existing@mode, mode)) {

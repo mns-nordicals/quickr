@@ -37,6 +37,7 @@ r2f_handlers[["as.double"]] <- function(
     return(Fortran(glue("reshape({x}, [{len_str}])"), out_val))
   }
 
+  x@value@has_dim <- FALSE
   x
 }
 
@@ -107,5 +108,6 @@ r2f_handlers[["as.integer"]] <- function(
     return(Fortran(glue("reshape({out}, [{len_str}])"), out_val))
   }
 
+  out@value@has_dim <- FALSE
   out
 }

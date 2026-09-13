@@ -14,7 +14,10 @@ guard_assignment_shape <- function(name, target, value, scope, hoist) {
     name,
     "`: assignment must preserve its shape"
   )
-  if (length(target_dims) != length(source_dims)) {
+  if (
+    length(target_dims) != length(source_dims) ||
+      target@has_dim != source@has_dim
+  ) {
     stop(message, call. = FALSE)
   }
   deferred_local <- !target@is_external &&
@@ -319,7 +322,8 @@ register_r2f_handler(
         src <- value@value
         var <- Variable(
           mode = src@mode,
-          dims = src@dims
+          dims = src@dims,
+          has_dim = src@has_dim
         )
       }
       if (
@@ -357,6 +361,7 @@ register_r2f_handler(
       ) {
         var@mode <- value@value@mode
         var@dims <- value@value@dims
+        var@has_dim <- value@value@has_dim
       }
       check_reassignment_narrowing(name, var, value@value)
       value <- guard_assignment_shape(name, var, value, scope, hoist)

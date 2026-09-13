@@ -61,7 +61,7 @@ new_hoist <- function(scope) {
     block_scope
   }
 
-  declare_tmp <- function(mode, dims, logical_as_int = FALSE) {
+  declare_tmp <- function(mode, dims, logical_as_int = FALSE, has_dim = FALSE) {
     stopifnot(
       is_string(mode),
       is.null(dims) || is.list(dims),
@@ -70,6 +70,7 @@ new_hoist <- function(scope) {
     ensure_block_scope()@get_unique_var(
       mode = mode,
       dims = dims,
+      has_dim = has_dim,
       logical_as_int = logical_as_int
     )
   }
@@ -112,8 +113,13 @@ new_hoist <- function(scope) {
     var
   }
 
-  declare_tmp_at_point <- function(mode, dims, logical_as_int = FALSE) {
-    var <- declare_tmp(mode, dims, logical_as_int)
+  declare_tmp_at_point <- function(
+    mode,
+    dims,
+    logical_as_int = FALSE,
+    has_dim = FALSE
+  ) {
+    var <- declare_tmp(mode, dims, logical_as_int, has_dim)
     allocate_tmp_at_point(var, emit)
   }
 
@@ -141,9 +147,10 @@ new_hoist <- function(scope) {
     capture_declare_tmp_at_point <- function(
       mode,
       dims,
-      logical_as_int = FALSE
+      logical_as_int = FALSE,
+      has_dim = FALSE
     ) {
-      var <- declare_tmp(mode, dims, logical_as_int)
+      var <- declare_tmp(mode, dims, logical_as_int, has_dim)
       allocate_tmp_at_point(var, capture_emit)
     }
     capture_mark_runtime_guard <- function() {
@@ -270,6 +277,7 @@ hoist_unless_name <- function(
   tmp <- declare_tmp(
     mode = x@value@mode,
     dims = x@value@dims,
+    has_dim = x@value@has_dim,
     logical_as_int = logical_as_int(x@value) &&
       !isTRUE(x@logical_booleanized)
   )
@@ -302,6 +310,7 @@ finish_captured_operand <- function(operand, captured_hoist, hoist) {
     tmp <- hoist$declare_tmp(
       mode = operand@value@mode,
       dims = operand@value@dims,
+      has_dim = operand@value@has_dim,
       logical_as_int = logical_as_int(operand@value) &&
         !isTRUE(operand@logical_booleanized)
     )

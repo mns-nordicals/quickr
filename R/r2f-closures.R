@@ -115,7 +115,8 @@ compile_internal_subroutine <- function(
   res_var,
   allow_void_return = FALSE,
   forbid_superassign = character(),
-  optional_args = character()
+  optional_args = character(),
+  preserve_result_attributes = TRUE
 ) {
   stopifnot(is_string(proc_name), inherits(closure_obj, LocalClosure))
   fun <- closure_obj@fun
@@ -174,6 +175,7 @@ compile_internal_subroutine <- function(
     arg_var <- Variable(
       mode = var@mode,
       dims = var@dims,
+      has_dim = var@has_dim,
       name = fortran_name,
       r_name = nm
     )
@@ -188,6 +190,7 @@ compile_internal_subroutine <- function(
       local_var <- Variable(
         mode = var@mode,
         dims = var@dims,
+        has_dim = var@has_dim,
         name = local_name,
         r_name = nm
       )
@@ -313,6 +316,13 @@ compile_internal_subroutine <- function(
       if (is.null(res_var@mode)) {
         res_var@mode <- expr@value@mode
         res_var@dims <- expr@value@dims
+        res_var@has_dim <- expr@value@has_dim
+      }
+      if (preserve_result_attributes && res_var@has_dim != expr@value@has_dim) {
+        stop(
+          "closure result must preserve its array/vector shape",
+          call. = FALSE
+        )
       }
       proc_scope[[res_name]] <- res_var
       if (!identical(expr@value@mode, res_var@mode)) {
@@ -355,10 +365,12 @@ compile_internal_subroutine <- function(
       if (is.null(local_var@mode) && !is.null(dummy_var@mode)) {
         local_var@mode <- dummy_var@mode
         local_var@dims <- dummy_var@dims
+        local_var@has_dim <- dummy_var@has_dim
       }
       if (is.null(dummy_var@mode) && !is.null(local_var@mode)) {
         dummy_var@mode <- local_var@mode
         dummy_var@dims <- local_var@dims
+        dummy_var@has_dim <- local_var@has_dim
       }
       if (is.null(dummy_var@mode) || is.null(local_var@mode)) {
         stop(
@@ -766,6 +778,7 @@ closure_formal_vars <- function(args_f, formal_names) {
       v <- Variable(
         mode = f@value@mode,
         dims = f@value@dims,
+        has_dim = f@value@has_dim,
         name = fortran_name,
         r_name = nm
       )
@@ -1127,7 +1140,11 @@ compile_closure_call <- function(
     stop("internal error: could not infer closure return type")
   }
 
-  tmp <- hoist$declare_tmp(mode = res_var@mode, dims = res_var@dims)
+  tmp <- hoist$declare_tmp(
+    mode = res_var@mode,
+    dims = res_var@dims,
+    has_dim = res_var@has_dim
+  )
   inputs <- closure_call_inputs(args_f, args_present, formal_vars)
   call_args <- inputs$args
   res_arg <- if (inputs$use_keywords) {
@@ -1194,6 +1211,7 @@ compile_closure_call_assignment <- function(
     out <- Variable(
       mode = target_var@mode,
       dims = target_var@dims,
+      has_dim = target_var@has_dim,
       name = target_fortran_name,
       r_name = target_name
     )
@@ -1220,7 +1238,8 @@ compile_closure_call_assignment <- function(
     }
     target_var <- Variable(
       mode = inferred_res_var@mode,
-      dims = inferred_res_var@dims
+      dims = inferred_res_var@dims,
+      has_dim = inferred_res_var@has_dim
     )
     target_var@r_name <- target_name
     target_var@name <- target_fortran_name
@@ -1230,7 +1249,11 @@ compile_closure_call_assignment <- function(
     ) {
       target_var@logical_as_int <- TRUE
       # Recompile with the correct storage for the output dummy argument.
-      res_var <- Variable(mode = target_var@mode, dims = target_var@dims)
+      res_var <- Variable(
+        mode = target_var@mode,
+        dims = target_var@dims,
+        has_dim = target_var@has_dim
+      )
       res_var@r_name <- target_name
       res_var@name <- target_fortran_name
       res_var@logical_as_int <- TRUE
@@ -1257,6 +1280,7 @@ compile_closure_call_assignment <- function(
     tmp <- hoist$declare_tmp(
       mode = target_var@mode,
       dims = target_var@dims,
+      has_dim = target_var@has_dim,
       logical_as_int = logical_as_int(target_var)
     )
     res_target <- tmp@name
@@ -1320,6 +1344,12 @@ compile_sapply_assignment <- function(
   if (target_exists) {
     if (out_var@rank < 1L) {
       stop("sapply() output must be an array: ", out_name)
+    }
+    if (out_var@rank == 1L && out_var@has_dim) {
+      stop(
+        "sapply() cannot replace an array binding with a vector",
+        call. = FALSE
+      )
     }
     if (
       out_var@rank > 2L && (is.null(simplify) || !identical(simplify, "array"))
@@ -1414,7 +1444,8 @@ compile_sapply_assignment <- function(
     scope,
     formal_vars,
     res_var,
-    forbid_superassign = out_name
+    forbid_superassign = out_name,
+    preserve_result_attributes = FALSE
   )
 
   if (!target_exists) {
@@ -1434,7 +1465,8 @@ compile_sapply_assignment <- function(
         scope,
         formal_vars,
         res_var,
-        forbid_superassign = out_name
+        forbid_superassign = out_name,
+        preserve_result_attributes = FALSE
       )
     }
 
@@ -1752,7 +1784,11 @@ compile_subscript_lhs <- function(
           stop("could not resolve symbol: ", base_name)
         }
 
-        shadow <- Variable(mode = parent_base@mode, dims = parent_base@dims)
+        shadow <- Variable(
+          mode = parent_base@mode,
+          dims = parent_base@dims,
+          has_dim = parent_base@has_dim
+        )
         shadow@r_name <- base_name
         shadow@name <- make_shadow_fortran_name(
           scope,

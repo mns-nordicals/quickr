@@ -303,6 +303,20 @@ Variable := new_class(
       }
     ),
 
+    # Fortran rank does not distinguish an R vector from a one-dimensional
+    # array. Keep that R attribute independently, even for scalar storage.
+    has_dim = new_property(
+      class_logical,
+      default = FALSE,
+      getter = function(self) {
+        self@rank > 1L || isTRUE(attr(self, "has_dim", exact = TRUE))
+      },
+      setter = function(self, value) {
+        attr(self, "has_dim") <- value
+        self
+      }
+    ),
+
     modified = prop_bool(default = FALSE),
 
     loop_is_singleton = prop_bool(default = FALSE),
