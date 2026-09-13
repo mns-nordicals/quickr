@@ -1322,6 +1322,9 @@ diag_matrix <- function(
   context = "diag"
 ) {
   assert_hoist_env(hoist)
+  dims <- snapshot_size_dims(list(nrow, ncol), scope, hoist)
+  nrow <- dims[[1L]]
+  ncol <- dims[[2L]]
 
   # R's diag(x, ...) preserves typeof(x). The identity-matrix callers pass
   # a synthesized 1.0_c_double, which keeps diag(n) double, as in R.

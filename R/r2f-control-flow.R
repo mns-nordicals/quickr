@@ -6,12 +6,15 @@
 r2f_handlers[["if"]] <- function(args, scope, ..., hoist = NULL) {
   # cond uses the current hoist context.
   cond <- r2f(args[[1]], scope, ..., hoist = hoist)
+  before <- size_state(scope)
 
   # true and false branchs gets their own hoist target.
   true <- r2f(args[[2]], scope, ..., hoist = NULL)
+  after_true <- size_state(scope)
   check_pending_parallel_consumed(scope)
 
   if (length(args) == 2) {
+    size_join(scope, after_true, before)
     Fortran(glue(
       "
       if ({cond}) then
@@ -20,7 +23,9 @@ r2f_handlers[["if"]] <- function(args, scope, ..., hoist = NULL) {
       "
     ))
   } else {
+    size_restore(scope, before)
     false <- r2f(args[[3]], scope, ..., hoist = NULL)
+    size_join(scope, after_true, size_state(scope))
     check_pending_parallel_consumed(scope)
     Fortran(glue(
       "
@@ -40,6 +45,9 @@ r2f_handlers[["if"]] <- function(args, scope, ..., hoist = NULL) {
 # ---- repeat ----
 r2f_handlers[["repeat"]] <- function(args, scope, ..., hoist = NULL) {
   stopifnot(length(args) == 1L)
+  writes <- size_written_names(args[[1L]])
+  size_forget(scope, writes)
+  on.exit(size_forget(scope, writes), add = TRUE)
   # The body gets its own hoist target: forwarding the enclosing
   # statement's hoist would emit a single-statement body's hoisted code
   # (BLAS calls, temporaries, guards) once, before the loop, instead of
@@ -72,6 +80,9 @@ r2f_handlers[["next"]] <- function(args, scope, ...) {
 # ---- while ----
 r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
   stopifnot(length(args) == 2L)
+  writes <- unique(unlist(lapply(args, size_written_names)))
+  size_forget(scope, writes)
+  on.exit(size_forget(scope, writes), add = TRUE)
   # The condition is re-evaluated every iteration, so any statements its
   # translation hoists (e.g. the conditional lowering of `&&`/`||`) must
   # re-run inside the loop -- the enclosing statement's hoist would
@@ -110,6 +121,9 @@ r2f_handlers[["while"]] <- function(args, scope, ..., hoist = NULL) {
 # ---- for ----
 r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
   .[var, iterable, body] <- args
+  writes <- union(as.character(var), size_written_names(body))
+  size_forget(scope, writes)
+  on.exit(size_forget(scope, writes), add = TRUE)
   source_body <- body
   stopifnot(is.symbol(var))
   var <- as.character(var)
@@ -175,6 +189,8 @@ r2f_handlers[["for"]] <- function(args, scope, ..., hoist = NULL) {
     }
     loop_var@loop_is_singleton <- FALSE
     loop_var@modified <- TRUE
+    loop_var@size_tracked <- TRUE
+    loop_var@size_value <- list()
     scope[[var]] <- loop_var
     register_openmp_private(scope, var_name)
     loop_var

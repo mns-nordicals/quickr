@@ -129,7 +129,9 @@ guard_constructor_dims <- function(
       }
     }
   }
-  dims
+  # Freeze body-dependent dimensions at this constructor. Later changes to
+  # their source variables must not change the array's recorded shape.
+  snapshot_size_dims(dims, scope, hoist)
 }
 
 # --- Handlers ---
@@ -300,7 +302,10 @@ r2f_handlers[["rep.int"]] <- function(args, scope, ..., hoist = NULL) {
   }
 
   i <- scope_unique_var(scope, "integer")
-  out_val <- Variable("integer", list(len_expr))
+  out_val <- Variable(
+    "integer",
+    snapshot_size_dims(list(len_expr), scope, hoist)
+  )
   Fortran(glue("[({x}, {i}=1, int({times}, kind=c_int))]"), out_val)
 }
 
@@ -327,7 +332,13 @@ fill_constructor_value <- function(literal, mode, args, scope, ..., hoist) {
     out@scalar_fill_dims <- if (length(args)) unname(args) else list(0L)
     return(out)
   }
-  materialize_via_hoist(literal, mode, var@dims, hoist)
+  materialize_via_hoist(
+    literal,
+    mode,
+    var@dims,
+    hoist,
+    allocate_at_point = TRUE
+  )
 }
 
 register_r2f_handler(
@@ -508,6 +519,25 @@ r2f_handlers[["array"]] <- function(args, scope = NULL, ..., hoist = NULL) {
 
     if (is.symbol(dim_arg)) {
       var <- get0(as.character(dim_arg), scope)
+      if (inherits(var, Variable) && var@size_tracked && var@rank == 1L) {
+        if (
+          length(var@size_value) &&
+            !size_binding_is_dynamic(dim_arg, var, scope)
+        ) {
+          return(dim_to_dims(var@size_value[[1L]]))
+        }
+        rank <- var@dims[[1L]]
+        if (!is_wholenumber(rank)) {
+          stop("array(dim=) must have a statically known length", call. = FALSE)
+        }
+        return(lapply(seq_len(rank), function(axis) {
+          dim <- scope_fortran_symbol(dim_arg, scope)
+          if (!passes_as_scalar(var)) {
+            dim <- call("quickr_extent_element", dim, axis)
+          }
+          runtime_size(dim)
+        }))
+      }
       if (
         inherits(var, Variable) &&
           var@mode %in% c("integer", "double") &&

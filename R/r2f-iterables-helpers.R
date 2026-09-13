@@ -353,7 +353,11 @@ seq_like_r2f <- function(
   ) {
     len_expr <- call("+", 0L, 1L)
   }
-  val <- Variable("integer", list(len_expr))
+  dims <- list(len_expr)
+  if (context == "value") {
+    dims <- snapshot_size_dims(dims, scope, list(...)$hoist)
+  }
+  val <- Variable("integer", dims)
 
   if (isTRUE(reversed)) {
     last <- glue("{from} + (({to} - {from}) / {by}) * {by}")

@@ -319,6 +319,11 @@ Variable := new_class(
 
     modified = prop_bool(default = FALSE),
 
+    # A snapshot of a size expression at its assignment point. An empty
+    # list means unknown; this is separate from @r, which records source code.
+    size_value = new_property(class_list, default = list()),
+    size_tracked = prop_bool(default = FALSE),
+
     loop_is_singleton = prop_bool(default = FALSE),
 
     r = new_property(

@@ -922,17 +922,21 @@ register_r2f_handler(
       x_var <- if (is.symbol(x_arg)) {
         get0(as.character(x_arg), scope, inherits = TRUE)
       }
+      known_value <- if (inherits(x_var, Variable)) {
+        if (x_var@size_tracked) x_var@size_value else list(x_var@r)
+      }
       local_numeric_value <-
         inherits(x_var, Variable) &&
         !x_var@is_arg &&
-        !x_var@modified &&
-        is_number(x_var@r) &&
-        is.finite(x_var@r)
+        !size_binding_is_dynamic(x_arg, x_var, scope) &&
+        length(known_value) == 1L &&
+        is_number(known_value[[1L]]) &&
+        is.finite(known_value[[1L]])
       if (identical(x@value@mode, "double") && !local_numeric_value) {
         guard_diag_identity_double(x, hoist, scope)
       }
       nrow <- if (local_numeric_value) {
-        as.integer(x_var@r)
+        as.integer(known_value[[1L]])
       } else if (identical(x@value@mode, "integer")) {
         r2size(x_arg, scope)
       } else if (inherits(x_var, Variable) && !x_var@is_arg) {
@@ -941,7 +945,12 @@ register_r2f_handler(
           call. = FALSE
         )
       } else {
-        call("quickr_size_int", x_arg)
+        size <- if (size_entry_available(x_arg, scope)) {
+          x_arg
+        } else {
+          runtime_size(x_arg)
+        }
+        call("quickr_size_int", size)
       }
       guard_diag_identity_size(nrow, hoist, scope)
       ncol <- nrow

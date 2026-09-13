@@ -311,6 +311,7 @@ register_r2f_handler(
     name <- as.character(target)
 
     rhs <- args[[2L]]
+    size_value <- size_assignment_value(rhs, scope)
 
     # Fall-through assignment: `a <- b <- expr` (or `a <- (b <- expr)`).
     # R evaluates this right-to-left and returns the assigned value, i.e.
@@ -422,6 +423,16 @@ register_r2f_handler(
       value <- r2f(rhs, scope, ..., hoist = hoist)
     }
 
+    if (
+      !existing_binding &&
+        inherits(inferred_var, Variable) &&
+        !isTRUE(value@writes_to_dest)
+    ) {
+      # Lowering may replace a runtime dimension with a snapshot taken at the
+      # constructor. Keep that result shape rather than the inference hint.
+      var@dims <- value@value@dims
+    }
+
     # immutable / copy-on-modify usage of Variable()
     if (!existing_binding) {
       # The var does not exist -> this is a binding to a new symbol
@@ -488,6 +499,37 @@ register_r2f_handler(
       assign(name, var, scope)
     }
 
+    var@size_tracked <- TRUE
+    var@size_value <- size_value
+    scope[[name]] <- var
+
+    # Body-dependent local extents must be allocated where the constructor
+    # runs, after its dimension snapshots have been computed.
+    if (
+      !existing_binding &&
+        !var@is_external &&
+        !name %in% scope_get(scope, "return_names", character()) &&
+        any(vapply(
+          var@dims,
+          function(dim) !size_entry_available(dim, scope),
+          logical(1L)
+        )) &&
+        subroutine_local_allocatable(var, scope)
+    ) {
+      hoist$emit(glue(
+        "if (.not. allocated({var@name})) allocate({var@name}({dims2f(var@dims, scope)}))"
+      ))
+      value <- guard_assignment_shape(name, var, value, scope, hoist)
+      scope_set(
+        scope,
+        "point_allocated_local_names",
+        union(
+          scope_get(scope, "point_allocated_local_names", character()),
+          var@name
+        )
+      )
+    }
+
     initialized_local_names <- scope_get(
       scope,
       "initialized_local_names",
@@ -544,6 +586,7 @@ register_r2f_handler(
     # whole-variable reassignment can: `x[1L] <- 2.5` on an integer `x`
     # would silently truncate where R promotes `x` to double.
     base_name <- as.character(target_call[[2L]])
+    size_forget(scope, base_name)
     check_reassignment_narrowing(base_name, get0(base_name, scope), value@value)
 
     compile_section_assignment(lhs$lhs, value, scope, hoist)
@@ -597,6 +640,8 @@ register_r2f_handler(
     }
 
     host_var@modified <- TRUE
+    host_var@size_tracked <- TRUE
+    host_var@size_value <- list()
     host_scope[[name]] <- host_var
 
     value <- r2f(args[[2L]], scope, ..., hoist = hoist)
@@ -644,6 +689,8 @@ register_r2f_handler(
     }
 
     host_var@modified <- TRUE
+    host_var@size_tracked <- TRUE
+    host_var@size_value <- list()
     host_scope[[name]] <- host_var
 
     value <- lower_section_replacement(

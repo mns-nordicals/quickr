@@ -63,6 +63,7 @@ new_fortran_subroutine <- function(
   }
 
   uses_errors <- scope_uses_errors_flag(scope)
+  verify_output_sizes(scope)
   uses_openmp <- scope_uses_openmp_flag(scope)
   manifest <- r2f.scope(scope, include_errors = uses_errors)
   local_allocs <- attr(manifest, "local_allocations", exact = TRUE) %||%

@@ -1267,6 +1267,8 @@ compile_closure_call_assignment <- function(
       )
     }
   }
+  target_var@size_tracked <- TRUE
+  target_var@size_value <- list()
   scope[[target_name]] <- target_var
   scope_add_internal_proc(scope_root(scope), proc)
 
@@ -1597,6 +1599,8 @@ compile_sapply_assignment <- function(
   ))
 
   out_var@modified <- TRUE
+  out_var@size_tracked <- TRUE
+  out_var@size_value <- list()
   scope[[out_name]] <- out_var
 
   directives <- openmp_directives(parallel)

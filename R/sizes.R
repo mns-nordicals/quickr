@@ -158,6 +158,9 @@ r2size <- function(r, scope) {
     if (axis > var@rank) {
       stop("insufficient rank of variable in ", deparse1(expr))
     }
+    if (!size_entry_available(var@dims[[axis]], scope)) {
+      return(call("[", call("dim", var_expr), axis))
+    }
     sanitize_dim(var@dims[[axis]])
   }
 
@@ -186,17 +189,24 @@ r2size <- function(r, scope) {
         if (!valid_mode || !passes_as_scalar(var)) {
           warning("size is not an integer:", as.character(r))
         }
-        if (var@is_arg && !var@modified) {
+        if (var@is_arg && !var@modified && !var@size_tracked) {
           return(scope_fortran_symbol(r, scope))
         }
-        # TODO: add specific unit tests here
+        if (size_binding_is_dynamic(r, var, scope)) {
+          return(runtime_size(scope_fortran_symbol(r, scope)))
+        }
+        if (var@size_tracked) {
+          if (length(var@size_value)) {
+            value <- var@size_value[[1L]]
+            return(if (is.atomic(value)) r2size(value, scope) else value)
+          }
+          return(runtime_size(scope_fortran_symbol(r, scope)))
+        }
         if (identical(var@r, r)) {
           return(scope_fortran_symbol(r, scope))
         }
-        # make a best effort to use the r expression last assigned to the
-        # symbol, or fail gracefully and return NA.
-        # closure-locals with unspecified shape are declared allocatable
-        # input and/or output args with unspecified shape signal an error.
+        # Untracked generated bindings may still carry a size expression in
+        # @r. Source assignments use the point-in-time facts above instead.
         r2size(var@r, scope)
       },
       language = {
@@ -217,10 +227,21 @@ r2size <- function(r, scope) {
 
         switch(
           op,
+          quickr_runtime_size = r,
+          `(` = r2size(r[[2L]], scope),
           length = {
             var <- get0(as.character(r[[2L]]), scope)
             if (!inherits(var, Variable)) {
               stop("could not resolve size: ", deparse1(r))
+            }
+            if (
+              any(vapply(
+                var@dims,
+                function(dim) !size_entry_available(dim, scope),
+                logical(1L)
+              ))
+            ) {
+              return(r)
             }
             if (var@rank == 1) {
               return(sanitize_dim(var@dims[[1L]]))
@@ -260,7 +281,9 @@ r2dims <- function(r, scope) {
           if (!inherits(var, Variable)) {
             stop("could not resolve dims: ", deparse1(r))
           }
-          return(var@dims)
+          return(lapply(seq_len(var@rank), function(axis) {
+            r2size(call("[", r, axis), scope)
+          }))
         },
         c = {
           args <- lapply(r[-1], r2dims, scope)

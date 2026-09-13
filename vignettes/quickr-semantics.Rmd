@@ -220,6 +220,23 @@ with a scalar, use subassignment such as `x[] <- 0L`.
 Locals declared with unspecified extents acquire their shape on first
 assignment and must preserve it afterward.
 
+Constructor dimensions use the value at the constructor's execution point.
+For example, `n <- 2L; n <- 3L; matrix(1, n + 1L, 1L)` creates a `4x1`
+matrix. Copying a size into another variable preserves the copied value:
+later assignments to the original variable do not change that copy.
+
+Returned arrays are allocated before the function body runs. Their dimensions
+must therefore be constants or expressions that can be determined from the
+inputs before executing the body. Arithmetic on unchanged input sizes is
+supported; a runtime-dependent choice such as
+`n <- 2L; if (flag) n <- 3L; matrix(1, n, 1L)` is refused when the matrix
+is returned. The compile-time error reports that the output size could not be
+verified before the function body runs and identifies the output expression
+and dimension. This analysis is conservative about loops, closure mutations,
+and copies of mutable inputs. Local arrays may use body-dependent dimensions;
+for example, the conditional matrix above can be constructed locally and
+reduced with `sum()` to return a scalar.
+
 For elementwise operations (arithmetic, comparisons, `&`, `|`),
 "compatible" means:
 

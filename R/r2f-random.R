@@ -90,6 +90,9 @@ r2f_handlers[["runif"]] <- function(args, scope, ..., hoist = NULL) {
       dims[[1L]] <- call("quickr_extent_int", n, message)
     }
   }
+  if (!size_entry_available(dims[[1L]], scope, allow_modified = TRUE)) {
+    dims <- snapshot_size_dims(list(runtime_size(count)), scope, hoist)
+  }
   var <- Variable("double", dims)
 
   if (passes_as_scalar(var)) {

@@ -540,6 +540,10 @@ r2f.scope <- function(scope, include_errors = FALSE) {
 
 dims2f_eval_base_env <- new.env(parent = emptyenv())
 dims2f_eval_base_env[["("]] <- baseenv()[["("]]
+dims2f_eval_base_env[["quickr_runtime_size"]] <- identity
+dims2f_eval_base_env[["quickr_extent_element"]] <- function(x, i) {
+  glue("{x}({i})")
+}
 
 # any call always evaluates to a string.
 # every argument will be either:
