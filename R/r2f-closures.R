@@ -1381,6 +1381,20 @@ compile_sapply_assignment <- function(
     stop("sapply() FUN must have exactly one named argument")
   }
 
+  if (!is.null(parallel)) {
+    writes <- closure_superassign_names(
+      closure_obj@fun,
+      closure_obj@definition_scope %||% scope
+    )
+    if (length(writes)) {
+      stop(
+        "parallel sapply() callbacks must not modify enclosing bindings: ",
+        str_flatten_commas(writes),
+        call. = FALSE
+      )
+    }
+  }
+
   seq_call_unwrapped <- seq_call
   while (
     is_call(seq_call_unwrapped, quote(`(`)) && length(seq_call_unwrapped) == 2L

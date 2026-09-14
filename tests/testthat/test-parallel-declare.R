@@ -115,6 +115,97 @@ test_that("parallel sapply supports axpy patterns", {
   expect_identical(qaxpy_no_out(x, y, a), a * x + y)
 })
 
+test_that("parallel sapply rejects writes to enclosing bindings", {
+  direct <- function() {
+    state <- 0L
+    declare(parallel())
+    out <- sapply(seq_len(1000L), function(i) {
+      state <<- state + 1L
+      i
+    })
+    state
+  }
+  subset <- function() {
+    state <- integer(2L)
+    declare(omp())
+    out <- sapply(seq_len(1000L), function(i) {
+      state[1L] <<- state[1L] + 1L
+      i
+    })
+    state
+  }
+  named <- function() {
+    state <- 0L
+    bump <- function(i) {
+      state <<- state + 1L
+      i
+    }
+    out <- integer(1000L)
+    declare(parallel())
+    out <- sapply(seq_along(out), bump)
+    state
+  }
+  indirect <- function() {
+    state <- 0L
+    bump <- function(i) {
+      state <<- state + 1L
+      i
+    }
+    declare(parallel())
+    out <- sapply(seq_len(1000L), function(i) bump(i))
+    state
+  }
+  nested <- function() {
+    state <- 0L
+    declare(parallel())
+    out <- sapply(seq_len(1000L), function(i) {
+      bump <- function(j) {
+        state <<- state + 1L
+        j
+      }
+      bump(i)
+    })
+    state
+  }
+
+  for (fn in list(direct, subset, named, indirect, nested)) {
+    expect_error(
+      quick(fn),
+      "parallel sapply() callbacks must not modify enclosing bindings: state",
+      fixed = TRUE
+    )
+
+    # Removing the parallel declaration preserves sequential host writes.
+    serial <- fn
+    body(serial) <- as.call(Filter(
+      function(expr) {
+        !identical(expr, quote(declare(parallel()))) &&
+          !identical(expr, quote(declare(omp())))
+      },
+      as.list(body(serial))
+    ))
+    expect_quick_identical(serial, list())
+  }
+})
+
+test_that("parallel sapply allows read-only captures and local writes", {
+  fn <- function(x) {
+    declare(type(x = integer(NA)))
+    offset <- 2L
+    declare(parallel())
+    out <- sapply(seq_along(x), function(i) {
+      value <- x[i] + offset
+      value <- value + 1L
+      local <- integer(2L)
+      local[1L] <- value
+      sum(local)
+    })
+    out
+  }
+
+  expect_quick_identical(fn, list(seq_len(1000L)))
+})
+
 test_that("parallel sapply supports seq_len(nrow(x))", {
   skip_if_no_openmp()
 
